@@ -99,19 +99,41 @@ function renderGate(info) {
   const gate = el("div", "gate");
   gate.append(el("h2", null, "Confirm the target function"));
 
+  const LEVEL_LABEL = {
+    1: "matched a known peptide",
+    2: "matched a characterised motif",
+    3: "matched a family profile",
+    4: "not recognised — default applied",
+  };
+
   const p = el("p");
   p.append(
-    document.createTextNode("Based on the available records, you are seeking a form of: "),
+    document.createTextNode("Based on the sequence, you are seeking a form of: "),
     el("span", "quote", info.inferred_function)
   );
   gate.append(p);
 
-  if (info.inference_confidence === 0) {
-    gate.append(notice(
-      "This peptide was not recognised, so no function could be inferred from records. " +
-      "Select the target function yourself — the scan will not run until you do.",
-      "info", "i"
-    ));
+  // How the inference was reached, so a level-4 default never reads like a
+  // level-1 identification.
+  const prov = el("div", `provenance lvl${info.inference_level}`);
+  prov.append(el("span", "lvl", `Level ${info.inference_level}`));
+  prov.append(el("span", "lvl-label", LEVEL_LABEL[info.inference_level] || ""));
+  prov.append(el("span", "lvl-conf", `confidence ${info.inference_confidence.toFixed(2)}`));
+  gate.append(prov);
+  gate.append(el("div", "kv", info.inference_basis));
+
+  if (info.parent_protein) {
+    gate.append(el("div", "kv", `Parent protein: ${info.parent_protein}`));
+  }
+  if (info.native_context_note) {
+    gate.append(notice(info.native_context_note, "info", "i"));
+  }
+  (info.caveats || []).forEach((c) => gate.append(notice(c)));
+
+  if ((info.alternatives || []).length) {
+    gate.append(el("div", "kv",
+      "Other motifs present: " +
+      info.alternatives.map((a) => `${a.motif} @ ${a.position} (${a.parent_protein})`).join(", ")));
   }
 
   const row = el("div", "row");
@@ -125,13 +147,25 @@ function renderGate(info) {
     o.value = g.id;
     sel.append(o);
   });
+  // Pre-select what was inferred rather than leaving the first option by default.
+  if (info.suggested_goal && GOALS.some((g) => g.id === info.suggested_goal)) {
+    sel.value = info.suggested_goal;
+  }
   goalWrap.append(sel);
+
+  const why = el("div", "kv goal-why");
+  if (info.suggested_goal_reason) {
+    why.append(el("b", null, "Why this goal "),
+               document.createTextNode(info.suggested_goal_reason));
+  }
 
   const desc = el("div", "kv");
   desc.id = "goal-desc";
   const syncDesc = () => {
     const g = GOALS.find((x) => x.id === sel.value);
     desc.textContent = g ? g.description : "";
+    // The rationale explains the SUGGESTED goal; hide it once the user overrides.
+    why.hidden = sel.value !== info.suggested_goal;
   };
   sel.addEventListener("change", syncDesc);
   syncDesc();
@@ -143,7 +177,7 @@ function renderGate(info) {
   btnWrap.append(run);
 
   row.append(goalWrap, btnWrap);
-  gate.append(row, desc);
+  gate.append(row, why, desc);
 
   const props = info.properties;
   if (props) {

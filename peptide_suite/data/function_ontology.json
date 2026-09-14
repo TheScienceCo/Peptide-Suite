@@ -7,9 +7,15 @@
     "established_peptides": "peptides/proteins with well-established roles; drives the Step 2 short circuit",
     "candidate_peptides": "less-established or context-dependent associations, ranked in Step 3"
   },
-
   "myelination": {
-    "keywords": ["myelin", "myelinating", "myelination", "remyelination", "oligodendrocyte", "schwann"],
+    "keywords": [
+      "myelin",
+      "myelinating",
+      "myelination",
+      "remyelination",
+      "oligodendrocyte",
+      "schwann"
+    ],
     "go_term": "GO:0042552",
     "go_name": "myelination",
     "cell_types": [
@@ -47,6 +53,12 @@
         "gene": "IGF1",
         "uniprot": "P05019",
         "rationale": "Supports oligodendrocyte survival and myelin protein synthesis; IGF1 loss reduces myelin content."
+      },
+      {
+        "name": "Laminin alpha-2 (laminin-211)",
+        "gene": "LAMA2",
+        "uniprot": "P24043",
+        "rationale": "Laminin-211 in the Schwann cell basal lamina is required for radial sorting of axons and for myelination in the peripheral nervous system. LAMA2 loss-of-function causes merosin-deficient congenital muscular dystrophy with a dysmyelinating peripheral neuropathy, which is the strongest evidence that this is required rather than merely correlated. Note that this is a very large ECM protein, not a peptide: its myelination-relevant activity is distributed across folded domains, so short derived motifs such as IKVAV or YIGSR reproduce adhesion but not the full function."
       }
     ],
     "candidate_peptides": [
@@ -70,9 +82,14 @@
       }
     ]
   },
-
   "wound_healing": {
-    "keywords": ["wound", "wound healing", "tissue repair", "regeneration", "granulation"],
+    "keywords": [
+      "wound",
+      "wound healing",
+      "tissue repair",
+      "regeneration",
+      "granulation"
+    ],
     "go_term": "GO:0042060",
     "go_name": "wound healing",
     "cell_types": [
@@ -121,9 +138,14 @@
       }
     ]
   },
-
   "angiogenesis": {
-    "keywords": ["angiogenesis", "vascular", "vasculature", "neovascular", "blood vessel"],
+    "keywords": [
+      "angiogenesis",
+      "vascular",
+      "vasculature",
+      "neovascular",
+      "blood vessel"
+    ],
     "go_term": "GO:0001525",
     "go_name": "angiogenesis",
     "cell_types": [
@@ -161,9 +183,14 @@
       }
     ]
   },
-
   "antimicrobial": {
-    "keywords": ["antimicrobial", "antibacterial", "host defense", "host defence", "innate immunity"],
+    "keywords": [
+      "antimicrobial",
+      "antibacterial",
+      "host defense",
+      "host defence",
+      "innate immunity"
+    ],
     "go_term": "GO:0019731",
     "go_name": "antibacterial humoral response",
     "cell_types": [
@@ -206,9 +233,17 @@
       }
     ]
   },
-
   "appetite_metabolic": {
-    "keywords": ["appetite", "satiety", "incretin", "glucose", "metabolic", "weight", "obesity", "insulin secretion"],
+    "keywords": [
+      "appetite",
+      "satiety",
+      "incretin",
+      "glucose",
+      "metabolic",
+      "weight",
+      "obesity",
+      "insulin secretion"
+    ],
     "go_term": "GO:0032099",
     "go_name": "negative regulation of appetite",
     "cell_types": [

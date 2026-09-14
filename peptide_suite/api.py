@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from peptide_suite.core import PeptideContext, SubstitutionRecommendation
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
+from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.peptide_manager import PeptideManager
 from peptide_suite.workflows.find_peptides import FindPeptidesWorkflow
 from peptide_suite.workflows.optimize import OptimizeWorkflow
@@ -40,6 +41,7 @@ _optimize = OptimizeWorkflow()
 _find = FindPeptidesWorkflow()
 _peptides = PeptideManager()
 _evidence = EvidenceRetriever()
+_inferencer = FunctionInferencer()
 _transform = TransformWorkflow()
 _scorer = ConfidenceScorer()
 
@@ -57,6 +59,21 @@ def encode(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [encode(v) for v in obj]
     return obj
+
+
+def encode_claim(claim) -> Optional[Dict]:
+    if claim is None:
+        return None
+    return {
+        "type": claim.claim_type.value,
+        "text": claim.text,
+        "method": claim.method,
+        "tier": claim.tier,
+        "citations": claim.citations,
+        "inference_step": claim.inference_step,
+        "experimentally_tested": claim.experimentally_tested,
+        "rendered": claim.render(),
+    }
 
 
 def encode_effect(effect) -> Dict:
@@ -203,18 +220,36 @@ def infer_function(req: InferRequest) -> Dict:
     except ValueError as e:
         parse_error = str(e)
 
-    inferred, confidence = _evidence.infer_function_from_name(name)
+    if not sequence:
+        return {
+            "sequence": "", "name": name, "length": 0, "parse_error": parse_error,
+            "inferred_function": "", "inference_confidence": 0.0,
+            "suggested_goal": None, "properties": None,
+        }
+
+    inference = _inferencer.infer(sequence, name=name)
 
     return {
         "sequence": sequence,
         "name": name,
         "length": len(sequence),
         "parse_error": parse_error,
-        "inferred_function": inferred,
-        "inference_confidence": confidence,
-        "properties": _peptides.basic_properties(sequence) if sequence else None,
+        "inferred_function": inference.inferred_function,
+        "inference_confidence": round(inference.confidence, 2),
+        "inference_level": inference.level,
+        "inference_basis": inference.basis,
+        "is_identification": inference.is_identification,
+        "matched_name": inference.matched_name,
+        "parent_protein": inference.parent_protein,
+        "native_context_note": inference.native_context_note,
+        "suggested_goal": inference.suggested_goal,
+        "suggested_goal_reason": inference.goal_reason,
+        "alternatives": inference.alternatives,
+        "caveats": inference.caveats,
+        "claim": encode_claim(inference.claim),
+        "properties": _peptides.basic_properties(sequence),
         "prompt": (
-            f"Based on the available records, you are seeking a form of: {inferred}. "
+            f"Based on the sequence, you are seeking a form of: {inference.inferred_function} "
             f"Confirm or specify a different target function before proceeding."
         ),
     }
@@ -272,21 +307,6 @@ def find_peptides(req: FindRequest) -> Dict:
             entry["evidence_tier"] = source.evidence_tier.name
             entry["confidence"] = source.confidence.value
     return payload
-
-
-def encode_claim(claim) -> Optional[Dict]:
-    if claim is None:
-        return None
-    return {
-        "type": claim.claim_type.value,
-        "text": claim.text,
-        "method": claim.method,
-        "tier": claim.tier,
-        "citations": claim.citations,
-        "inference_step": claim.inference_step,
-        "experimentally_tested": claim.experimentally_tested,
-        "rendered": claim.render(),
-    }
 
 
 def encode_transformation(t) -> Dict:

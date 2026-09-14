@@ -1,0 +1,152 @@
+{
+  "_comment": "Reference sequences and bioactive motifs for sequence-based function inference. Every entry requires verification against UniProt or primary literature before being relied on — this is a local cache, not an authority. Sequences here are included only where they are well established; where a sequence was uncertain it was left out rather than approximated, because a wrong sequence produces confidently wrong downstream analysis.",
+
+  "exact_peptides": {
+    "GLP-1(7-37)": {
+      "sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",
+      "gene": "GCG",
+      "function": "Incretin hormone: glucose-dependent insulin secretion, satiety, gastric emptying delay via GLP-1R",
+      "family": "glucagon superfamily",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Native GLP-1 has a circulating half-life of roughly two minutes due to DPP-4 cleavage at position 2. Protease resistance is the dominant liability for this scaffold."
+    },
+    "Glucagon": {
+      "sequence": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT",
+      "gene": "GCG",
+      "function": "Counter-regulatory hormone: raises blood glucose via GCGR",
+      "family": "glucagon superfamily",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Shares the DPP-4-susceptible N-terminus of the glucagon superfamily."
+    },
+    "Insulin A-chain": {
+      "sequence": "GIVEQCCTSICSLYQLENYCN",
+      "gene": "INS",
+      "function": "A-chain of insulin; disulfide-linked to the B-chain in the mature hormone",
+      "family": "insulin superfamily",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "An isolated chain is not the functional unit. The cysteines here form interchain disulfides, so this is a fragment of a binary complex rather than a standalone peptide."
+    },
+    "Insulin B-chain": {
+      "sequence": "FVNQHLCGSHLVEALYLVCGERGFFYTPKT",
+      "gene": "INS",
+      "function": "B-chain of insulin; carries the receptor-binding surface",
+      "family": "insulin superfamily",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Carries the primary receptor-binding determinants, but only in the disulfide-linked complex with the A-chain."
+    },
+    "Oxytocin": {
+      "sequence": "CYIQNCPLG",
+      "gene": "OXT",
+      "function": "Uterine contraction, milk ejection, social bonding via OXTR",
+      "family": "neurohypophysial",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Short cyclic peptide with a very short plasma half-life; exposure is the limiting property."
+    },
+    "Vasopressin": {
+      "sequence": "CYFQNCPRG",
+      "gene": "AVP",
+      "function": "Antidiuresis and vasoconstriction via V1/V2 receptors",
+      "family": "neurohypophysial",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Short half-life; desmopressin is the clinical precedent for stabilising this scaffold."
+    },
+    "Substance P": {
+      "sequence": "RPKPQQFFGLM",
+      "gene": "TAC1",
+      "function": "Neurokinin-1 receptor agonist: pain transmission, neurogenic inflammation",
+      "family": "tachykinin",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Rapidly degraded by neprilysin and ACE; the C-terminal Met is also an oxidation liability."
+    },
+    "Bradykinin": {
+      "sequence": "RPPGFSPFR",
+      "gene": "KNG1",
+      "function": "Vasodilation, vascular permeability, pain via B2 receptor",
+      "family": "kinin",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Half-life under a minute; degraded by ACE and neprilysin."
+    },
+    "LL-37": {
+      "sequence": "LLGDFFRKSKEKIGKEFKRIVQRIKDFLRNLVPRTES",
+      "gene": "CAMP",
+      "function": "Cathelicidin host-defence peptide: membrane-disrupting antimicrobial, immunomodulatory",
+      "family": "cathelicidin",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Cationic amphipathic helix. Activity depends on the amphipathic fold, so constraint moves and protease resistance both apply; salt sensitivity is the other classic liability."
+    },
+    "BPC-157": {
+      "sequence": "GEPPPGKPADDAGLV",
+      "gene": "",
+      "function": "Synthetic pentadecapeptide derived from a gastric juice protein fragment; reported in tissue-repair models",
+      "family": "synthetic",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Human clinical evidence is limited. Reported stability in gastric juice is the distinguishing claim for this peptide, so proteolytic behaviour is the property most worth examining."
+    }
+  },
+
+  "bioactive_motifs": {
+    "IKVAV": {
+      "parent_protein": "Laminin alpha-1 chain",
+      "gene": "LAMA1",
+      "location": "LG domain region of the alpha-1 chain",
+      "function": "Neurite outgrowth, cell adhesion and migration; widely used to functionalise scaffolds for neural regeneration",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "A short adhesion motif excised from a very large basement-membrane protein. Its activity is presentation-dependent — density, spacing and multivalency dominate — so binding and its structural context matter more than half-life.",
+      "native_context_note": "This is an internal fragment of a multi-thousand-residue ECM protein. Both termini are excision artefacts, and in the native protein the motif is displayed on a folded domain rather than as a free peptide."
+    },
+    "YIGSR": {
+      "parent_protein": "Laminin beta-1 chain",
+      "gene": "LAMB1",
+      "location": "Domain III of the beta-1 chain",
+      "function": "Cell adhesion via the 67 kDa laminin receptor; reported anti-metastatic and anti-angiogenic activity",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Adhesion motif whose activity depends on receptor engagement and presentation rather than circulating exposure.",
+      "native_context_note": "Internal fragment of laminin beta-1. Free termini are excision artefacts."
+    },
+    "RKRLQVQLSIRT": {
+      "parent_protein": "Laminin alpha-1 chain, LG4 module (the peptide commonly designated AG73)",
+      "gene": "LAMA1",
+      "location": "LG4 module",
+      "function": "Syndecan-binding; cell adhesion, spreading and neurite outgrowth",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Heparin/syndecan binding is charge-driven, so charge engineering and presentation dominate over proteolytic stability.",
+      "native_context_note": "Internal fragment of the laminin alpha-1 LG4 module; strongly cationic, which is the basis of its syndecan binding."
+    },
+    "RGD": {
+      "parent_protein": "Integrin-binding motif found in fibronectin, vitronectin, and several other matrix proteins",
+      "gene": "",
+      "location": "Various",
+      "function": "Integrin-mediated cell adhesion",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Integrin selectivity depends almost entirely on the conformation the RGD is presented in — cyclic RGD peptides differ from linear ones by orders of magnitude in both affinity and integrin subtype selectivity.",
+      "native_context_note": "A three-residue motif is too short to be specific on its own. Flanking residues and conformational constraint determine which integrin it engages.",
+      "min_length_warning": "RGD alone is only three residues. A match here indicates the motif is present, not that the peptide's function is adhesion."
+    }
+  },
+
+  "family_signatures": {
+    "_comment": "Physicochemical signatures used when no sequence or motif match is found. These are heuristics over computed Tier 0 properties and are reported as INFERRED, never as identification.",
+    "cationic_amphipathic_amp": {
+      "description": "Cationic amphipathic helix — the host-defence / antimicrobial peptide profile",
+      "min_net_charge": 3.0,
+      "min_hydrophobic_moment": 0.35,
+      "min_length": 12,
+      "max_length": 60,
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Antimicrobial peptides are typically protease-labile and lose activity on proteolysis. Activity also depends on the amphipathic fold, so constraint moves are the other productive direction."
+    },
+    "disulfide_rich": {
+      "description": "Disulfide-rich scaffold — defensin, knottin, or growth-factor-like fold",
+      "min_cysteines": 6,
+      "requires_even_cysteines": true,
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Disulfide-rich scaffolds are already proteolytically stable because of their crosslinked fold, so protease resistance is rarely the limiting property. Binding and correct disulfide pairing dominate."
+    },
+    "collagen_like": {
+      "description": "Gly/Pro-rich, collagen-like composition",
+      "min_gly_pro_fraction": 0.35,
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Gly/Pro-rich sequences are MMP and collagenase substrates."
+    }
+  }
+}
