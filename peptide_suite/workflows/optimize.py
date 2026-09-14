@@ -44,6 +44,7 @@ class OptimizeWorkflow:
         confirmed_goal: Optional[str] = None,
         auto_confirm: bool = False,
         ph: float = 7.4,
+        homologs: Optional[List[str]] = None,
     ) -> Tuple[PeptideContext, List[SubstitutionRecommendation]]:
         """
         Run the full optimization workflow.
@@ -53,6 +54,9 @@ class OptimizeWorkflow:
             confirmed_goal: If provided, skip function inference step
             auto_confirm: If True, auto-use inferred function (testing only)
             ph: pH for charge calculations
+            homologs: Caller-supplied homologous sequences. This is the manual
+                route to the conservation term until NCBI retrieval is wired up;
+                supplying >= 3 distinct sequences activates entropy scoring.
 
         Returns:
             Tuple of (PeptideContext, list of SubstitutionRecommendation objects)
@@ -94,19 +98,25 @@ class OptimizeWorkflow:
 
         # Step 2: Retrieve homologs and compute conservation
         logger.info("Step 2: Retrieving homologs and computing conservation...")
-        homologs, homolog_status = self.evidence_retriever.retrieve_homologs(
-            peptide_context.name
-        )
 
-        if not homologs:
-            logger.warning(f"No homologs found ({homolog_status}). Using query peptide only.")
-            homologs = [peptide_context.sequence]
+        if homologs:
+            logger.info(f"Using {len(homologs)} caller-supplied homolog(s)")
+            homolog_source = "caller-supplied"
         else:
-            logger.info(f"Retrieved {len(homologs)} homologs from NCBI")
+            homologs, homolog_status = self.evidence_retriever.retrieve_homologs(
+                peptide_context.name
+            )
+            homolog_source = "NCBI"
+            if not homologs:
+                logger.warning(f"No homologs found ({homolog_status}). Using query peptide only.")
+                homologs = [peptide_context.sequence]
+            else:
+                logger.info(f"Retrieved {len(homologs)} homologs from NCBI")
 
-        # Distinct sequences only: duplicate copies of the query add no information
-        # and would otherwise make every position look perfectly conserved.
-        distinct = list(dict.fromkeys(homologs))
+        # The query sequence is part of its own alignment, and only distinct
+        # sequences carry information: duplicates would make every position look
+        # perfectly conserved.
+        distinct = list(dict.fromkeys([peptide_context.sequence] + list(homologs)))
         peptide_context.homolog_count = len(distinct)
         peptide_context.known_homologs = distinct
         peptide_context.conservation_available = len(distinct) >= MIN_HOMOLOGS_FOR_CONSERVATION
@@ -206,6 +216,9 @@ class OptimizeWorkflow:
                 net_score, combined_confidence = self.confidence_scorer.combine_effect_scores(
                     all_effects
                 )
+                breakdown = self.confidence_scorer.explain_net_score(all_effects)
+                limiting = self.confidence_scorer.limiting_effect(all_effects)
+                breakdown["confidence_limited_by"] = limiting.description if limiting else ""
 
                 # Determine net recommendation
                 if net_score >= 0.5:
@@ -239,6 +252,7 @@ class OptimizeWorkflow:
                     overall_confidence=combined_confidence.value,
                     net_score=net_score,
                     ranking_rationale=f"Score {net_score:.2f}, confidence {combined_confidence.value}",
+                    score_breakdown=breakdown,
                 )
 
                 all_recs.append(rec)

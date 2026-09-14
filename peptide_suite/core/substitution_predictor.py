@@ -433,7 +433,7 @@ class SubstitutionPredictor:
 
         if entropy < 0.5:
             reason = (
-                f"Position {position} is highly conserved (entropy {entropy:.2f}). "
+                f"Position {position + 1} is highly conserved (entropy {entropy:.2f}). "
                 "Suggests strong functional constraint. Mutation may disable critical interactions."
             )
             modifier = 0.9  # High confidence in the risk
@@ -441,14 +441,14 @@ class SubstitutionPredictor:
             evidence = EvidenceTier.DIRECT_EXPERIMENTAL  # MSA is direct data
         elif entropy < 2.0:
             reason = (
-                f"Position {position} is moderately conserved (entropy {entropy:.2f}). "
+                f"Position {position + 1} is moderately conserved (entropy {entropy:.2f}). "
                 "May be important but tolerate some variation."
             )
             modifier = 0.6
             magnitude = 0.4
             evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
         else:
-            reason = f"Position {position} is variable (entropy {entropy:.2f}). No conservation penalty."
+            reason = f"Position {position + 1} is variable (entropy {entropy:.2f}). No conservation penalty."
             modifier = 0.9
             magnitude = 0.05
             evidence = EvidenceTier.DIRECT_EXPERIMENTAL

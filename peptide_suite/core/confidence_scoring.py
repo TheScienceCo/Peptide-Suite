@@ -13,6 +13,13 @@ from . import EvidenceTier, ConfidenceLevel, Effect
 
 logger = logging.getLogger(__name__)
 
+CONFIDENCE_RANK = {ConfidenceLevel.HIGH: 3, ConfidenceLevel.MEDIUM: 2, ConfidenceLevel.LOW: 1}
+
+# An effect below this contribution is treated as boilerplate for the purpose of
+# the overall confidence label: it is still shown and still scored, but it does
+# not get to drag the headline confidence down.
+MATERIAL_CONTRIBUTION = 0.1
+
 
 class ConfidenceScorer:
     """
@@ -100,6 +107,42 @@ class ConfidenceScorer:
         else:
             return ConfidenceLevel.LOW
 
+    def explain_net_score(self, effects: List[Effect]) -> Dict:
+        """
+        Compute the net score and return every intermediate term.
+
+        This is the single source of truth for the scoring arithmetic, so that a
+        displayed score can always be re-derived from the terms shown beside it
+        rather than being taken on trust.
+        """
+        if not effects:
+            return {"expected_benefit": 0.0, "combined_cost": 0.0, "net": 0.0, "terms": []}
+
+        primary, off_targets = effects[0], effects[1:]
+
+        # Expected benefit: how big the primary effect is, discounted by how sure
+        # we are it is real. Magnitude and confidence are separate axes.
+        expected_benefit = primary.magnitude * primary.score
+
+        # Off-target costs combine as independent risks (noisy-OR) rather than by
+        # summation, so the total is bounded and does not scale with how many
+        # off-target checks happen to be implemented.
+        survival = 1.0
+        terms = []
+        for effect in off_targets:
+            contribution = effect.magnitude * effect.score
+            survival *= 1.0 - contribution
+            terms.append({"description": effect.description, "contribution": round(contribution, 4)})
+        combined_cost = 1.0 - survival
+
+        return {
+            "expected_benefit": round(expected_benefit, 4),
+            "combined_cost": round(combined_cost, 4),
+            "net": round(max(-1.0, min(1.0, expected_benefit - combined_cost)), 4),
+            "formula": "net = (primary magnitude x confidence) - (1 - product of (1 - magnitude x confidence) over off-targets)",
+            "terms": terms,
+        }
+
     def combine_effect_scores(self, effects: List[Effect]) -> Tuple[float, ConfidenceLevel]:
         """
         Combine multiple effects (primary + off-targets) into a net score.
@@ -115,29 +158,29 @@ class ConfidenceScorer:
         if not effects:
             return 0.0, ConfidenceLevel.LOW
 
-        primary, off_targets = effects[0], effects[1:]
-
-        # Expected benefit: how big the primary effect is, discounted by how sure
-        # we are it is real. Magnitude and confidence are separate axes.
-        expected_benefit = primary.magnitude * primary.score
-
-        # Off-target costs combine as independent risks (noisy-OR) rather than by
-        # summation, so the total is bounded and does not scale with how many
-        # off-target checks happen to be implemented.
-        survival = 1.0
-        for effect in off_targets:
-            survival *= 1.0 - (effect.magnitude * effect.score)
-        combined_cost = 1.0 - survival
-
-        net = max(-1.0, min(1.0, expected_benefit - combined_cost))
+        primary = effects[0]
+        breakdown = self.explain_net_score(effects)
+        net = breakdown["net"]
 
         # Overall confidence reflects only effects that materially move the net
         # score; near-zero boilerplate checks must not drag the label down.
-        confidence_rank = {ConfidenceLevel.HIGH: 3, ConfidenceLevel.MEDIUM: 2, ConfidenceLevel.LOW: 1}
-        material = [e for e in effects if e.magnitude * e.score > 0.1] or [primary]
-        min_confidence = min((e.confidence for e in material), key=lambda conf: confidence_rank[conf])
+        material = [e for e in effects if e.magnitude * e.score > MATERIAL_CONTRIBUTION] or [primary]
+        limiting = min(material, key=lambda e: CONFIDENCE_RANK[e.confidence])
 
-        return net, min_confidence
+        return net, limiting.confidence
+
+    def limiting_effect(self, effects: List[Effect]) -> Optional[Effect]:
+        """
+        Return the effect that sets the overall confidence label.
+
+        Surfaced alongside the label so a reader can see why a recommendation
+        carrying a high-confidence primary effect is nonetheless reported at a
+        lower overall confidence.
+        """
+        if not effects:
+            return None
+        material = [e for e in effects if e.magnitude * e.score > MATERIAL_CONTRIBUTION] or [effects[0]]
+        return min(material, key=lambda e: CONFIDENCE_RANK[e.confidence])
 
     def log_prediction(
         self,

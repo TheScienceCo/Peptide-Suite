@@ -82,6 +82,7 @@ class SubstitutionRecommendation:
     overall_confidence: float = 0.0
     net_score: float = 0.0
     ranking_rationale: str = ""
+    score_breakdown: Dict = None
 
     def __post_init__(self):
         if self.off_target_effects is None:

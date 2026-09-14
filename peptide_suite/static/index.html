@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Peptide Suite</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Peptide Suite</h1>
+    <span class="version" id="version">…</span>
+  </header>
+  <p class="subtitle">
+    Substitution scanning and peptide discovery with evidence-tiered confidence.
+    Every number shown here is computed by the Python pipeline; anything that could
+    not be computed is reported as unavailable rather than estimated.
+  </p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-optimize" aria-selected="true" aria-controls="panel-optimize">
+      Optimize a peptide
+    </button>
+    <button class="tab" role="tab" id="tab-find" aria-selected="false" aria-controls="panel-find">
+      Find peptides
+    </button>
+  </div>
+
+  <!-- ================= WORKFLOW 1 ================= -->
+  <section class="panel" id="panel-optimize" role="tabpanel" aria-labelledby="tab-optimize">
+
+    <div class="card">
+      <h2>Input</h2>
+      <label for="seq">Peptide sequence (one-letter codes)</label>
+      <textarea id="seq" spellcheck="false"
+                placeholder="HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG"></textarea>
+      <div class="chips" id="seq-examples"></div>
+
+      <details class="opt-extra">
+        <summary>Homologous sequences (optional)</summary>
+        <p class="hint">
+          Automated NCBI retrieval is not wired up in this build, so the per-position
+          conservation term is reported as not computed unless you supply homologs here.
+          Paste one sequence per line; three or more distinct sequences activate entropy
+          scoring and the conservation chart.
+        </p>
+        <textarea id="homologs" spellcheck="false"
+                  placeholder="One homologous sequence per line"></textarea>
+      </details>
+
+      <div class="row">
+        <div>
+          <label for="ph">pH for charge calculation</label>
+          <input type="text" id="ph" value="7.4" inputmode="decimal">
+        </div>
+        <div class="shrink">
+          <button class="primary" id="btn-infer">Analyze</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="gate-slot"></div>
+    <div id="opt-results"></div>
+
+  </section>
+
+  <!-- ================= WORKFLOW 2 ================= -->
+  <section class="panel" id="panel-find" role="tabpanel" aria-labelledby="tab-find" hidden>
+
+    <div class="card">
+      <h2>Functional goal</h2>
+      <label for="query">Describe the function you are looking for</label>
+      <input type="text" id="query" placeholder="myelinating peptides" spellcheck="false">
+      <div class="chips" id="query-examples"></div>
+
+      <div class="row">
+        <div class="shrink">
+          <label for="force">
+            <input type="checkbox" id="force" style="width:auto;margin-right:6px">
+            Run full ranking even if the literature already answers this
+          </label>
+        </div>
+        <div class="shrink">
+          <button class="primary" id="btn-find">Search</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="find-results"></div>
+
+  </section>
+
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
