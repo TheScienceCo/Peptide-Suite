@@ -1,0 +1,260 @@
+{
+  "_comment": "LOCAL FALLBACK CACHE for Workflow 2 (Find Peptides). This is NOT a substitute for querying Gene Ontology / UniProt / Human Protein Atlas live; it exists so the workflow degrades honestly when those APIs are unreachable. Every entry is tagged source='curated_local_seed' and requires_verification=true in the output, and no PMIDs are recorded here because inventing citation identifiers would be worse than having none. Gene symbols and UniProt accessions should be confirmed at uniprot.org before use. Extend this file as live retrieval is wired up.",
+  "_schema": {
+    "keywords": "match terms, lowercased, substring-matched against the user query",
+    "go_term": "Gene Ontology biological process identifier",
+    "cell_types": "cell types known to perform the process (Cell Ontology IDs where known)",
+    "established_peptides": "peptides/proteins with well-established roles; drives the Step 2 short circuit",
+    "candidate_peptides": "less-established or context-dependent associations, ranked in Step 3"
+  },
+
+  "myelination": {
+    "keywords": ["myelin", "myelinating", "myelination", "remyelination", "oligodendrocyte", "schwann"],
+    "go_term": "GO:0042552",
+    "go_name": "myelination",
+    "cell_types": [
+      {
+        "name": "Schwann cell",
+        "ontology_id": "CL:0002573",
+        "relationship": "Forms myelin sheath in the peripheral nervous system"
+      },
+      {
+        "name": "Oligodendrocyte",
+        "ontology_id": "CL:0000128",
+        "relationship": "Forms myelin sheath in the central nervous system"
+      },
+      {
+        "name": "Oligodendrocyte precursor cell",
+        "ontology_id": "CL:0002453",
+        "relationship": "Differentiates into myelinating oligodendrocytes; target of remyelination strategies"
+      }
+    ],
+    "established_peptides": [
+      {
+        "name": "Neuregulin-1 type III",
+        "gene": "NRG1",
+        "uniprot": "Q02297",
+        "rationale": "Axonal NRG1 type III signalling through ErbB2/ErbB3 is the principal determinant of Schwann cell myelination and sheath thickness in the PNS."
+      },
+      {
+        "name": "Brain-derived neurotrophic factor",
+        "gene": "BDNF",
+        "uniprot": "P23560",
+        "rationale": "Promotes myelination via TrkB/p75 signalling; acts on both Schwann cells and oligodendrocyte lineage cells."
+      },
+      {
+        "name": "Insulin-like growth factor 1",
+        "gene": "IGF1",
+        "uniprot": "P05019",
+        "rationale": "Supports oligodendrocyte survival and myelin protein synthesis; IGF1 loss reduces myelin content."
+      }
+    ],
+    "candidate_peptides": [
+      {
+        "name": "Ciliary neurotrophic factor",
+        "gene": "CNTF",
+        "uniprot": "P26441",
+        "rationale": "Supports oligodendrocyte survival and has been investigated in demyelinating models."
+      },
+      {
+        "name": "Leukemia inhibitory factor",
+        "gene": "LIF",
+        "uniprot": "P15018",
+        "rationale": "gp130 cytokine reported to protect oligodendrocytes in demyelination models."
+      },
+      {
+        "name": "Myelin basic protein",
+        "gene": "MBP",
+        "uniprot": "P02686",
+        "rationale": "Structural myelin component rather than a signalling peptide; included because expression is highly specific to myelinating cells."
+      }
+    ]
+  },
+
+  "wound_healing": {
+    "keywords": ["wound", "wound healing", "tissue repair", "regeneration", "granulation"],
+    "go_term": "GO:0042060",
+    "go_name": "wound healing",
+    "cell_types": [
+      {
+        "name": "Keratinocyte",
+        "ontology_id": "CL:0000312",
+        "relationship": "Re-epithelialises the wound bed"
+      },
+      {
+        "name": "Fibroblast",
+        "ontology_id": "CL:0000057",
+        "relationship": "Deposits extracellular matrix and drives contraction"
+      },
+      {
+        "name": "Endothelial cell",
+        "ontology_id": "CL:0000115",
+        "relationship": "Forms new vasculature supplying the repair site"
+      }
+    ],
+    "established_peptides": [
+      {
+        "name": "Epidermal growth factor",
+        "gene": "EGF",
+        "uniprot": "P01133",
+        "rationale": "Drives keratinocyte proliferation and migration; long-established in re-epithelialisation."
+      },
+      {
+        "name": "Vascular endothelial growth factor A",
+        "gene": "VEGFA",
+        "uniprot": "P15692",
+        "rationale": "Principal angiogenic signal supplying the granulation tissue."
+      }
+    ],
+    "candidate_peptides": [
+      {
+        "name": "Thymosin beta-4",
+        "gene": "TMSB4X",
+        "uniprot": "P62328",
+        "rationale": "Actin-sequestering peptide reported to accelerate wound closure and promote angiogenesis."
+      },
+      {
+        "name": "BPC-157",
+        "gene": "",
+        "uniprot": "",
+        "rationale": "Synthetic pentadecapeptide derived from a gastric juice protein fragment. Widely reported in rodent repair models; human clinical evidence is limited, so this ranks as a candidate rather than an established answer."
+      }
+    ]
+  },
+
+  "angiogenesis": {
+    "keywords": ["angiogenesis", "vascular", "vasculature", "neovascular", "blood vessel"],
+    "go_term": "GO:0001525",
+    "go_name": "angiogenesis",
+    "cell_types": [
+      {
+        "name": "Endothelial cell",
+        "ontology_id": "CL:0000115",
+        "relationship": "Proliferates and migrates to form new vessels"
+      },
+      {
+        "name": "Pericyte",
+        "ontology_id": "CL:0000669",
+        "relationship": "Stabilises nascent vessels"
+      }
+    ],
+    "established_peptides": [
+      {
+        "name": "Vascular endothelial growth factor A",
+        "gene": "VEGFA",
+        "uniprot": "P15692",
+        "rationale": "Canonical pro-angiogenic factor acting through VEGFR2."
+      },
+      {
+        "name": "Fibroblast growth factor 2",
+        "gene": "FGF2",
+        "uniprot": "P09038",
+        "rationale": "Potent endothelial mitogen, long established in angiogenesis."
+      }
+    ],
+    "candidate_peptides": [
+      {
+        "name": "Angiopoietin-1",
+        "gene": "ANGPT1",
+        "uniprot": "Q15389",
+        "rationale": "Tie2 ligand promoting vessel maturation and stability rather than sprouting."
+      }
+    ]
+  },
+
+  "antimicrobial": {
+    "keywords": ["antimicrobial", "antibacterial", "host defense", "host defence", "innate immunity"],
+    "go_term": "GO:0019731",
+    "go_name": "antibacterial humoral response",
+    "cell_types": [
+      {
+        "name": "Neutrophil",
+        "ontology_id": "CL:0000775",
+        "relationship": "Stores and releases antimicrobial peptides from granules"
+      },
+      {
+        "name": "Paneth cell",
+        "ontology_id": "CL:0000510",
+        "relationship": "Secretes defensins into the intestinal crypt"
+      },
+      {
+        "name": "Keratinocyte",
+        "ontology_id": "CL:0000312",
+        "relationship": "Produces cathelicidin and beta-defensins at the epithelial barrier"
+      }
+    ],
+    "established_peptides": [
+      {
+        "name": "Cathelicidin LL-37",
+        "gene": "CAMP",
+        "uniprot": "P49913",
+        "rationale": "The sole human cathelicidin; broad-spectrum membrane-disrupting antimicrobial peptide."
+      },
+      {
+        "name": "Human beta-defensin 2",
+        "gene": "DEFB4A",
+        "uniprot": "O15263",
+        "rationale": "Inducible epithelial defensin active against Gram-negative bacteria."
+      }
+    ],
+    "candidate_peptides": [
+      {
+        "name": "Hepcidin",
+        "gene": "HAMP",
+        "uniprot": "P81172",
+        "rationale": "Primarily an iron-regulatory hormone; antimicrobial activity is secondary and largely indirect via iron restriction."
+      }
+    ]
+  },
+
+  "appetite_metabolic": {
+    "keywords": ["appetite", "satiety", "incretin", "glucose", "metabolic", "weight", "obesity", "insulin secretion"],
+    "go_term": "GO:0032099",
+    "go_name": "negative regulation of appetite",
+    "cell_types": [
+      {
+        "name": "Enteroendocrine L cell",
+        "ontology_id": "CL:0002279",
+        "relationship": "Secretes GLP-1 and PYY in response to nutrient intake"
+      },
+      {
+        "name": "Pancreatic beta cell",
+        "ontology_id": "CL:0000169",
+        "relationship": "Target of incretin signalling; secretes insulin"
+      },
+      {
+        "name": "Adipocyte",
+        "ontology_id": "CL:0000136",
+        "relationship": "Secretes leptin in proportion to fat mass"
+      }
+    ],
+    "established_peptides": [
+      {
+        "name": "Glucagon-like peptide-1",
+        "gene": "GCG",
+        "uniprot": "P01275",
+        "rationale": "Incretin driving glucose-dependent insulin secretion and satiety; the basis of an established drug class."
+      },
+      {
+        "name": "Leptin",
+        "gene": "LEP",
+        "uniprot": "P41159",
+        "rationale": "Adipose-derived satiety signal acting on hypothalamic circuits."
+      }
+    ],
+    "candidate_peptides": [
+      {
+        "name": "Peptide YY",
+        "gene": "PYY",
+        "uniprot": "P10082",
+        "rationale": "Co-secreted with GLP-1; reduces food intake via Y2 receptor signalling."
+      },
+      {
+        "name": "Ghrelin",
+        "gene": "GHRL",
+        "uniprot": "Q9UBU3",
+        "rationale": "Orexigenic rather than anorexigenic; relevant to appetite regulation but with the opposite sign of effect."
+      }
+    ]
+  }
+}

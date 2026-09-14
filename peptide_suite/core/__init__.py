@@ -88,6 +88,55 @@ class SubstitutionRecommendation:
             self.off_target_effects = []
 
 
+@dataclass
+class CellTypeHit:
+    """A cell type or tissue implicated in a queried biological function."""
+    name: str
+    ontology_id: str = ""          # GO / CL identifier where known
+    relationship: str = ""         # How it relates to the function
+    source: str = ""               # Which resource answered
+    confidence: float = 0.0
+
+
+@dataclass
+class PeptideCandidate:
+    """A peptide/protein proposed as relevant to a queried function."""
+    name: str
+    gene: str = ""
+    uniprot: str = ""
+    rationale: str = ""
+    expression_note: str = ""      # What expression data says, or that none was retrieved
+    literature_note: str = ""      # What the literature search returned
+    expression_score: Optional[float] = None   # None when not retrieved — never invented
+    literature_score: Optional[float] = None
+    combined_score: float = 0.0
+    confidence: ConfidenceLevel = ConfidenceLevel.LOW
+    evidence_tier: EvidenceTier = EvidenceTier.INFERENCE_ONLY
+    citations: List[str] = None
+    requires_verification: bool = True
+
+    def __post_init__(self):
+        if self.citations is None:
+            self.citations = []
+
+
+@dataclass
+class FindPeptidesResult:
+    """Output of Workflow 2."""
+    query: str
+    cell_types: List[CellTypeHit] = None
+    known_answer_found: bool = False
+    known_answers: List[PeptideCandidate] = None
+    candidates: List[PeptideCandidate] = None
+    data_notes: List[str] = None
+    methodology_note: str = ""
+
+    def __post_init__(self):
+        for field_name in ("cell_types", "known_answers", "candidates", "data_notes"):
+            if getattr(self, field_name) is None:
+                setattr(self, field_name, [])
+
+
 # Shannon entropy over fewer than this many sequences carries no conservation
 # information (a single sequence is 0 at every position by construction), so it
 # is reported as unavailable rather than as a computed value.

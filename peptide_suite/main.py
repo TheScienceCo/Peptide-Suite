@@ -11,6 +11,10 @@ from peptide_suite.workflows.optimize import (
     OptimizeWorkflow,
     format_workflow_summary,
 )
+from peptide_suite.workflows.find_peptides import (
+    FindPeptidesWorkflow,
+    format_find_result,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -57,11 +61,16 @@ def main():
     # Workflow 2: Find Peptides (placeholder)
     find_parser = subparsers.add_parser(
         "find",
-        help="Find peptides for a functional goal (Workflow 2 - TODO)",
+        help="Find peptides for a functional goal (Workflow 2)",
     )
     find_parser.add_argument(
         "goal",
-        help="Functional goal (e.g., 'myelinating_peptides', 'wound_healing')",
+        help="Functional goal (e.g., 'myelinating peptides', 'wound healing')",
+    )
+    find_parser.add_argument(
+        "--force-full",
+        action="store_true",
+        help="Run the full ranking even when the literature already answers the question",
     )
 
     # Test/calibration commands
@@ -114,8 +123,11 @@ def run_optimize(args):
 
 def run_find(args):
     """Execute Workflow 2: Find Peptides."""
-    logger.error("Workflow 2: Find Peptides is not yet implemented (v1 roadmap)")
-    sys.exit(1)
+    logger.info("Launching Workflow 2: Find Peptides")
+
+    workflow = FindPeptidesWorkflow()
+    result = workflow.run(args.goal, force_full_workflow=args.force_full)
+    print(format_find_result(result))
 
 
 def run_test_panel():

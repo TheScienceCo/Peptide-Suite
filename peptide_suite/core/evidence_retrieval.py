@@ -228,6 +228,46 @@ class EvidenceRetriever:
             0.0,
         )
 
+    # ====== Gene Ontology / expression (Workflow 2) ======
+
+    def query_gene_ontology(self, keywords: str) -> Tuple[List[Dict], str]:
+        """
+        Map a functional keyword query to GO biological process terms and the
+        cell types annotated to them.
+
+        Returns:
+            Tuple of (hits, status_message). Returns an empty list when live
+            retrieval is unavailable, so callers fall back to the local cache
+            at a visibly lower evidence tier rather than silently pretending
+            the ontology answered.
+        """
+        logger.info(f"Gene Ontology query for '{keywords}': live retrieval not wired up")
+        return [], (
+            "Gene Ontology API not wired up in this build — no live ontology query performed"
+        )
+
+    def retrieve_expression_profiles(
+        self, cell_types: List[str]
+    ) -> Tuple[Dict[str, Dict], str]:
+        """
+        Retrieve expression specificity for genes in the given cell types from
+        Human Protein Atlas / GTEx.
+
+        Returns:
+            Tuple of (gene -> {specificity, note}, status_message). Returns an
+            empty dict when unavailable; callers must report expression
+            specificity as unretrieved rather than substituting a placeholder
+            number.
+        """
+        logger.info(
+            f"Expression profile query for {len(cell_types)} cell type(s): "
+            f"live retrieval not wired up"
+        )
+        return {}, (
+            "Human Protein Atlas / GTEx APIs not wired up in this build — "
+            "no expression specificity retrieved"
+        )
+
     def get_function_keywords(self) -> List[str]:
         """Return common functional keywords for 'Find Peptides' workflow."""
         return [
