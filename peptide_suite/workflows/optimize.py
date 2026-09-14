@@ -11,7 +11,12 @@ import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
-from peptide_suite.core import PeptideContext, SubstitutionRecommendation, ConfidenceLevel
+from peptide_suite.core import (
+    PeptideContext,
+    SubstitutionRecommendation,
+    ConfidenceLevel,
+    MIN_HOMOLOGS_FOR_CONSERVATION,
+)
 from peptide_suite.core.peptide_manager import PeptideManager, CANONICAL_AAS
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
 from peptide_suite.core.conservation import ConservationAnalyzer
@@ -99,15 +104,32 @@ class OptimizeWorkflow:
         else:
             logger.info(f"Retrieved {len(homologs)} homologs from NCBI")
 
-        # Compute conservation
-        msa = self.conservation.build_msa_from_sequences(homologs)
-        conservation_profile = self.conservation.conservation_profile(msa)
-        peptide_context.conservation_entropy = conservation_profile
+        # Distinct sequences only: duplicate copies of the query add no information
+        # and would otherwise make every position look perfectly conserved.
+        distinct = list(dict.fromkeys(homologs))
+        peptide_context.homolog_count = len(distinct)
+        peptide_context.known_homologs = distinct
+        peptide_context.conservation_available = len(distinct) >= MIN_HOMOLOGS_FOR_CONSERVATION
 
-        if conservation_profile:
-            logger.info(f"Conservation entropy computed (range: {min(conservation_profile.values()):.2f} - {max(conservation_profile.values()):.2f})")
+        if peptide_context.conservation_available:
+            msa = self.conservation.build_msa_from_sequences(distinct)
+            conservation_profile = self.conservation.conservation_profile(msa)
+            logger.info(
+                f"Conservation entropy computed from {len(distinct)} distinct sequences "
+                f"(range: {min(conservation_profile.values()):.2f} - {max(conservation_profile.values()):.2f})"
+            )
         else:
-            logger.info("No conservation profile (single sequence or no homologs)")
+            conservation_profile = {}
+            note = (
+                f"Conservation entropy NOT computed: only {len(distinct)} distinct sequence(s) "
+                f"available, {MIN_HOMOLOGS_FOR_CONSERVATION} required. Entropy over a single "
+                f"sequence is 0 at every position by construction and carries no information, "
+                f"so no conservation claim is made and no conservation penalty is applied."
+            )
+            peptide_context.data_notes.append(note)
+            logger.warning(note)
+
+        peptide_context.conservation_entropy = conservation_profile
 
         # Step 3: Run substitution scan
         logger.info("Step 3: Running substitution scan...")
@@ -163,10 +185,6 @@ class OptimizeWorkflow:
         for position in range(len(sequence)):
             wt_aa = sequence[position]
 
-            # Skip positions with conservation red flag? (optional, we'll still scan)
-            entropy = conservation_profile.get(position, 2.0)
-            conservation_flag = self.conservation.conservation_flag(entropy)
-
             for mutant_aa in CANONICAL_AAS:
                 if mutant_aa == wt_aa:
                     continue  # Skip identity substitution
@@ -180,6 +198,7 @@ class OptimizeWorkflow:
                     conservation_profile=conservation_profile,
                     inferred_goal=peptide_context.confirmed_goal or "generic_improvement",
                     ph=ph,
+                    conservation_available=peptide_context.conservation_available,
                 )
 
                 # Combine scores

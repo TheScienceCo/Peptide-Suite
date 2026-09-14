@@ -1,9 +1,14 @@
 {
-  "comment": "Known protease cleavage sites and recognition motifs. Used to predict proteolytic resistance.",
+  "comment": "Known protease cleavage sites and recognition motifs. Used to predict proteolytic resistance. `p1_residues` is the machine-readable P1 specificity used by the scanner; `fixed_position` restricts a protease to one site (0-indexed) rather than scanning the whole sequence.",
   "dpp4": {
     "full_name": "Dipeptidyl peptidase IV",
     "cleavage_site": "N-terminus, 2 residues from N-term",
     "recognition_motif": "[AEP]P",
+    "p1_residues": [
+      "P",
+      "A"
+    ],
+    "fixed_position": 1,
     "specificity": "Pro or Ala in P1; P1' position is cleaved off",
     "examples": [
       "GLP-1 (cleaved after N-terminus Pro)",
@@ -24,7 +29,12 @@
     ],
     "resistance_strategy": "Replace Ala/Gly with bulky residues",
     "evidence_tier": "direct_experimental",
-    "confidence": 0.85
+    "confidence": 0.85,
+    "p1_residues": [
+      "A",
+      "G",
+      "V"
+    ]
   },
   "elastase": {
     "full_name": "Serine elastase (pancreatic)",
@@ -36,7 +46,13 @@
     ],
     "resistance_strategy": "Replace hydrophobic residues with charged",
     "evidence_tier": "direct_experimental",
-    "confidence": 0.8
+    "confidence": 0.8,
+    "p1_residues": [
+      "V",
+      "L",
+      "I",
+      "A"
+    ]
   },
   "trypsin": {
     "full_name": "Trypsin (serine protease)",
@@ -48,7 +64,11 @@
     ],
     "resistance_strategy": "Remove or replace Lys/Arg with non-basic",
     "evidence_tier": "direct_experimental",
-    "confidence": 0.95
+    "confidence": 0.95,
+    "p1_residues": [
+      "K",
+      "R"
+    ]
   },
   "chymotrypsin": {
     "full_name": "Chymotrypsin (serine protease)",
@@ -60,7 +80,12 @@
     ],
     "resistance_strategy": "Replace Phe/Trp/Tyr with non-aromatic",
     "evidence_tier": "direct_experimental",
-    "confidence": 0.85
+    "confidence": 0.85,
+    "p1_residues": [
+      "F",
+      "W",
+      "Y"
+    ]
   },
   "matrix_metalloproteinases": {
     "full_name": "MMPs (collagenases, gelatinases, stromelysins)",
@@ -72,6 +97,10 @@
     ],
     "resistance_strategy": "Incorporate D-amino acids, N-methylation, or steric modifications",
     "evidence_tier": "biochemical_principle",
-    "confidence": 0.65
+    "confidence": 0.65,
+    "p1_residues": [
+      "L",
+      "M"
+    ]
   }
 }

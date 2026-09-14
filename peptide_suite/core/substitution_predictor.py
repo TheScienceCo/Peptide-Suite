@@ -4,7 +4,9 @@ Predicts primary and off-target effects using charge states, conservation,
 hydrophobicity, and known motif impacts.
 """
 
+import json
 import logging
+from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
@@ -58,15 +60,45 @@ class SubstitutionPredictor:
         self.charge_calc = ChargeCalculator()
         self.conservation = ConservationAnalyzer()
         self.confidence_scorer = ConfidenceScorer()
+        self.protease_motifs = self._load_protease_motifs()
 
-        # Known protease cleavage patterns (simplified)
-        # Real version would use Prosite or Merops databases
-        self.protease_motifs = {
-            "DPP4": ["[AEP]P"],  # Dipeptidyl peptidase IV
-            "neprilysin": ["AX", "GX"],  # Neprilysin (NEP) preferred sites
-            "elastase": ["VX", "AX", "LX"],  # Serine elastase sites
-            "trypsin": ["KR"],  # Trypsin cleavage after K or R
-        }
+    @staticmethod
+    def _load_protease_motifs() -> Dict[str, Dict]:
+        """Load P1 specificities from the reference data file."""
+        path = Path(__file__).parent.parent / "data" / "protease_motifs.json"
+        with open(path) as f:
+            data = json.load(f)
+        return {k: v for k, v in data.items() if isinstance(v, dict) and "p1_residues" in v}
+
+    def cleavage_liability(self, sequence: str, position: int) -> List[Dict]:
+        """
+        Report which proteases recognise `position` as a P1 cleavage residue.
+
+        This is motif matching against known specificities, not enzyme kinetics:
+        it answers "does this residue match a documented recognition pattern",
+        never "what is the kcat/KM".
+
+        Returns:
+            List of {protease, full_name, confidence, resistance_strategy} dicts
+        """
+        residue = sequence[position].upper()
+        hits = []
+
+        for name, spec in self.protease_motifs.items():
+            fixed = spec.get("fixed_position")
+            if fixed is not None and position != fixed:
+                continue
+            if residue in spec["p1_residues"]:
+                hits.append(
+                    {
+                        "protease": name,
+                        "full_name": spec.get("full_name", name),
+                        "confidence": spec.get("confidence", 0.5),
+                        "resistance_strategy": spec.get("resistance_strategy", ""),
+                    }
+                )
+
+        return hits
 
     def predict_substitution_effect(
         self,
@@ -77,6 +109,7 @@ class SubstitutionPredictor:
         conservation_profile: Dict[int, float],
         inferred_goal: str = "generic_improvement",
         ph: float = 7.4,
+        conservation_available: bool = False,
     ) -> Tuple[Effect, List[Effect]]:
         """
         Predict primary and off-target effects of a single substitution.
@@ -89,6 +122,9 @@ class SubstitutionPredictor:
             conservation_profile: Dict from ConservationAnalyzer
             inferred_goal: "protease_resistance", "binding_affinity", etc.
             ph: pH for charge calculations
+            conservation_available: False when too few homologs were retrieved for
+                entropy to carry information; suppresses the conservation term
+                rather than reporting a value with no computation path behind it.
 
         Returns:
             Tuple of (primary_effect, off_target_effects_list)
@@ -120,6 +156,7 @@ class SubstitutionPredictor:
             mutant_aa,
             conservation_profile,
             ph,
+            conservation_available,
         )
 
         return primary_effect, off_targets
@@ -150,37 +187,64 @@ class SubstitutionPredictor:
     ) -> Effect:
         """Predict protease resistance benefit."""
 
-        # Check if we're modifying a known protease site
-        window_size = 2
-        disrupt_motif = False
+        # Which proteases recognise the wild-type residue here, and which would
+        # still recognise the mutant? A substitution only helps if it removes a
+        # liability without introducing a new one.
+        removed = self.cleavage_liability(wild_seq, position)
+        introduced = self.cleavage_liability(mutant_seq, position)
 
-        for motif_aa_set in ["[AEP]", "AX", "GX", "KR", "VX", "LX"]:
-            for i in range(max(0, position - window_size), min(len(wild_seq), position + window_size)):
-                if i < position and wt_aa in motif_aa_set:
-                    disrupt_motif = True
-                    break
+        removed_names = {h["protease"] for h in removed}
+        introduced_names = {h["protease"] for h in introduced}
+        net_removed = removed_names - introduced_names
+        net_added = introduced_names - removed_names
 
-        if disrupt_motif:
+        if net_removed and not net_added:
+            best = max((h for h in removed if h["protease"] in net_removed), key=lambda h: h["confidence"])
             score = self.confidence_scorer.score_effect(
-                description=f"Disrupts protease recognition motif (substituting {wt_aa} with {mut_aa})",
-                evidence_tier=EvidenceTier.BIOCHEMICAL_PRINCIPLE,
-                reasoning=(
-                    "Known protease sites (DPP4, neprilysin, elastase) have specific "
-                    "recognition preferences. Removing or altering these residues prevents cleavage."
+                description=(
+                    f"Predicted cleavage liability reduced: removes {wt_aa} P1 site for "
+                    f"{', '.join(sorted(net_removed))}"
                 ),
-                modifier=0.8,  # Good evidence but context-dependent
-                equation_refs=[22, 23],  # Michaelis-Menten framing
+                evidence_tier=EvidenceTier.DIRECT_EXPERIMENTAL,
+                reasoning=(
+                    f"{wt_aa} at position {position + 1} matches the documented P1 specificity of "
+                    f"{best['full_name']}; {mut_aa} does not. Predicted cleavage liability: "
+                    f"high → low at this site. Motif match against known recognition patterns "
+                    f"(Michaelis-Menten framing only — no kcat/KM is computed or implied). "
+                    f"Documented strategy: {best['resistance_strategy']}"
+                ),
+                modifier=best["confidence"],
+                magnitude=0.75,
+                equation_refs=[22, 23],
+            )
+        elif net_added:
+            score = self.confidence_scorer.score_effect(
+                description=(
+                    f"Predicted cleavage liability INCREASED: introduces P1 site for "
+                    f"{', '.join(sorted(net_added))}"
+                ),
+                evidence_tier=EvidenceTier.DIRECT_EXPERIMENTAL,
+                reasoning=(
+                    f"{mut_aa} at position {position + 1} matches the P1 specificity of "
+                    f"{', '.join(sorted(net_added))}, creating a cleavage site that the wild-type "
+                    f"residue {wt_aa} did not present. This works against the stated goal."
+                ),
+                modifier=0.85,
+                magnitude=0.0,  # No benefit; the cost is carried as a negative below
+                equation_refs=[22, 23],
             )
         else:
-            # Generic proteolysis resistance (harder to predict without structure)
             score = self.confidence_scorer.score_effect(
-                description=f"Potential protease resistance (position not in known site)",
-                evidence_tier=EvidenceTier.INFERENCE_ONLY,
+                description="No change in predicted cleavage liability at this position",
+                evidence_tier=EvidenceTier.BIOCHEMICAL_PRINCIPLE,
                 reasoning=(
-                    f"D-amino acids and N-methylated positions generally resist proteolysis. "
-                    f"However, without structure, cannot assess local accessibility."
+                    f"Neither {wt_aa} nor {mut_aa} at position {position + 1} matches a P1 "
+                    f"specificity in the reference set ({', '.join(sorted(self.protease_motifs))}). "
+                    "Backbone-level strategies (D-amino acids, N-methylation) would be required "
+                    "here instead; those are non-canonical and out of scope for this scan."
                 ),
-                modifier=0.4,
+                modifier=0.7,
+                magnitude=0.05,
                 equation_refs=[],
             )
 
@@ -201,22 +265,29 @@ class SubstitutionPredictor:
         # Hydrophobicity change
         hydro_delta = HydrophobicityScale.hydrophobicity(mut_aa) - HydrophobicityScale.hydrophobicity(wt_aa)
 
-        description = f"Charge change: {charge_delta:.2f}e"
+        description = f"Charge change: {charge_delta:+.2f}e at pH {ph}"
         if abs(hydro_delta) > 1.0:
             description += f"; hydrophobicity shift: {hydro_delta:+.1f}"
 
-        # Heuristic: if charge match to known interacting residues improves, likely beneficial
-        # But we have no structure, so this is weak inference
+        # Magnitude is derived from the size of the physicochemical change actually
+        # computed from the sequence, not asserted. A substitution that changes
+        # neither charge nor hydrophobicity cannot plausibly change binding much.
+        magnitude = min(1.0, (abs(charge_delta) * 0.6) + (abs(hydro_delta) / 9.0) * 0.4)
+
         score = self.confidence_scorer.score_effect(
             description=description,
             evidence_tier=EvidenceTier.BIOCHEMICAL_PRINCIPLE,
             reasoning=(
-                f"Charge-based prediction (Coulomb-style heuristic). "
-                f"Without structural data, cannot compute binding energies. "
-                f"Assumes electrostatic interactions dominate locally. "
-                f"Hydrophobicity change of {hydro_delta:+.1f} may affect water solvation layer."
+                f"Charge state computed via Henderson-Hasselbalch at pH {ph}; hydrophobicity "
+                f"from the Kyte-Doolittle scale. Direction of the effect on binding is NOT "
+                f"predicted: without a receptor structure there is no way to know whether this "
+                f"change is complementary or antagonistic to the binding interface. Magnitude "
+                f"reflects only how large a physicochemical perturbation this is "
+                f"(Δq = {charge_delta:+.2f}e, Δhydrophobicity = {hydro_delta:+.1f}). "
+                f"No binding energy is computed — that requires Tier 2 structure prediction."
             ),
             modifier=0.5,  # Moderate confidence without structure
+            magnitude=magnitude,
             equation_refs=[1, 11],  # Coulomb, Henderson-Hasselbalch
         )
 
@@ -228,14 +299,17 @@ class SubstitutionPredictor:
     ) -> Effect:
         """Generic improvement prediction (neutral goal)."""
 
-        wt_charge = self.charge_calc.charge_at_ph(wt_aa, ph=ph, position=position)
-        mut_charge = self.charge_calc.charge_at_ph(mut_aa, ph=ph, position=position)
-
         score = self.confidence_scorer.score_effect(
-            description="Generic substitution (no specific functional goal specified)",
+            description="No functional goal specified — no benefit can be predicted",
             evidence_tier=EvidenceTier.INFERENCE_ONLY,
-            reasoning="Without a specific goal, difficult to predict benefit. Recommend specifying target function.",
-            modifier=0.3,
+            reasoning=(
+                "Benefit is defined relative to a goal. With no goal supplied there is nothing "
+                "to score against, so no primary benefit is claimed and the ranking below "
+                "reflects off-target cost only. Specify a target function "
+                "(protease_resistance, binding_affinity) to activate primary-effect scoring."
+            ),
+            modifier=1.0,
+            magnitude=0.0,
             equation_refs=[],
         )
 
@@ -251,6 +325,7 @@ class SubstitutionPredictor:
         mut_aa: str,
         conservation_profile: Dict[int, float],
         ph: float,
+        conservation_available: bool = False,
     ) -> List[Effect]:
         """Predict secondary/off-target effects of substitution."""
 
@@ -262,7 +337,9 @@ class SubstitutionPredictor:
         # Off-target 2: Conservation penalty
         conservation_entropy = conservation_profile.get(position, 2.0)
         off_targets.append(
-            self._conservation_penalty_effect(conservation_entropy, position, wt_aa, mut_aa)
+            self._conservation_penalty_effect(
+                conservation_entropy, position, wt_aa, mut_aa, conservation_available
+            )
         )
 
         # Off-target 3: Structural/backbone effects
@@ -284,35 +361,75 @@ class SubstitutionPredictor:
             )
             evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
             modifier = 0.7
+            magnitude = 0.7
         elif wt_aa == "C":
             reason = f"Cys→{mut_aa} removes disulfide-bonding capability (if applicable)."
             evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
             modifier = 0.6
-        elif wt_aa in ["W", "Y", "F"]:
+            magnitude = 0.65
+        elif wt_aa in ["W", "Y", "F"] and mut_aa not in ["W", "Y", "F"]:
             reason = (
                 f"{wt_aa}→{mut_aa} removes aromatic ring. "
                 "May disrupt π-π stacking or hydrophobic pocket interactions."
             )
             evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
             modifier = 0.7
+            magnitude = 0.55
         else:
-            reason = f"{wt_aa}→{mut_aa} is a significant property change."
-            evidence = EvidenceTier.INFERENCE_ONLY
-            modifier = 0.4
+            # Scale the cost by how far apart the two residues actually are on the
+            # hydrophobicity scale, rather than calling every swap "significant".
+            hydro_delta = abs(
+                HydrophobicityScale.hydrophobicity(mut_aa)
+                - HydrophobicityScale.hydrophobicity(wt_aa)
+            )
+            magnitude = min(1.0, hydro_delta / 9.0)  # Scale spans -4.5..4.5
+            reason = (
+                f"{wt_aa}→{mut_aa}: Kyte-Doolittle hydrophobicity differs by {hydro_delta:.1f} "
+                f"(scale range 9.0), a {'substantial' if magnitude > 0.4 else 'modest'} "
+                "change in side-chain character."
+            )
+            evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
+            modifier = 0.6
 
         effect = self.confidence_scorer.score_effect(
             description=f"Loss of {wt_aa} biochemical properties",
             evidence_tier=evidence,
             reasoning=reason,
             modifier=modifier,
+            magnitude=magnitude,
         )
         effect.category = "off_target"
         return effect
 
     def _conservation_penalty_effect(
-        self, entropy: float, position: int, wt_aa: str, mut_aa: str
+        self,
+        entropy: float,
+        position: int,
+        wt_aa: str,
+        mut_aa: str,
+        conservation_available: bool = False,
     ) -> Effect:
         """Warn if mutating a highly conserved position."""
+
+        # Without enough homologs there is no conservation signal to report.
+        # Entropy over a single sequence is 0 at every position by construction,
+        # which would otherwise flag the whole peptide as "highly conserved".
+        if not conservation_available:
+            effect = self.confidence_scorer.score_effect(
+                description="Conservation risk: NOT COMPUTED (insufficient homolog data)",
+                evidence_tier=EvidenceTier.INFERENCE_ONLY,
+                reasoning=(
+                    "Too few homologous sequences were retrieved to compute per-position "
+                    "Shannon entropy. No conservation claim is made for this position, and "
+                    "no conservation penalty is applied to the net score. Supply homologs "
+                    "or enable NCBI retrieval to activate this term."
+                ),
+                modifier=1.0,
+                magnitude=0.0,  # Contributes nothing to the net score
+                equation_refs=[],
+            )
+            effect.category = "off_target"
+            return effect
 
         if entropy < 0.5:
             reason = (
@@ -320,6 +437,7 @@ class SubstitutionPredictor:
                 "Suggests strong functional constraint. Mutation may disable critical interactions."
             )
             modifier = 0.9  # High confidence in the risk
+            magnitude = 0.8  # Breaking a conserved position is a large cost
             evidence = EvidenceTier.DIRECT_EXPERIMENTAL  # MSA is direct data
         elif entropy < 2.0:
             reason = (
@@ -327,10 +445,12 @@ class SubstitutionPredictor:
                 "May be important but tolerate some variation."
             )
             modifier = 0.6
+            magnitude = 0.4
             evidence = EvidenceTier.BIOCHEMICAL_PRINCIPLE
         else:
             reason = f"Position {position} is variable (entropy {entropy:.2f}). No conservation penalty."
-            modifier = 0.1
+            modifier = 0.9
+            magnitude = 0.05
             evidence = EvidenceTier.DIRECT_EXPERIMENTAL
 
         effect = self.confidence_scorer.score_effect(
@@ -338,6 +458,7 @@ class SubstitutionPredictor:
             evidence_tier=evidence,
             reasoning=reason,
             modifier=modifier,
+            magnitude=magnitude,
             equation_refs=[43],  # Shannon entropy
         )
         effect.category = "off_target"
@@ -346,23 +467,34 @@ class SubstitutionPredictor:
     def _backbone_effect(self, wt_aa: str, mut_aa: str, position: int) -> Effect:
         """Predict backbone conformational changes."""
 
-        # Proline is special: cyclic, restricts φ
+        # Proline is special: cyclic, restricts φ. Glycine is the other outlier:
+        # no side chain, so it samples backbone conformations nothing else can.
         if wt_aa == "P":
             reason = f"Pro removal at {position} increases backbone flexibility (loss of ring constraint)."
             modifier = 0.8
+            magnitude = 0.6
         elif mut_aa == "P":
             reason = f"Introduction of Pro at {position} restricts backbone flexibility (new ring)."
             modifier = 0.8
+            magnitude = 0.6
+        elif wt_aa == "G":
+            reason = (
+                f"Gly removal at {position} restricts backbone φ/ψ sampling; Gly is the only "
+                "residue that readily occupies left-handed conformations."
+            )
+            modifier = 0.7
+            magnitude = 0.45
         else:
-            # Generic: hydrophobic -> charged might shift local hydration
             reason = "Standard backbone dynamics, minimal effect expected."
-            modifier = 0.3
+            modifier = 0.6
+            magnitude = 0.1
 
         effect = self.confidence_scorer.score_effect(
             description="Backbone conformational impact",
             evidence_tier=EvidenceTier.BIOCHEMICAL_PRINCIPLE,
             reasoning=reason,
             modifier=modifier,
+            magnitude=magnitude,
         )
         effect.category = "off_target"
         return effect
@@ -372,34 +504,54 @@ class SubstitutionPredictor:
     ) -> Effect:
         """Check for unexpected charge cluster effects."""
 
-        # Simple: look for charge neighbors
+        # Compare the substituted residue's own charge against its neighbours.
+        # (Comparing the flanking windows alone is a no-op: they are identical by
+        # construction, since the sequences differ only at `position`.)
         window = 3
         start = max(0, position - window)
         end = min(len(wild_seq), position + window + 1)
 
-        wt_charged = sum(
-            1
+        wt_charge = self.charge_calc.charge_at_ph(wild_seq[position], ph=ph, position=position)
+        mut_charge = self.charge_calc.charge_at_ph(mutant_seq[position], ph=ph, position=position)
+        charge_delta = mut_charge.effective_charge - wt_charge.effective_charge
+
+        neighbour_charge = sum(
+            self.charge_calc.charge_at_ph(wild_seq[i], ph=ph, position=i).effective_charge
             for i in range(start, end)
             if i != position
-            and wild_seq[i] in ["D", "E", "K", "R", "H"]
-        )
-        mut_charged = sum(
-            1
-            for i in range(start, end)
-            if i != position
-            and mutant_seq[i] in ["D", "E", "K", "R", "H"]
         )
 
-        reason = (
-            f"Local charge environment unchanged (charged neighbors: {wt_charged} → {mut_charged})."
-        )
-        modifier = 0.5 if wt_charged == mut_charged else 0.7
+        if abs(charge_delta) < 0.2:
+            reason = (
+                f"Substitution does not materially change charge at this position "
+                f"(Δq = {charge_delta:+.2f}e at pH {ph})."
+            )
+            magnitude = 0.05
+        elif charge_delta * neighbour_charge > 0.2:
+            # New charge has the same sign as the local environment.
+            reason = (
+                f"Introduces {charge_delta:+.2f}e into a local environment already carrying "
+                f"{neighbour_charge:+.2f}e within ±{window} residues. Like charges in proximity "
+                "may repel and destabilise local packing. Heuristic flag (Coulomb-style "
+                "reasoning), not a computed interaction energy: no structure or solvent model."
+            )
+            magnitude = 0.5
+        else:
+            reason = (
+                f"Introduces {charge_delta:+.2f}e against a local environment of "
+                f"{neighbour_charge:+.2f}e within ±{window} residues. Opposite charges may be "
+                "stabilising, but without structure the geometry is unknown. Heuristic flag, "
+                "not a computed interaction energy."
+            )
+            magnitude = 0.2
 
         effect = self.confidence_scorer.score_effect(
             description="Local charge redistribution",
             evidence_tier=EvidenceTier.INFERENCE_ONLY,
             reasoning=reason,
-            modifier=modifier,
+            modifier=0.8,
+            magnitude=magnitude,
+            equation_refs=[1, 11],  # Coulomb heuristic, Henderson-Hasselbalch
         )
         effect.category = "off_target"
         return effect

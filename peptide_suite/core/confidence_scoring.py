@@ -45,6 +45,7 @@ class ConfidenceScorer:
         evidence_tier: EvidenceTier,
         reasoning: str,
         modifier: float = 1.0,
+        magnitude: float = 0.5,
         sources: Optional[List[str]] = None,
         equation_refs: Optional[List[int]] = None,
     ) -> Effect:
@@ -57,6 +58,8 @@ class ConfidenceScorer:
             reasoning: Explanation of why we believe this
             modifier: 0-1, used to apply domain-specific penalties
                      (e.g., if a claim contradicts existing data, multiply down)
+            magnitude: 0-1 size of the effect if real. Independent of confidence:
+                      how much this matters, not how sure we are.
             sources: Literature/database citations
             equation_refs: Which equations informed this
 
@@ -82,6 +85,7 @@ class ConfidenceScorer:
             evidence_tier=evidence_tier,
             confidence=confidence_level,
             score=final_score,
+            magnitude=max(0.0, min(1.0, magnitude)),
             reasoning=reasoning,
             sources=sources or [],
             equation_refs=equation_refs or [],
@@ -111,31 +115,27 @@ class ConfidenceScorer:
         if not effects:
             return 0.0, ConfidenceLevel.LOW
 
-        # Primary effect (first) counts as +score
-        # Off-targets count as -score (penalty)
-        net = 0.0
-        weights_sum = 0.0
+        primary, off_targets = effects[0], effects[1:]
 
-        for i, effect in enumerate(effects):
-            weight = effect.score  # Weight by own confidence
-            if i == 0:  # Primary effect, positive contribution
-                net += weight
-            else:  # Off-target, negative contribution
-                net -= weight * 0.5  # Off-targets are weighted at half severity
+        # Expected benefit: how big the primary effect is, discounted by how sure
+        # we are it is real. Magnitude and confidence are separate axes.
+        expected_benefit = primary.magnitude * primary.score
 
-            weights_sum += weight
+        # Off-target costs combine as independent risks (noisy-OR) rather than by
+        # summation, so the total is bounded and does not scale with how many
+        # off-target checks happen to be implemented.
+        survival = 1.0
+        for effect in off_targets:
+            survival *= 1.0 - (effect.magnitude * effect.score)
+        combined_cost = 1.0 - survival
 
-        if weights_sum > 0:
-            net = net / weights_sum
-        else:
-            net = 0.0
+        net = max(-1.0, min(1.0, expected_benefit - combined_cost))
 
-        net = max(-1.0, min(1.0, net))  # Clamp to [-1, 1]
-
-        # Combine confidences (take worst of all effects)
-        # Map to numeric values for comparison
+        # Overall confidence reflects only effects that materially move the net
+        # score; near-zero boilerplate checks must not drag the label down.
         confidence_rank = {ConfidenceLevel.HIGH: 3, ConfidenceLevel.MEDIUM: 2, ConfidenceLevel.LOW: 1}
-        min_confidence = min((e.confidence for e in effects), key=lambda conf: confidence_rank[conf])
+        material = [e for e in effects if e.magnitude * e.score > 0.1] or [primary]
+        min_confidence = min((e.confidence for e in material), key=lambda conf: confidence_rank[conf])
 
         return net, min_confidence
 

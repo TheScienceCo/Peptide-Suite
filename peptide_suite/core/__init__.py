@@ -26,12 +26,19 @@ class Effect:
     """
     Represents a predicted effect of a substitution.
 
+    `score` and `magnitude` are deliberately separate axes and must not be
+    collapsed into one another: `score` answers "how sure are we this effect is
+    real", `magnitude` answers "how much does it matter if it is". A trivial
+    effect we are certain about must not outrank a large effect we are less
+    certain about.
+
     Attributes:
         category: "primary" or "off_target"
         description: Plain-language effect (e.g., "adds negative charge")
         evidence_tier: EvidenceTier enum
         confidence: ConfidenceLevel enum
-        score: 0-1 numeric confidence score
+        score: 0-1 confidence that this effect is real
+        magnitude: 0-1 size of the effect if real (benefit for primary, cost for off-target)
         reasoning: Detailed justification including sources
         equation_refs: Which equations (if any) informed this
     """
@@ -39,8 +46,9 @@ class Effect:
     description: str
     evidence_tier: EvidenceTier
     confidence: ConfidenceLevel
-    score: float  # 0-1
+    score: float  # 0-1 confidence
     reasoning: str
+    magnitude: float = 0.5  # 0-1 effect size
     equation_refs: List[int] = None  # e.g., [43, 11, 1] for Shannon, HH, Coulomb
     sources: List[str] = None  # Literature citations, database lookups
 
@@ -80,6 +88,12 @@ class SubstitutionRecommendation:
             self.off_target_effects = []
 
 
+# Shannon entropy over fewer than this many sequences carries no conservation
+# information (a single sequence is 0 at every position by construction), so it
+# is reported as unavailable rather than as a computed value.
+MIN_HOMOLOGS_FOR_CONSERVATION = 3
+
+
 @dataclass
 class PeptideContext:
     """Metadata about the peptide being analyzed."""
@@ -90,3 +104,10 @@ class PeptideContext:
     target_organism: str = "human"
     known_homologs: List[str] = None
     conservation_entropy: Dict[int, float] = None  # position -> Shannon entropy
+    homolog_count: int = 0
+    conservation_available: bool = False
+    data_notes: List[str] = None  # Plain-language limitations to surface to the user
+
+    def __post_init__(self):
+        if self.data_notes is None:
+            self.data_notes = []
