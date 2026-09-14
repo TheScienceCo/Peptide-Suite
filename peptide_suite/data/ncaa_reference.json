@@ -1,0 +1,73 @@
+{
+  "comment": "Non-canonical amino acids and their known biochemical effects. Used for v1.1+ NCAA weighting.",
+  "d_amino_acids": {
+    "d_alanine": {
+      "1_letter_code": "a",
+      "effects": ["protease_resistance", "backbone_rigidity", "chirality_inversion"],
+      "known_benefits": ["proteolytic_resistance"],
+      "known_detriments": ["receptor_binding_may_suffer", "structure_disruption"],
+      "evidence_tier": "biochemical_principle",
+      "confidence": 0.7
+    },
+    "d_leucine": {
+      "effects": ["protease_resistance", "hydrophobic_shift"],
+      "known_benefits": ["protease_evasion"],
+      "known_detriments": ["may_alter_binding_interface"],
+      "evidence_tier": "biochemical_principle",
+      "confidence": 0.6
+    }
+  },
+  "n_methylated": {
+    "n_methyl_alanine": {
+      "effects": ["protease_resistance", "reduced_h_bond_donor"],
+      "known_benefits": ["backbone_resistance_to_trypsin_elastase"],
+      "known_detriments": ["reduced_secondary_structure_formation"],
+      "evidence_tier": "biochemical_principle",
+      "confidence": 0.75
+    }
+  },
+  "conformational_promoters": {
+    "aib": {
+      "full_name": "Alpha-aminoisobutyric acid",
+      "effects": ["helix_inducer", "conformational_rigidity", "increased_stability"],
+      "known_benefits": ["secondary_structure_stabilization", "rigid_backbone"],
+      "known_detriments": ["may_disrupt_dynamics", "bulky_residue"],
+      "evidence_tier": "direct_experimental",
+      "confidence": 0.85
+    },
+    "hydroxyproline": {
+      "effects": ["helix_stability", "increased_thermal_stability", "collagen_like"],
+      "known_benefits": ["thermostability", "structure_stabilization"],
+      "known_detriments": ["restricted_phi_angle"],
+      "evidence_tier": "direct_experimental",
+      "confidence": 0.8
+    }
+  },
+  "charge_modifiers": {
+    "citrulline": {
+      "replaces": "arginine",
+      "effects": ["removes_positive_charge", "maintains_size", "protease_evasion"],
+      "known_benefits": ["protease_resistance", "preserves_structure_without_charge"],
+      "known_detriments": ["loss_of_positive_interaction"],
+      "evidence_tier": "biochemical_principle",
+      "confidence": 0.75
+    },
+    "ornithine": {
+      "replaces": "lysine",
+      "effects": ["reduces_positive_charge", "shorter_sidechain"],
+      "known_benefits": ["subtle_charge_tuning"],
+      "known_detriments": ["reduced_electrostatic_effect"],
+      "evidence_tier": "inference_only",
+      "confidence": 0.4
+    }
+  },
+  "pegylatable": {
+    "homoserine": {
+      "effects": ["hydroxyl_group", "pegylation_site"],
+      "known_benefits": ["pegylation_for_serum_half_life"],
+      "known_detriments": ["added_bulk"],
+      "evidence_tier": "direct_experimental",
+      "confidence": 0.8
+    }
+  }
+}

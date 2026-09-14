@@ -1,0 +1,77 @@
+{
+  "comment": "Known protease cleavage sites and recognition motifs. Used to predict proteolytic resistance.",
+  "dpp4": {
+    "full_name": "Dipeptidyl peptidase IV",
+    "cleavage_site": "N-terminus, 2 residues from N-term",
+    "recognition_motif": "[AEP]P",
+    "specificity": "Pro or Ala in P1; P1' position is cleaved off",
+    "examples": [
+      "GLP-1 (cleaved after N-terminus Pro)",
+      "GIP (cleaved after N-terminus Pro)"
+    ],
+    "resistance_strategy": "Remove Pro at position 1-2, or mutate to X",
+    "evidence_tier": "direct_experimental",
+    "confidence": 0.95
+  },
+  "neprilysin": {
+    "full_name": "Neutral endopeptidase (NEP)",
+    "cleavage_site": "Internal, broad specificity",
+    "recognition_motif": "AX|GX|VX",
+    "specificity": "Prefers small residues in P1 (Ala, Gly), any residue in P1'",
+    "examples": [
+      "Bradykinin",
+      "Enkephalins"
+    ],
+    "resistance_strategy": "Replace Ala/Gly with bulky residues",
+    "evidence_tier": "direct_experimental",
+    "confidence": 0.85
+  },
+  "elastase": {
+    "full_name": "Serine elastase (pancreatic)",
+    "cleavage_site": "After hydrophobic residues",
+    "recognition_motif": "[VLI]X|AX",
+    "specificity": "Val, Leu, Ile, Ala in P1 position",
+    "examples": [
+      "Naturally small, hydrophobic peptides"
+    ],
+    "resistance_strategy": "Replace hydrophobic residues with charged",
+    "evidence_tier": "direct_experimental",
+    "confidence": 0.8
+  },
+  "trypsin": {
+    "full_name": "Trypsin (serine protease)",
+    "cleavage_site": "After basic residues",
+    "recognition_motif": "[KR]X",
+    "specificity": "Strict specificity for Lys/Arg in P1",
+    "examples": [
+      "Used for controlled protein digestion"
+    ],
+    "resistance_strategy": "Remove or replace Lys/Arg with non-basic",
+    "evidence_tier": "direct_experimental",
+    "confidence": 0.95
+  },
+  "chymotrypsin": {
+    "full_name": "Chymotrypsin (serine protease)",
+    "cleavage_site": "After aromatic residues",
+    "recognition_motif": "[FWY]X",
+    "specificity": "Phe, Trp, Tyr in P1 position",
+    "examples": [
+      "Aromatic peptides"
+    ],
+    "resistance_strategy": "Replace Phe/Trp/Tyr with non-aromatic",
+    "evidence_tier": "direct_experimental",
+    "confidence": 0.85
+  },
+  "matrix_metalloproteinases": {
+    "full_name": "MMPs (collagenases, gelatinases, stromelysins)",
+    "cleavage_site": "Variable, depends on MMP subtype",
+    "recognition_motif": "Broad (context-dependent)",
+    "specificity": "Prefer Leu, Met in P1; variable P1' specificity",
+    "examples": [
+      "Collagen (natural substrate)"
+    ],
+    "resistance_strategy": "Incorporate D-amino acids, N-methylation, or steric modifications",
+    "evidence_tier": "biochemical_principle",
+    "confidence": 0.65
+  }
+}

@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.log
+
+# Generated results
+results_*.txt
+logs/prediction_calibration.jsonl
+
+# Evidence cache
+.evidence_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

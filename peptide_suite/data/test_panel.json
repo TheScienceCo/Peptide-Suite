@@ -1,0 +1,49 @@
+{
+  "IGF1": {
+    "full_name": "Insulin-like growth factor 1",
+    "sequence": "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
+    "function": "IGF-1 receptor binding, growth promotion, mitogenic signaling",
+    "homologs": [
+      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
+      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
+      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT"
+    ],
+    "known_var_effects": [
+      {
+        "position": 6,
+        "wt": "L",
+        "mutant": "I",
+        "known_effect": "minimal_impact",
+        "confidence": 0.8
+      }
+    ]
+  },
+  "INS": {
+    "full_name": "Insulin",
+    "sequence": "GIVEQCCTSICSLYQLENYCN",
+    "function": "Glucose homeostasis, IR/IGF-1R signaling",
+    "homologs": [
+      "GIVEQCCTSICSLYQLENYCN",
+      "GIVEQCCTSICSLYQLENYCN"
+    ],
+    "known_var_effects": []
+  },
+  "GCG": {
+    "full_name": "Glucagon",
+    "sequence": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT",
+    "function": "Blood glucose elevation via GCGR, counterregulatory hormone",
+    "homologs": [
+      "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT"
+    ],
+    "known_var_effects": []
+  },
+  "BPC157": {
+    "full_name": "Body Protection Compound 157",
+    "sequence": "GEPGDWGDPEHPPGAGQGDSPGAGAGQGDQGAGAGAEAEQGAGAGRGRGDSPR",
+    "function": "Wound healing, GI repair, anti-inflammatory, neuroprotection",
+    "homologs": [
+      "GEPGDWGDPEHPPGAGQGDSPGAGAGQGDQGAGAGAEAEQGAGAGRGRGDSPR"
+    ],
+    "known_var_effects": []
+  }
+}
