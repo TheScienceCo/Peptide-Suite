@@ -10,6 +10,7 @@ import unittest
 
 from peptide_suite.core.epistemics import ClaimType
 from peptide_suite.core.function_inference import FunctionInferencer
+from peptide_suite.core.uniprot_client import UniProtClient
 
 GLP1 = "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG"
 LAMININ_IKVAV = "CSRARKQAASIKVAVSADR"
@@ -21,7 +22,9 @@ class TestAlwaysReturnsAGoal(unittest.TestCase):
     """No input should leave the user with nothing selected."""
 
     def setUp(self):
-        self.fi = FunctionInferencer()
+        # UniProt disabled: these tests cover local inference and must not
+        # depend on network reachability.
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
         self.valid_goals = {"protease_resistance", "binding_affinity", "generic_improvement"}
 
     def test_every_sequence_yields_a_usable_goal(self):
@@ -46,7 +49,9 @@ class TestAlwaysReturnsAGoal(unittest.TestCase):
 class TestEvidenceLevels(unittest.TestCase):
 
     def setUp(self):
-        self.fi = FunctionInferencer()
+        # UniProt disabled: these tests cover local inference and must not
+        # depend on network reachability.
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
 
     def test_exact_match_is_level_one(self):
         r = self.fi.infer(GLP1)
@@ -100,14 +105,25 @@ class TestEvidenceLevels(unittest.TestCase):
 
     def test_level_four_is_not_presented_as_identification(self):
         r = self.fi.infer(NONSENSE)
-        self.assertIn("not recognised", r.inferred_function.lower())
         self.assertFalse(r.is_identification)
+        self.assertIn("not matched", r.inferred_function.lower())
+
+    def test_level_four_still_reports_measured_properties(self):
+        """
+        An unrecognised sequence must still say something true about itself.
+        "Not recognised" alone tells the user nothing they can act on.
+        """
+        r = self.fi.infer(NONSENSE)
+        self.assertIn("residues", r.inferred_function)
+        self.assertIn("pH 7.4", r.inferred_function)
 
 
 class TestClaimProvenance(unittest.TestCase):
 
     def setUp(self):
-        self.fi = FunctionInferencer()
+        # UniProt disabled: these tests cover local inference and must not
+        # depend on network reachability.
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
 
     def test_sequence_match_is_a_retrieved_claim(self):
         self.assertEqual(self.fi.infer(GLP1).claim.claim_type, ClaimType.RETRIEVED)
@@ -127,7 +143,9 @@ class TestClaimProvenance(unittest.TestCase):
 class TestReferenceDataIntegrity(unittest.TestCase):
 
     def setUp(self):
-        self.fi = FunctionInferencer()
+        # UniProt disabled: these tests cover local inference and must not
+        # depend on network reachability.
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
 
     def test_every_reference_peptide_infers_to_itself(self):
         for name, entry in self.fi.reference["exact_peptides"].items():

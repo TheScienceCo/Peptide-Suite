@@ -227,13 +227,33 @@ def infer_function(req: InferRequest) -> Dict:
             "suggested_goal": None, "properties": None,
         }
 
-    inference = _inferencer.infer(sequence, name=name)
+    _cleaned, sequence_notes = _peptides.clean_sequence(raw)
+    length_class = _peptides.classify_length(sequence)
+    inference = _inferencer.infer(sequence, name=name, raw_input=raw)
 
+    rec = inference.uniprot
     return {
         "sequence": sequence,
         "name": name,
         "length": len(sequence),
         "parse_error": parse_error,
+        "sequence_notes": sequence_notes,
+        "is_protein": length_class["is_protein"],
+        "length_note": length_class["note"],
+        "uniprot": (
+            {
+                "accession": rec.accession,
+                "entry_name": rec.entry_name,
+                "protein_name": rec.protein_name,
+                "gene": rec.gene,
+                "organism": rec.organism,
+                "full_length": rec.length,
+                "subcellular_location": rec.subcellular_location,
+                "keywords": rec.keywords[:12],
+                "url": rec.url,
+            }
+            if rec else None
+        ),
         "inferred_function": inference.inferred_function,
         "inference_confidence": round(inference.confidence, 2),
         "inference_level": inference.level,

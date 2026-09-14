@@ -951,3 +951,35 @@ button.ghost:hover { border-color: var(--axis); }
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ---- uniprot identification ---- */
+
+.uniprot {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--status-good);
+  border-radius: var(--radius);
+  padding: 11px 13px;
+  margin: 10px 0;
+  background: var(--raised);
+}
+
+.uniprot > b {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+
+.uniprot .acc {
+  font-family: var(--mono);
+  font-weight: 620;
+  color: var(--series-1);
+  text-decoration: none;
+}
+
+.uniprot .acc:hover { text-decoration: underline; }
+
+.provenance.lvl0 .lvl { color: var(--status-good); }

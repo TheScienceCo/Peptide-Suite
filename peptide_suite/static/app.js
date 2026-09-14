@@ -100,6 +100,7 @@ function renderGate(info) {
   gate.append(el("h2", null, "Confirm the target function"));
 
   const LEVEL_LABEL = {
+    0: "identified in UniProt",
     1: "matched a known peptide",
     2: "matched a characterised motif",
     3: "matched a family profile",
@@ -113,8 +114,31 @@ function renderGate(info) {
   );
   gate.append(p);
 
+  // What the parser had to clean out of the paste, and whether this is a
+  // protein rather than a peptide — both change what the analysis means.
+  (info.sequence_notes || []).forEach((n) => gate.append(notice(n, "info", "i")));
+  if (info.is_protein) gate.append(notice(info.length_note, "warn", "!"));
+
+  if (info.uniprot) {
+    const u = info.uniprot;
+    const box = el("div", "uniprot");
+    box.append(el("b", null, "UniProt"));
+    const line = el("div", "kv");
+    const link = el("a", "acc", u.accession);
+    link.href = u.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    line.append(link, document.createTextNode(
+      ` — ${u.protein_name}${u.gene ? ` (${u.gene})` : ""}` +
+      `${u.organism ? `, ${u.organism}` : ""}${u.full_length ? `, ${u.full_length} aa` : ""}`));
+    box.append(line);
+    if (u.subcellular_location) box.append(el("div", "kv", `Location: ${u.subcellular_location}`));
+    if ((u.keywords || []).length) box.append(el("div", "eqrefs", u.keywords.join(" · ")));
+    gate.append(box);
+  }
+
   // How the inference was reached, so a level-4 default never reads like a
-  // level-1 identification.
+  // level-0 identification.
   const prov = el("div", `provenance lvl${info.inference_level}`);
   prov.append(el("span", "lvl", `Level ${info.inference_level}`));
   prov.append(el("span", "lvl-label", LEVEL_LABEL[info.inference_level] || ""));

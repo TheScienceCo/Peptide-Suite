@@ -12,6 +12,24 @@ logger = logging.getLogger(__name__)
 
 CANONICAL_AAS = set("ACDEFGHIKLMNPQRSTVWY")
 
+# Codes that appear in real database sequences and must not cause a rejection.
+# Rejecting these means a user cannot paste a genuine UniProt or RefSeq entry,
+# which is the most common thing anyone will try to do.
+AMBIGUITY_CODES = {
+    "X": "any amino acid (position unresolved)",
+    "B": "Asp or Asn (unresolved)",
+    "Z": "Glu or Gln (unresolved)",
+    "J": "Leu or Ile (unresolved)",
+    "U": "selenocysteine",
+    "O": "pyrrolysine",
+}
+
+ACCEPTED_AAS = CANONICAL_AAS | set(AMBIGUITY_CODES)
+
+# Anything longer than this is a protein, not a peptide. The distinction changes
+# what the analysis can honestly claim, so it is surfaced rather than ignored.
+PEPTIDE_LENGTH_CEILING = 100
+
 
 class PeptideManager:
     """Loads, validates, and manages peptide sequences."""
@@ -19,53 +37,128 @@ class PeptideManager:
     def __init__(self):
         pass
 
+    def clean_sequence(self, raw: str) -> Tuple[str, List[str]]:
+        """
+        Strip a pasted sequence down to residues, tolerating real-world formats.
+
+        Handles the shapes sequences actually arrive in: FASTA, whitespace-blocked,
+        line-numbered (the NCBI and EMBL display formats), lowercase, and
+        containing ambiguity codes. Returns the residues plus a list of notes
+        describing what was cleaned away, so nothing is removed silently.
+        """
+        notes: List[str] = []
+        text = raw.strip()
+
+        if text.startswith(">"):
+            lines = text.split("\n")
+            notes.append(f"FASTA header removed: {lines[0][1:].strip()[:70]}")
+            text = "\n".join(lines[1:])
+
+        if any(ch.isdigit() for ch in text):
+            notes.append("Position numbers removed (line-numbered sequence format)")
+        if "-" in text or "." in text:
+            notes.append("Alignment gap characters removed")
+        if "*" in text:
+            notes.append("Stop codon marker removed")
+
+        kept = []
+        dropped = set()
+        for ch in text.upper():
+            if ch in ACCEPTED_AAS:
+                kept.append(ch)
+            elif ch.isspace() or ch.isdigit() or ch in "-.*":
+                continue
+            else:
+                dropped.add(ch)
+
+        if dropped:
+            notes.append(
+                f"Unrecognised character(s) removed: {', '.join(sorted(dropped))}"
+            )
+
+        sequence = "".join(kept)
+
+        present_ambiguity = sorted(set(sequence) & set(AMBIGUITY_CODES))
+        if present_ambiguity:
+            notes.append(
+                "Contains ambiguity codes: "
+                + "; ".join(f"{c} = {AMBIGUITY_CODES[c]}" for c in present_ambiguity)
+                + ". These positions are kept but cannot be scored for charge, "
+                "hydrophobicity, or liability motifs."
+            )
+
+        return sequence, notes
+
     def validate_sequence(self, sequence: str) -> Tuple[bool, str]:
         """
-        Validate amino acid sequence.
+        Validate an already-cleaned amino acid sequence.
 
         Returns:
             Tuple of (is_valid, error_message)
         """
-        sequence = sequence.upper().replace(" ", "").replace("\n", "")
-
         if not sequence:
-            return False, "Empty sequence"
+            return False, (
+                "No amino acid residues found. Paste a protein or peptide sequence — "
+                "FASTA, numbered, or plain text all work."
+            )
 
-        # Check for non-standard characters
-        invalid = set(sequence) - CANONICAL_AAS
+        invalid = set(sequence) - ACCEPTED_AAS
         if invalid:
             return False, f"Invalid amino acid(s): {', '.join(sorted(invalid))}"
 
         if len(sequence) < 5:
-            return False, "Peptide too short (minimum 5 residues)"
-
-        if len(sequence) > 200:
-            logger.warning(f"Large peptide ({len(sequence)} AA) may be slower to analyze")
+            return False, f"Sequence too short ({len(sequence)} residues; minimum 5)"
 
         return True, ""
 
+    def classify_length(self, sequence: str) -> Dict:
+        """
+        Distinguish a peptide from a full-length protein.
+
+        This matters because most of the analysis in this suite assumes a
+        peptide. Running a per-position substitution scan over a 3,000-residue
+        protein produces roughly 57,000 candidates and answers a question nobody
+        asked; the useful move on a protein is to locate the relevant domain
+        first and analyse that.
+        """
+        n = len(sequence)
+        if n <= PEPTIDE_LENGTH_CEILING:
+            return {"is_protein": False, "length": n, "note": ""}
+
+        return {
+            "is_protein": True,
+            "length": n,
+            "note": (
+                f"This is {n} residues — a full-length protein, not a peptide. "
+                f"A per-position substitution scan would generate {n * 19:,} candidates "
+                f"and rank them against each other, which is not a meaningful question at "
+                f"this scale. Sequence-level properties (composition, charge, liability "
+                f"motifs, domain-level signals) are still computed and reported. To run the "
+                f"optimisation workflows, identify the bioactive region first and paste that."
+            ),
+        }
+
     def load_sequence(self, input_str: str) -> Tuple[str, str]:
         """
-        Load sequence from string (raw sequence or FASTA-like format).
+        Load a sequence from a pasted string.
 
         Returns:
             Tuple of (sequence, name)
         """
-        input_str = input_str.strip()
+        name = "unnamed_peptide"
+        text = input_str.strip()
 
-        if input_str.startswith(">"):
-            # FASTA format
-            lines = input_str.split("\n")
-            name = lines[0][1:].strip()  # Remove '>' and trim
-            sequence = "".join(lines[1:]).replace(" ", "").replace("\n", "").upper()
-        else:
-            # Raw sequence
-            name = "unnamed_peptide"
-            sequence = input_str.replace(" ", "").replace("\n", "").upper()
+        if text.startswith(">"):
+            header = text.split("\n", 1)[0][1:].strip()
+            # FASTA headers are commonly db|accession|entry description
+            parts = [p for p in header.split("|") if p]
+            name = parts[-1].split()[0] if parts else (header.split()[0] if header else name)
+
+        sequence, _notes = self.clean_sequence(input_str)
 
         is_valid, error = self.validate_sequence(sequence)
         if not is_valid:
-            raise ValueError(f"Invalid sequence: {error}")
+            raise ValueError(error)
 
         return sequence, name
 

@@ -6,6 +6,7 @@ sequence has no name, so inference could never succeed for the primary input
 mode. This module infers from the sequence itself, through four descending
 levels of evidence, and always returns a usable default:
 
+    0. UNIPROT IDENTIFICATION     the sequence is looked up in UniProt
     1. EXACT / NEAR-EXACT MATCH   the sequence is a known peptide
     2. BIOACTIVE MOTIF            it contains a characterised functional motif
     3. FAMILY SIGNATURE           its computed properties fit a known profile
@@ -38,13 +39,14 @@ class FunctionInference:
     goal_reason: str
     confidence: float           # 0-1
     basis: str                  # Which level answered
-    level: int                  # 1-4
+    level: int                  # 0-4
     claim: Claim = None
     matched_name: str = ""
     parent_protein: str = ""
     native_context_note: str = ""
     alternatives: List[Dict] = field(default_factory=list)
     caveats: List[str] = field(default_factory=list)
+    uniprot: object = None   # UniProtRecord when identification came from UniProt
 
     @property
     def is_identification(self) -> bool:
@@ -55,9 +57,13 @@ class FunctionInference:
 class FunctionInferencer:
     """Infers likely function from sequence, never returning nothing."""
 
-    def __init__(self):
+    def __init__(self, uniprot: Optional["UniProtClient"] = None):
         self.reference = self._load_reference()
         self.tier0 = Tier0Sequence()
+        if uniprot is None:
+            from .uniprot_client import UniProtClient
+            uniprot = UniProtClient()
+        self.uniprot = uniprot
 
     @staticmethod
     def _load_reference() -> Dict:
@@ -262,6 +268,30 @@ class FunctionInferencer:
 
         return None
 
+    def _describe_profile(self, seq: str) -> str:
+        """
+        A one-line physicochemical description built from computed Tier 0 values.
+
+        Used when nothing was identified, so the output still says something true
+        and specific about the sequence rather than only reporting a miss.
+        """
+        net = self.tier0.charge_calc.net_charge(seq, ph=7.4)
+        moment = self.tier0.windowed_hydrophobic_moment(seq)["max_moment"]
+        pi = self.tier0.isoelectric_point(seq)
+        cys = seq.count("C")
+
+        charge_word = "cationic" if net > 1 else "anionic" if net < -1 else "near-neutral"
+        parts = [
+            f"{len(seq)} residues",
+            f"{charge_word} ({net:+.1f} at pH 7.4, pI {pi})",
+        ]
+        if moment >= 0.35:
+            parts.append(f"amphipathic (max muH {moment:.2f})")
+        if cys >= 2:
+            parts.append(f"{cys} cysteines")
+
+        return " · ".join(parts) + "."
+
     # ---- level 4: liability-driven default ------------------------------
 
     def _liability_default(self, seq: str) -> FunctionInference:
@@ -272,12 +302,17 @@ class FunctionInferencer:
         liabilities = self.tier0.scan_liabilities(seq)
         high = [l for l in liabilities if l.severity == "high"]
 
+        # Lead with what was measured. "Not recognised" alone is useless to a
+        # reader: the Tier 0 properties below are real numbers about their
+        # sequence and are worth more than the absence of a database hit.
+        profile = self._describe_profile(seq)
+
         if high:
             named = ", ".join(f"{l.motif} at {l.display_position}" for l in high[:3])
             return FunctionInference(
                 inferred_function=(
-                    "Not recognised. No functional assignment is claimed — the sequence does not "
-                    "match a known peptide, a characterised motif, or a family profile."
+                    f"{profile} Not matched to a named protein, so no functional assignment "
+                    f"is claimed — but the properties above are computed from your sequence."
                 ),
                 suggested_goal="protease_resistance",
                 goal_reason=(
@@ -301,8 +336,8 @@ class FunctionInferencer:
 
         return FunctionInference(
             inferred_function=(
-                "Not recognised. No functional assignment is claimed, and no high-severity "
-                "liability motifs were found either."
+                f"{profile} Not matched to a named protein, and no high-severity liability "
+                f"motifs were found — so there is no obvious first move from the sequence alone."
             ),
             suggested_goal="protease_resistance",
             goal_reason=(
@@ -329,7 +364,97 @@ class FunctionInferencer:
 
     # ---- entry point -----------------------------------------------------
 
-    def infer(self, sequence: str, name: str = "") -> FunctionInference:
+    def _match_uniprot(self, seq: str, raw_input: str) -> Optional[FunctionInference]:
+        """Level 0: ask UniProt what this actually is."""
+        result = self.uniprot.identify(seq, raw_input=raw_input)
+
+        if not result.found:
+            if not result.reachable:
+                # A network failure must not be reported as an unrecognised
+                # peptide — that blames the input for an infrastructure problem.
+                self._uniprot_note = (
+                    f"UniProt could not be reached ({result.status}), so identification fell "
+                    f"back to the local reference set, which covers only a handful of peptides. "
+                    f"If this sequence is a known protein, that is why it was not recognised."
+                )
+            else:
+                self._uniprot_note = ""
+            return None
+
+        rec = result.record
+        goal, reason = self._goal_for_record(rec, seq)
+
+        function = rec.function or rec.protein_name or "No functional annotation in the UniProt entry"
+        if rec.protein_name and rec.function:
+            function = f"{rec.protein_name} — {rec.function}"
+
+        caveats = []
+        if rec.length and len(seq) < rec.length * 0.9:
+            caveats.append(
+                f"The pasted sequence is {len(seq)} residues but {rec.accession} is "
+                f"{rec.length}. This is a fragment of the full protein, so its termini are "
+                f"excision artefacts and the annotated function describes the whole protein, "
+                f"not necessarily this piece of it."
+            )
+
+        return FunctionInference(
+            inferred_function=function,
+            suggested_goal=goal,
+            goal_reason=reason,
+            confidence=0.95 if result.route == "accession" else 0.85,
+            basis=(
+                f"UniProt {rec.accession} ({rec.entry_name or rec.protein_name})"
+                f" via {result.route} lookup"
+                + (f", {rec.organism}" if rec.organism else "")
+            ),
+            level=0,
+            matched_name=rec.protein_name or rec.accession,
+            parent_protein=rec.protein_name,
+            native_context_note=(
+                f"Subcellular location: {rec.subcellular_location}."
+                if rec.subcellular_location else ""
+            ),
+            claim=Claim.retrieved(
+                f"{rec.protein_name or rec.accession}: {rec.function or 'annotated in UniProt'}",
+                citations=[rec.citation],
+                tested=True,
+            ),
+            caveats=caveats,
+            uniprot=rec,
+        )
+
+    @staticmethod
+    def _goal_for_record(rec, seq: str) -> Tuple[str, str]:
+        """Choose a goal from what UniProt says about the protein."""
+        blob = " ".join([rec.protein_name, rec.function, " ".join(rec.keywords)]).lower()
+
+        if any(k in blob for k in ("extracellular matrix", "basement membrane", "cell adhesion",
+                                   "laminin", "collagen", "integrin")):
+            return "binding_affinity", (
+                "UniProt annotates this as an extracellular matrix or adhesion protein. For this "
+                "class, activity depends on receptor engagement and on how the motif is presented "
+                "— density, spacing and valency — rather than on circulating half-life, so binding "
+                "is the productive axis."
+            )
+        if any(k in blob for k in ("antimicrobial", "antibiotic", "defensin", "host defense")):
+            return "protease_resistance", (
+                "UniProt annotates antimicrobial activity. These peptides are typically "
+                "protease-labile and lose activity on cleavage, so stability is the limiting "
+                "property."
+            )
+        if any(k in blob for k in ("hormone", "receptor agonist", "secreted", "signaling")):
+            return "protease_resistance", (
+                "UniProt annotates this as a secreted signalling molecule. Circulating peptide "
+                "hormones are typically exposure-limited, so proteolytic stability is usually "
+                "the first thing worth fixing."
+            )
+        return "protease_resistance", (
+            "No annotation clearly indicated a goal, so this defaults to the highest-confidence "
+            "lane: protease liability is scored from documented specificities rather than "
+            "estimated."
+        )
+
+    def infer(self, sequence: str, name: str = "", raw_input: str = "") -> FunctionInference:
         """
         Infer function from sequence, falling through the evidence levels.
 
@@ -339,12 +464,23 @@ class FunctionInferencer:
         if not seq:
             raise ValueError("Cannot infer function from an empty sequence")
 
+        self._uniprot_note = ""
+
+        uniprot_hit = self._match_uniprot(seq, raw_input or name)
+        if uniprot_hit is not None:
+            logger.info(f"Function inference level 0: {uniprot_hit.basis}")
+            return uniprot_hit
+
         for level_fn in (self._match_known_peptide, self._match_motif, self._match_family_signature):
             result = level_fn(seq)
             if result is not None:
+                if self._uniprot_note:
+                    result.caveats.append(self._uniprot_note)
                 logger.info(f"Function inference level {result.level}: {result.basis}")
                 return result
 
         result = self._liability_default(seq)
+        if self._uniprot_note:
+            result.caveats.insert(0, self._uniprot_note)
         logger.info(f"Function inference level 4 (default): {result.basis}")
         return result

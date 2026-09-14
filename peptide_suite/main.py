@@ -79,6 +79,11 @@ def main():
         help="Run calibration tests on known peptides",
     )
 
+    subparsers.add_parser(
+        "selftest",
+        help="Check whether UniProt is reachable from this machine",
+    )
+
     args = parser.parse_args()
 
     if args.command == "optimize":
@@ -87,6 +92,8 @@ def main():
         run_find(args)
     elif args.command == "test":
         run_test_panel()
+    elif args.command == "selftest":
+        run_selftest()
     else:
         parser.print_help()
         sys.exit(1)
@@ -128,6 +135,27 @@ def run_find(args):
     workflow = FindPeptidesWorkflow()
     result = workflow.run(args.goal, force_full_workflow=args.force_full)
     print(format_find_result(result))
+
+
+def run_selftest():
+    """Report whether live UniProt lookup works from this machine."""
+    from peptide_suite.core.uniprot_client import UniProtClient
+
+    print("Checking UniProt connectivity...")
+    client = UniProtClient()
+    ok, status = client.connectivity()
+
+    if ok:
+        print("  UniProt reachable — sequence identification will use live lookup.")
+        result = client.by_accession("P01308")
+        if result.found:
+            r = result.record
+            print(f"  Test lookup P01308: {r.protein_name} ({r.organism}, {r.length} aa)")
+    else:
+        print(f"  UniProt NOT reachable: {status}")
+        print("  Identification will fall back to the local reference set, which covers")
+        print("  only a handful of peptides. Most sequences will report as unrecognised.")
+        print("  This is a network or proxy issue, not a problem with your sequence.")
 
 
 def run_test_panel():
