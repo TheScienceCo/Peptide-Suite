@@ -59,6 +59,12 @@ class OptimizeWorkflow:
 
         # Step 0: Parse input
         peptide_context = self._parse_input(input_sequence_or_name)
+
+        # Validate that we have a sequence
+        if not peptide_context.sequence:
+            logger.error(f"Could not parse '{input_sequence_or_name}' as a valid sequence or recognized peptide name")
+            return peptide_context, []
+
         logger.info(f"Parsed: {peptide_context.sequence[:50]}... (length {len(peptide_context.sequence)})")
 
         # Step 1: Infer function
@@ -97,7 +103,11 @@ class OptimizeWorkflow:
         msa = self.conservation.build_msa_from_sequences(homologs)
         conservation_profile = self.conservation.conservation_profile(msa)
         peptide_context.conservation_entropy = conservation_profile
-        logger.info(f"Conservation entropy computed (range: {min(conservation_profile.values()):.2f} - {max(conservation_profile.values()):.2f})")
+
+        if conservation_profile:
+            logger.info(f"Conservation entropy computed (range: {min(conservation_profile.values()):.2f} - {max(conservation_profile.values()):.2f})")
+        else:
+            logger.info("No conservation profile (single sequence or no homologs)")
 
         # Step 3: Run substitution scan
         logger.info("Step 3: Running substitution scan...")
