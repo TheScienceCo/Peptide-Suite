@@ -30,7 +30,7 @@ peptide_suite/
 │
 ├── workflows/
 │   ├── optimize.py      # Workflow 1: "Optimize This Peptide" (v1 complete)
-│   └── find_peptides.py # Workflow 2: "Find Peptides" (v2 roadmap)
+│   └── find_peptides.py # Workflow 2: "Find Peptides" (complete)
 │
 ├── data/
 │   ├── test_panel.json  # Known peptides (IGF-1, insulin, GLP-1, BPC-157)
@@ -271,16 +271,24 @@ Known peptides with characterized variants:
 - ✅ Workflow 1: Optimize This Peptide (canonical AAs)
 - ✅ Audit logging for calibration
 
-### v1.1
-- 📋 Non-canonical AA reference table + weighting
-- 📋 Protease resistance tuning (DPP4, neprilysin, etc.)
-- 📋 Brier-score calibration reporting
+### v1.1 (Complete)
+- ✅ Protease resistance scored by real P1 specificity matching (DPP4, neprilysin,
+      elastase, trypsin, chymotrypsin, MMPs), distinguishing sites a substitution
+      removes from new sites it introduces
+- ✅ Workflow 2: Find Peptides
+- ✅ Web interface for both workflows
+- ✅ Confidence and magnitude separated; net scores are auditable from the UI
+
+### v1.2 (Next)
+- 📋 Live NCBI Entrez homolog retrieval, replacing the manual homolog input
+- 📋 Live Gene Ontology / UniProt / Human Protein Atlas queries for Workflow 2,
+      replacing the local ontology cache
+- 📋 Non-canonical AA reference table + weighting (data file already drafted)
+- 📋 Brier-score calibration reporting from the prediction log
 
 ### v2.0
 - 📋 Structure prediction integration (ESMFold/ColabFold)
-- 📋 Lennard-Jones clash checking
-- 📋 Generalized Born rescoring
-- 📋 Workflow 2: Find Peptides (expression-based discovery)
+- 📋 Lennard-Jones clash checking, SASA burial, Generalized Born rescoring
 
 ---
 
@@ -291,6 +299,27 @@ Known peptides with characterized variants:
 ```bash
 pip install -r requirements.txt
 ```
+
+### Web interface
+
+```bash
+pip install fastapi "uvicorn[standard]"
+python -m uvicorn peptide_suite.api:app --reload --port 8000
+# open http://127.0.0.1:8000
+```
+
+Both workflows run from the browser. The page computes nothing itself — it
+calls the same Python pipeline the CLI uses, so displayed scores cannot drift
+from the analysis engine.
+
+Workflow 1 in the UI follows the spec's confirmation gate: it infers the
+function, shows it, and waits. The scan does not run until a target function is
+confirmed or overridden.
+
+Because automated NCBI retrieval is not wired up yet, the conservation term is
+reported as not computed by default. To activate it, expand **Homologous
+sequences (optional)** and paste three or more distinct sequences — the
+per-position entropy chart and the conservation penalty both come alive.
 
 ### CLI Usage
 
@@ -315,11 +344,13 @@ python -m peptide_suite.main optimize IGF1 --auto-confirm --ph 6.5
 python -m peptide_suite.main test
 ```
 
-#### Workflow 2 (Placeholder)
+#### Workflow 2: Find Peptides
 
 ```bash
-python -m peptide_suite.main find "myelinating_peptides"
-# Not yet implemented
+python -m peptide_suite.main find "myelinating peptides"
+
+# Force the full ranking even when the literature already answers the question
+python -m peptide_suite.main find "wound healing" --force-full
 ```
 
 ### Unit Tests
