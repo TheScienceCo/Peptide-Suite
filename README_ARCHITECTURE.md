@@ -303,10 +303,15 @@ pip install -r requirements.txt
 ### Web interface
 
 ```bash
-pip install fastapi "uvicorn[standard]"
+pip install -r requirements.txt
 python -m uvicorn peptide_suite.api:app --reload --port 8000
 # open http://127.0.0.1:8000
 ```
+
+The analysis pipeline itself has no third-party dependencies — the scoring,
+conservation, charge, physics-tier and transformation modules are pure standard
+library, and the CLI and test suite run with nothing installed. FastAPI and
+uvicorn are needed only for the web interface.
 
 Both workflows run from the browser. The page computes nothing itself — it
 calls the same Python pipeline the CLI uses, so displayed scores cannot drift
