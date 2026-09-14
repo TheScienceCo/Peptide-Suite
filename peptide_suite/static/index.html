@@ -23,6 +23,9 @@
     <button class="tab" role="tab" id="tab-optimize" aria-selected="true" aria-controls="panel-optimize">
       Optimize a peptide
     </button>
+    <button class="tab" role="tab" id="tab-transform" aria-selected="false" aria-controls="panel-transform">
+      Transformations
+    </button>
     <button class="tab" role="tab" id="tab-find" aria-selected="false" aria-controls="panel-find">
       Find peptides
     </button>
@@ -63,6 +66,41 @@
 
     <div id="gate-slot"></div>
     <div id="opt-results"></div>
+
+  </section>
+
+  <!-- ================= TRANSFORMATIONS ================= -->
+  <section class="panel" id="panel-transform" role="tabpanel" aria-labelledby="tab-transform" hidden>
+
+    <div class="card">
+      <h2>Input</h2>
+      <label for="tseq">Peptide sequence (one-letter codes)</label>
+      <textarea id="tseq" spellcheck="false"
+                placeholder="HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG"></textarea>
+      <div class="chips" id="tseq-examples"></div>
+
+      <div class="row">
+        <div>
+          <label for="tph">Formulation pH</label>
+          <input type="text" id="tph" value="7.4" inputmode="decimal">
+        </div>
+        <div class="shrink">
+          <label for="tfrag">
+            <input type="checkbox" id="tfrag" checked style="width:auto;margin-right:6px">
+            Internal fragment of a larger protein
+          </label>
+        </div>
+        <div class="shrink">
+          <button class="primary" id="btn-transform">Generate transformations</button>
+        </div>
+      </div>
+      <div class="kv" style="margin-top:8px">
+        Emits discrete transformations, never an optimised sequence — a sequence hides
+        which moves were made and why.
+      </div>
+    </div>
+
+    <div id="transform-results"></div>
 
   </section>
 

@@ -677,3 +677,243 @@ button.ghost:hover { border-color: var(--axis); }
   margin: 9px 0;
   max-width: 72ch;
 }
+
+/* ---- physics tier ladder ---- */
+
+.tier-ladder { margin-top: 10px; }
+
+.tier-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--grid);
+  font-size: 12px;
+}
+
+.tier-row:last-child { border-bottom: 0; }
+
+.tier-n {
+  font: 11px var(--mono);
+  font-weight: 700;
+  flex: 0 0 46px;
+  color: var(--text-primary);
+}
+
+.tier-state {
+  flex: 0 0 84px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tier-row.ok  .tier-state { color: var(--status-good); }
+.tier-row.off .tier-state { color: var(--text-muted); }
+.tier-row.off .tier-n     { color: var(--text-muted); }
+
+.tier-detail { color: var(--text-secondary); flex: 1 1 240px; }
+.tier-dep { display: block; color: var(--text-muted); font-family: var(--mono); font-size: 11px; margin-top: 2px; }
+
+/* ---- liabilities ---- */
+
+.liability {
+  border-left: 3px solid var(--axis);
+  padding: 9px 0 9px 13px;
+  margin-bottom: 11px;
+}
+
+.liability.sev-high   { border-left-color: var(--status-critical); }
+.liability.sev-medium { border-left-color: var(--status-warning); }
+.liability.sev-low    { border-left-color: var(--text-muted); }
+
+.liability-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+
+.sev {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 100px;
+}
+
+.sev-high   .sev { color: var(--status-critical); }
+.sev-medium .sev { color: var(--status-serious); }
+.sev-low    .sev { color: var(--text-muted); }
+
+.lmotif { font-family: var(--mono); font-weight: 620; font-size: 13px; }
+.lclass { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ---- transformation cards ---- */
+
+.xform .movetag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  min-width: 128px;
+}
+
+.xform .xdesc { font-weight: 560; flex: 1 1 200px; font-size: 13px; }
+
+.trade-pill, .leak-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 100px;
+  border: 1px solid currentColor;
+  flex: 0 0 auto;
+}
+
+.trade-pill { color: var(--status-serious); }
+.leak-pill  { color: var(--series-1); }
+
+.xform .cov {
+  font: 11px var(--mono);
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ---- objective vector ---- */
+
+.objvec {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+
+.objvec > b {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 9px;
+}
+
+.objrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.objname { flex: 0 0 176px; color: var(--text-secondary); }
+
+.objtrack {
+  flex: 1 1 auto;
+  position: relative;
+  height: 7px;
+  background: var(--grid);
+  border-radius: 100px;
+  min-width: 90px;
+}
+
+/* Diverging encoding: blue improves, red degrades, neutral gray midpoint. */
+.objmid {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--axis);
+}
+
+.objbar { position: absolute; top: 0; bottom: 0; border-radius: 100px; }
+.objbar.pos { background: var(--series-1); }
+.objbar.neg { background: var(--status-critical); }
+
+/* "Not assessed" reads as absent, never as a zero-length bar at the midpoint. */
+.objtrack.unassessed {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 3px, var(--grid) 3px, var(--grid) 6px
+  );
+  opacity: 0.7;
+}
+
+.objval {
+  flex: 0 0 46px;
+  text-align: right;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.objval.unassessed-label {
+  flex: 0 0 auto;
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.objclaim {
+  flex: 0 0 74px;
+  font: 9px var(--mono);
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+/* ---- assumptions ---- */
+
+.assumptions {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.assumptions > b {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.assumption { padding: 7px 0; border-bottom: 1px solid var(--grid); }
+.assumption:last-child { border-bottom: 0; }
+
+.akind {
+  display: inline-block;
+  font: 10px var(--mono);
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
+}
+
+.weights {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 10px 0 14px;
+  line-height: 1.6;
+}
+
+.weights b {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .objname { flex: 0 0 120px; }
+  .objclaim { display: none; }
+  .xform .movetag { min-width: 0; }
+}

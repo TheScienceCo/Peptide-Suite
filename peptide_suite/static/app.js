@@ -539,17 +539,19 @@ function renderCandidate(c) {
 
 /* ---------- wiring ---------- */
 
+const TABS = ["optimize", "transform", "find"];
+
 function switchTab(which) {
-  const isOpt = which === "optimize";
-  $("#tab-optimize").setAttribute("aria-selected", String(isOpt));
-  $("#tab-find").setAttribute("aria-selected", String(!isOpt));
-  $("#panel-optimize").hidden = !isOpt;
-  $("#panel-find").hidden = isOpt;
+  TABS.forEach((name) => {
+    const selected = name === which;
+    $(`#tab-${name}`).setAttribute("aria-selected", String(selected));
+    $(`#panel-${name}`).hidden = !selected;
+  });
 }
 
 async function init() {
-  $("#tab-optimize").addEventListener("click", () => switchTab("optimize"));
-  $("#tab-find").addEventListener("click", () => switchTab("find"));
+  TABS.forEach((name) => $(`#tab-${name}`).addEventListener("click", () => switchTab(name)));
+  $("#btn-transform").addEventListener("click", onTransform);
   $("#btn-infer").addEventListener("click", onAnalyze);
   $("#btn-find").addEventListener("click", onFind);
   $("#query").addEventListener("keydown", (e) => { if (e.key === "Enter") onFind(); });
@@ -558,6 +560,12 @@ async function init() {
     const b = el("button", "chip", ex.label);
     b.addEventListener("click", () => { $("#seq").value = ex.seq; });
     $("#seq-examples").append(b);
+  });
+
+  EXAMPLES.sequences.forEach((ex) => {
+    const b = el("button", "chip", ex.label);
+    b.addEventListener("click", () => { $("#tseq").value = ex.seq; });
+    $("#tseq-examples").append(b);
   });
 
   EXAMPLES.queries.forEach((q) => {
@@ -576,3 +584,360 @@ async function init() {
 }
 
 init();
+
+/* ---------- Transformations ---------- */
+
+const OBJECTIVE_LABELS = {
+  potency: "Potency",
+  functional_selectivity_bias: "Functional selectivity / bias",
+  proteolytic_half_life: "Proteolytic half-life",
+  albumin_fcrn_engagement: "Albumin / FcRn engagement",
+  aggregation_propensity: "Aggregation propensity",
+  solubility_at_formulation_ph: "Solubility at formulation pH",
+  immunogenicity_risk: "Immunogenicity risk",
+  synthesizability: "Synthesizability",
+};
+
+const MOVE_LABELS = {
+  backbone_constraint: "Backbone constraint",
+  side_chain_substitution: "Side-chain substitution",
+  lipidation: "Lipidation",
+  cyclization_stapling: "Cyclization / stapling",
+  terminal_capping: "Terminal capping",
+  glycosylation: "Glycosylation",
+  disulfide_surrogate: "Disulfide surrogate",
+  charge_engineering: "Charge engineering",
+  liability_removal: "Liability removal",
+};
+
+async function onTransform() {
+  const btn = $("#btn-transform");
+  const out = $("#transform-results");
+  out.innerHTML = "";
+  const sequence = $("#tseq").value.trim();
+
+  if (!sequence) {
+    out.append(notice("Enter a peptide sequence.", "error", "×"));
+    return;
+  }
+
+  busy(btn, true);
+  try {
+    const ph = parseFloat($("#tph").value);
+    const data = await api("/api/transform", {
+      sequence,
+      formulation_ph: Number.isFinite(ph) ? ph : 7.4,
+      is_internal_fragment: $("#tfrag").checked,
+    });
+    renderTransformResults(data);
+  } catch (e) {
+    out.append(notice(e.message, "error", "×"));
+  } finally {
+    busy(btn, false, "Generate transformations");
+  }
+}
+
+function renderTransformResults(d) {
+  const out = $("#transform-results");
+  const p = d.physics;
+
+  // --- how far the physics actually got
+  const tierCard = el("div", "card");
+  tierCard.append(el("h2", null, "Physics tiers"));
+  tierCard.append(el("div", "kv", p.summary));
+
+  const ladder = el("div", "tier-ladder");
+  p.tiers.forEach((t) => {
+    const row = el("div", `tier-row ${t.available ? "ok" : "off"}`);
+    row.append(el("span", "tier-n", `Tier ${t.tier}`));
+    row.append(el("span", "tier-state", t.available ? "ran" : "did not run"));
+    const detail = el("span", "tier-detail");
+    if (t.available) {
+      detail.textContent = t.illustrative_only
+        ? "ran, but without pocket perturbation — see the pKa note below"
+        : "computed";
+    } else {
+      detail.textContent = t.unavailable_reason || "";
+      if (t.missing_dependency) {
+        detail.append(el("span", "tier-dep", ` Needs: ${t.missing_dependency}`));
+      }
+    }
+    row.append(detail);
+    ladder.append(row);
+  });
+  tierCard.append(ladder);
+  out.append(tierCard);
+
+  // --- Tier 0 numbers
+  const stats = el("div", "stats");
+  const addStat = (k, v, sm) => {
+    const s = el("div", "stat");
+    s.append(el("div", "k", k), el("div", `v${sm ? " sm" : ""}`, v));
+    stats.append(s);
+  };
+  addStat("Isoelectric point", `${p.isoelectric_point}`);
+  addStat(`Net charge @ pH ${p.formulation_ph}`, `${p.net_charge_at_formulation_ph >= 0 ? "+" : ""}${p.net_charge_at_formulation_ph}`);
+  addStat("Max μH (11-mer)", `${p.windowed_hydrophobic_moment.max_moment}`);
+  addStat("Mean hydrophobicity", `${p.mean_hydrophobicity >= 0 ? "+" : ""}${p.mean_hydrophobicity}`);
+  addStat("Liabilities", `${p.liabilities.length}`);
+  out.append(stats);
+
+  // --- charge vs pH
+  out.append(renderChargeCurve(p));
+
+  // --- liabilities
+  if (p.liabilities.length) {
+    const c = el("div", "card");
+    c.append(el("h2", null, `Liability motifs (${p.liabilities.length})`));
+    p.liabilities.forEach((l) => {
+      const row = el("div", `liability sev-${l.severity}`);
+      const head = el("div", "liability-head");
+      head.append(
+        el("span", "sev", l.severity.toUpperCase()),
+        el("span", "lmotif", `${l.motif} @ ${l.display_position}`),
+        el("span", "lclass", l.class.replace(/_/g, " "))
+      );
+      row.append(head);
+      row.append(el("div", "kv", l.mechanism));
+      const mit = el("div", "kv");
+      mit.append(el("b", null, "Mitigation "), document.createTextNode(l.mitigation));
+      row.append(mit);
+      c.append(row);
+    });
+    out.append(c);
+  }
+
+  // --- excision site
+  const ex = d.native_context.excision;
+  if (ex && ex.is_internal_fragment) {
+    const c = el("div", "card");
+    c.append(el("h2", null, "Excision-site check"));
+    c.append(notice(ex.priority_note, "info", "i"));
+    c.append(el("div", "kv", ex.n_terminal_artifact));
+    c.append(el("div", "kv", ex.c_terminal_artifact));
+    out.append(c);
+  }
+
+  d.native_context.data_notes.forEach((n) => out.append(notice(n)));
+
+  // --- transformations
+  const tc = el("div", "card");
+  tc.append(el("h2", null, `Ranked transformations (${d.transformations.length})`));
+  tc.append(notice(d.comparability_warning, "warn", "!"));
+  tc.append(el("div", "kv", d.scalarization_note));
+
+  const w = el("div", "weights");
+  w.append(el("b", null, "Scalarization weights "));
+  w.append(document.createTextNode(
+    Object.entries(d.weights).map(([k, v]) => `${OBJECTIVE_LABELS[k] || k} ${v}`).join(" · ")
+  ));
+  tc.append(w);
+
+  d.transformations.forEach((t, i) => tc.append(renderTransformation(t, i + 1)));
+
+  if (d.rejected.length) {
+    const r = el("div", "kv");
+    r.append(el("b", null, `${d.rejected.length} transformation(s) withheld `));
+    r.append(document.createTextNode(
+      "for violating the output contract: " +
+      d.rejected.map((x) => `${x.description} (${x.violations.join("; ")})`).join(" | ")
+    ));
+    tc.append(r);
+  }
+
+  out.append(tc);
+}
+
+function renderChargeCurve(p) {
+  const card = el("div", "card");
+  card.append(el("h2", null, "Net charge vs pH"));
+
+  const pts = p.charge_vs_ph;
+  const W = 1000, H = 190, PAD_L = 40, PAD_B = 26, PAD_T = 10, PAD_R = 12;
+  const plotW = W - PAD_L - PAD_R, plotH = H - PAD_B - PAD_T;
+
+  const charges = pts.map((q) => q[1]);
+  const yMax = Math.ceil(Math.max(...charges, 1));
+  const yMin = Math.floor(Math.min(...charges, -1));
+  const x = (ph) => PAD_L + ((ph - pts[0][0]) / (pts[pts.length - 1][0] - pts[0][0])) * plotW;
+  const y = (q) => PAD_T + plotH - ((q - yMin) / (yMax - yMin)) * plotH;
+
+  const ns = (tag, attrs) => {
+    const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    return n;
+  };
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Net charge as a function of pH");
+  svg.style.display = "block";
+
+  for (let q = yMin; q <= yMax; q++) {
+    const yy = y(q);
+    svg.append(ns("line", {
+      x1: PAD_L, x2: W - PAD_R, y1: yy, y2: yy,
+      stroke: q === 0 ? "var(--axis)" : "var(--grid)",
+      "stroke-width": q === 0 ? 1.5 : 1,
+    }));
+    const lbl = ns("text", {
+      x: PAD_L - 7, y: yy + 3.5, "text-anchor": "end",
+      fill: "var(--text-muted)", "font-size": 10, "font-family": "ui-monospace, monospace",
+    });
+    lbl.textContent = q > 0 ? `+${q}` : `${q}`;
+    svg.append(lbl);
+  }
+
+  [2, 4, 6, 8, 10, 12, 14].forEach((ph) => {
+    const lbl = ns("text", {
+      x: x(ph), y: H - 8, "text-anchor": "middle",
+      fill: "var(--text-muted)", "font-size": 10, "font-family": "ui-monospace, monospace",
+    });
+    lbl.textContent = `pH ${ph}`;
+    svg.append(lbl);
+  });
+
+  svg.append(ns("path", {
+    d: pts.map((q, i) => `${i ? "L" : "M"}${x(q[0]).toFixed(1)},${y(q[1]).toFixed(1)}`).join(" "),
+    fill: "none", stroke: "var(--series-1)", "stroke-width": 2,
+    "stroke-linejoin": "round", "stroke-linecap": "round",
+  }));
+
+  // pI marker: where the curve crosses zero
+  const pI = p.isoelectric_point;
+  svg.append(ns("line", {
+    x1: x(pI), x2: x(pI), y1: PAD_T, y2: PAD_T + plotH,
+    stroke: "var(--text-muted)", "stroke-width": 1, "stroke-dasharray": "3 3",
+  }));
+  const pilbl = ns("text", {
+    x: x(pI) + 5, y: PAD_T + 12, fill: "var(--text-secondary)",
+    "font-size": 11, "font-family": "ui-monospace, monospace",
+  });
+  pilbl.textContent = `pI ${pI}`;
+  svg.append(pilbl);
+
+  // formulation pH marker
+  svg.append(ns("circle", {
+    cx: x(p.formulation_ph), cy: y(p.net_charge_at_formulation_ph), r: 4,
+    fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2,
+  }));
+
+  const wrap = el("div", "chart");
+  wrap.append(svg);
+  card.append(wrap);
+  card.append(el("div", "kv",
+    `Computed per residue via Henderson-Hasselbalch. Marker shows the formulation pH ` +
+    `(${p.formulation_ph}, net ${p.net_charge_at_formulation_ph >= 0 ? "+" : ""}` +
+    `${p.net_charge_at_formulation_ph}). Solubility is typically worst near pI.`));
+  return card;
+}
+
+function renderTransformation(t, rank) {
+  const d = el("details", "rec xform");
+  if (rank === 1) d.open = true;
+
+  const summary = document.createElement("summary");
+  summary.className = "rec-head";
+  const s = t.scalarized;
+
+  summary.append(
+    el("span", "rank", String(rank)),
+    el("span", "movetag", MOVE_LABELS[t.move] || t.move),
+    el("span", "xdesc", t.description)
+  );
+  if (t.tradeoff_label) summary.append(el("span", "trade-pill", "TRADE"));
+  if (t.leakage_flag) summary.append(el("span", "leak-pill", "KNOWN ANALOG"));
+  summary.append(
+    el("span", "net", `${s.score >= 0 ? "+" : ""}${s.score.toFixed(2)}`),
+    el("span", "cov", `${Math.round(s.coverage * 100)}%`),
+    el("span", "caret", "›")
+  );
+  d.append(summary);
+
+  const body = el("div", "rec-body");
+
+  if (t.tradeoff_label) body.append(notice(t.tradeoff_label, "warn", "⇄"));
+  if (t.leakage_flag) body.append(notice(t.leakage_flag.note, "info", "i"));
+
+  body.append(el("p", "reasoning", t.rationale));
+
+  // objective vector
+  const ov = el("div", "objvec");
+  ov.append(el("b", null, "Objective vector"));
+  t.objective_deltas.forEach((od) => ov.append(renderObjectiveRow(od)));
+  body.append(ov);
+
+  body.append(el("div", "kv",
+    `Scalarized ${s.score >= 0 ? "+" : ""}${s.score.toFixed(3)}. ${s.caveat}`));
+
+  if (t.preorganization) {
+    const pre = el("div", "derivation");
+    pre.append(el("b", null, "Pre-organization proxy"));
+    pre.append(el("div", "kv", t.preorganization.rendered));
+    if (t.preorganization.claim) {
+      pre.append(el("div", "eqrefs", t.preorganization.claim.rendered));
+    }
+    body.append(pre);
+  }
+
+  if (t.assumptions.length) {
+    const a = el("div", "assumptions");
+    a.append(el("b", null, "Assumptions"));
+    t.assumptions.forEach((as) => {
+      const row = el("div", "assumption");
+      row.append(el("span", "akind", as.kind.replace(/_/g, " ")));
+      row.append(el("div", "kv", as.statement));
+      if (as.impact_if_wrong) {
+        const imp = el("div", "kv");
+        imp.append(el("b", null, "If wrong "), document.createTextNode(as.impact_if_wrong));
+        row.append(imp);
+      }
+      a.append(row);
+    });
+    body.append(a);
+  }
+
+  t.notes.forEach((n) => body.append(el("div", "eqrefs", n)));
+  body.append(el("div", "eqrefs",
+    `evidence tier: ${t.evidence_tier || "n/a"} · physics tier reached: ${t.physics_tier_reached}`));
+
+  d.append(body);
+  return d;
+}
+
+function renderObjectiveRow(od) {
+  const row = el("div", "objrow");
+  row.append(el("span", "objname", OBJECTIVE_LABELS[od.objective] || od.objective));
+
+  if (!od.assessed) {
+    // Rendered as visibly absent, never as a zero: "not looked at" must not
+    // read the same as "no effect".
+    row.append(el("span", "objtrack unassessed"));
+    const r = el("span", "objval unassessed-label", "not assessed");
+    r.title = od.claim ? od.claim.inference_step : "";
+    row.append(r);
+    return row;
+  }
+
+  const track = el("span", "objtrack");
+  const mid = el("span", "objmid");
+  const bar = el("span", `objbar ${od.signed >= 0 ? "pos" : "neg"}`);
+  const pct = Math.min(1, Math.abs(od.signed)) * 50;
+  if (od.signed >= 0) {
+    bar.style.left = "50%";
+    bar.style.width = `${pct}%`;
+  } else {
+    bar.style.right = "50%";
+    bar.style.width = `${pct}%`;
+  }
+  track.append(mid, bar);
+  row.append(track);
+
+  const val = el("span", "objval", `${od.signed >= 0 ? "+" : ""}${od.signed.toFixed(2)}`);
+  row.append(val);
+  row.append(el("span", "objclaim", od.claim ? od.claim.type : ""));
+  if (od.claim) row.title = od.claim.rendered;
+  return row;
+}

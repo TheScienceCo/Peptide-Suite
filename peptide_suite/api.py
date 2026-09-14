@@ -23,6 +23,7 @@ from peptide_suite.core.evidence_retrieval import EvidenceRetriever
 from peptide_suite.core.peptide_manager import PeptideManager
 from peptide_suite.workflows.find_peptides import FindPeptidesWorkflow
 from peptide_suite.workflows.optimize import OptimizeWorkflow
+from peptide_suite.workflows.transform import TransformWorkflow
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ _optimize = OptimizeWorkflow()
 _find = FindPeptidesWorkflow()
 _peptides = PeptideManager()
 _evidence = EvidenceRetriever()
+_transform = TransformWorkflow()
 _scorer = ConfidenceScorer()
 
 
@@ -132,6 +134,12 @@ class OptimizeRequest(BaseModel):
 class FindRequest(BaseModel):
     query: str
     force_full: bool = False
+
+
+class TransformRequest(BaseModel):
+    sequence: str
+    formulation_ph: float = Field(7.4, ge=0.0, le=14.0)
+    is_internal_fragment: bool = True
 
 
 # ---- endpoints -------------------------------------------------------------
@@ -264,6 +272,204 @@ def find_peptides(req: FindRequest) -> Dict:
             entry["evidence_tier"] = source.evidence_tier.name
             entry["confidence"] = source.confidence.value
     return payload
+
+
+def encode_claim(claim) -> Optional[Dict]:
+    if claim is None:
+        return None
+    return {
+        "type": claim.claim_type.value,
+        "text": claim.text,
+        "method": claim.method,
+        "tier": claim.tier,
+        "citations": claim.citations,
+        "inference_step": claim.inference_step,
+        "experimentally_tested": claim.experimentally_tested,
+        "rendered": claim.render(),
+    }
+
+
+def encode_transformation(t) -> Dict:
+    scal = t.scalarize()
+    return {
+        "move": t.move.value,
+        "position": t.position,
+        "display_position": t.display_position,
+        "description": t.description,
+        "rationale": t.rationale,
+        "evidence_tier": t.evidence_tier,
+        "physics_tier_reached": t.physics_tier_reached,
+        "tradeoff_label": t.tradeoff_label,
+        "notes": t.notes,
+        "scalarized": scal,
+        "objective_deltas": [
+            {
+                "objective": d.objective.value,
+                "direction": d.direction.value,
+                "assessed": d.assessed,
+                "magnitude": d.magnitude,
+                "signed": d.signed,
+                "basis": d.basis,
+                "claim": encode_claim(d.claim),
+            }
+            for d in t.objective_deltas
+        ],
+        "preorganization": (
+            {
+                "helicity_delta": t.preorganization.helicity_delta,
+                "basin_restriction": t.preorganization.basin_restriction,
+                "rmsf_change": t.preorganization.rmsf_change,
+                "mechanism": t.preorganization.mechanism,
+                "rendered": t.preorganization.render(),
+                "claim": encode_claim(t.preorganization.claim),
+            }
+            if t.preorganization else None
+        ),
+        "assumptions": [
+            {"kind": a.kind.value, "statement": a.statement, "impact_if_wrong": a.impact_if_wrong}
+            for a in t.assumptions
+        ],
+        "leakage_flag": (
+            {
+                "scaffold": t.leakage_flag.scaffold,
+                "marketed_analogs": t.leakage_flag.marketed_analogs,
+                "matching_modification": t.leakage_flag.matching_modification,
+                "note": t.leakage_flag.note,
+            }
+            if t.leakage_flag else None
+        ),
+    }
+
+
+def encode_physics(physics: Dict) -> Dict:
+    t0 = physics["tier0"].data
+    tiers = []
+    for key in ("tier0", "tier1", "tier2", "tier3", "tier4"):
+        tr = physics.get(key)
+        if tr is None:
+            tiers.append({
+                "tier": int(key[-1]), "available": False,
+                "unavailable_reason": physics.get("tier3_blocked_reason", "")
+                if key == "tier3" else "Not applicable to this peptide.",
+                "missing_dependency": "",
+            })
+            continue
+        tiers.append({
+            "tier": tr.tier,
+            "available": tr.available,
+            "unavailable_reason": tr.unavailable_reason,
+            "missing_dependency": tr.missing_dependency,
+            "illustrative_only": tr.illustrative_only,
+        })
+
+    return {
+        "tier_reached": physics["tier_reached"],
+        "summary": physics["summary"],
+        "tiers": tiers,
+        "hydrophobic_moment": t0["hydrophobic_moment"],
+        "windowed_hydrophobic_moment": t0["windowed_hydrophobic_moment"],
+        "mean_hydrophobicity": t0["mean_hydrophobicity"],
+        "isoelectric_point": t0["isoelectric_point"],
+        "net_charge_at_formulation_ph": t0["net_charge_at_formulation_ph"],
+        "formulation_ph": t0["formulation_ph"],
+        "charge_vs_ph": t0["charge_vs_ph"],
+        "helical_wheel": t0["helical_wheel"],
+        "liabilities": [
+            {
+                "motif": l.motif,
+                "position": l.position,
+                "display_position": l.display_position,
+                "class": l.liability_class.value,
+                "mechanism": l.mechanism,
+                "severity": l.severity,
+                "mitigation": l.mitigation,
+            }
+            for l in t0["liabilities"]
+        ],
+        "pka_residues": physics["tier1"].data.get("residues", []),
+        "pocket_perturbation_applied": physics["tier1"].data.get("pocket_perturbation_applied", False),
+    }
+
+
+def encode_native_context(nc) -> Dict:
+    ex = nc.excision
+    return {
+        "retrieval_status": nc.retrieval_status,
+        "structure_status": nc.structure_status,
+        "data_notes": nc.data_notes,
+        "excision": (
+            {
+                "is_internal_fragment": ex.is_internal_fragment,
+                "n_terminal_artifact": ex.n_terminal_artifact,
+                "c_terminal_artifact": ex.c_terminal_artifact,
+                "recommended_n_cap": ex.recommended_n_cap,
+                "recommended_c_cap": ex.recommended_c_cap,
+                "priority_note": ex.priority_note,
+            }
+            if ex else None
+        ),
+        "contacts": [
+            {
+                "partner": c.partner_description,
+                "class": c.contact_class.value,
+                "residues": c.residues_involved,
+                "basis": c.classification_basis,
+                "response": c.recommended_response,
+            }
+            for c in nc.contacts
+        ],
+        "partners": [
+            {
+                "name": p.partner_name,
+                "class": p.partner_class.value,
+                "rationale": p.rationale,
+                "stoichiometry": p.stoichiometry,
+                "engagement_order": p.engagement_order,
+                "covalent_tether_assessment": p.covalent_tether_assessment,
+                "evidence_required": p.evidence_required,
+            }
+            for p in nc.partners
+        ],
+        "assumptions": [
+            {"kind": a.kind.value, "statement": a.statement, "impact_if_wrong": a.impact_if_wrong}
+            for a in nc.assumptions
+        ],
+    }
+
+
+@app.post("/api/transform")
+def transform(req: TransformRequest) -> Dict:
+    """
+    Generate ranked discrete transformations with the full objective vector.
+
+    Emits transformations, never an optimised sequence: a sequence hides which
+    moves were made and why.
+    """
+    try:
+        sequence, _ = _peptides.load_sequence(req.sequence)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        result = _transform.run(
+            sequence,
+            formulation_ph=req.formulation_ph,
+            is_internal_fragment=req.is_internal_fragment,
+        )
+    except Exception as e:
+        logger.exception("Transform failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "sequence": result["sequence"],
+        "physics": encode_physics(result["physics"]),
+        "native_context": encode_native_context(result["native_context"]),
+        "transformations": [encode_transformation(t) for t in result["transformations"]],
+        "rejected": result["rejected"],
+        "weights": result["weights"],
+        "scalarization_note": result["scalarization_note"],
+        "comparability_warning": result["comparability_warning"],
+    }
 
 
 @app.get("/api/calibration")
