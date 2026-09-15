@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set
+from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -530,25 +530,81 @@ class AggregateTermRegistry:
 # Parameter budget
 # ---------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class ReceptorComplex:
+    """
+    A receptor identity that is complete enough to pool measurements under.
+
+    A receptor gene alone is underspecified where accessory proteins determine
+    pharmacology: CLR with RAMP1 is the CGRP receptor and CLR with RAMP2 is AM1,
+    same gene, different ligand preference. Affinities measured against
+    different accessory complexes are not the same quantity, so the identifier
+    carries the accessory subunits and two complexes that differ in them will
+    not compare equal.
+    """
+    receptor: str
+    accessory: Tuple[str, ...] = ()
+    species: str = ""
+
+    @property
+    def identifier(self) -> str:
+        parts = [self.receptor]
+        if self.accessory:
+            parts.append("+".join(sorted(self.accessory)))
+        if self.species:
+            parts.append(f"({self.species})")
+        return "".join(p if i == 0 else f"+{p}" if not p.startswith("(") else p
+                       for i, p in enumerate(parts))
+
+    def poolable_with(self, other: "ReceptorComplex") -> bool:
+        return (self.receptor == other.receptor
+                and set(self.accessory) == set(other.accessory))
+
+    def __str__(self) -> str:
+        return self.identifier
+
+
 @dataclass
 class ParameterBudget:
     """
-    Free parameters in the scoring policy must not exceed N_measured / 10 for
-    the target class being scored.
+    Free parameters must not exceed N_measured / divisor.
 
-    Printed at the top of every eval report. Published affinity numbers for a
-    given receptor class run to the low hundreds, while per-residue descriptors
-    generate thousands of candidate features; without this cap a retrospective
-    holdout looks excellent for exactly the wrong reason.
+    The budget is computed over the POOLED measurement set rather than per
+    class: the policy is one artifact with one parameter count, so counting it
+    against a single class would understate the data required.
+
+    Pooling is only legitimate across complexes that are the same quantity.
+    `add_pool` refuses to merge measurements from complexes that differ in
+    accessory subunits, since those are different pharmacology recorded under a
+    shared receptor name.
     """
-    target_class: str
-    n_measured: int
-    free_parameters: int
-    ratio_divisor: int = 10
+    divisor: float
+    pools: Dict[str, int] = field(default_factory=dict)
+    free_parameters: int = 0
+    _complexes: Dict[str, "ReceptorComplex"] = field(default_factory=dict)
+
+    def add_pool(self, complex_: "ReceptorComplex", n_measured: int) -> "ParameterBudget":
+        key = complex_.identifier
+        for existing_key, existing in self._complexes.items():
+            if existing_key == key:
+                continue
+            if existing.receptor == complex_.receptor and not existing.poolable_with(complex_):
+                raise LicenseViolation(
+                    f"Refusing to pool '{key}' with '{existing_key}': same receptor, different "
+                    f"accessory subunits. These are different pharmacology and their affinities "
+                    f"are not the same quantity."
+                )
+        self._complexes[key] = complex_
+        self.pools[key] = self.pools.get(key, 0) + n_measured
+        return self
+
+    @property
+    def n_measured(self) -> int:
+        return sum(self.pools.values())
 
     @property
     def budget(self) -> float:
-        return self.n_measured / self.ratio_divisor
+        return self.n_measured / self.divisor
 
     @property
     def within_budget(self) -> bool:
@@ -561,19 +617,21 @@ class ParameterBudget:
     def require(self) -> "ParameterBudget":
         if not self.within_budget:
             raise LicenseViolation(
-                f"Parameter budget exceeded for target class '{self.target_class}': "
-                f"{self.free_parameters} free parameters against {self.n_measured} measured "
-                f"values (budget {self.budget:.1f}). Adding a feature family requires removing "
-                f"one or acquiring data."
+                f"Parameter budget exceeded: {self.free_parameters} free parameters against "
+                f"{self.n_measured} pooled measured values across {len(self.pools)} complex(es) "
+                f"(budget {self.budget:.1f}). Adding a feature family requires removing one or "
+                f"acquiring data."
             )
         return self
 
     def report_line(self) -> str:
         status = "WITHIN BUDGET" if self.within_budget else "OVER BUDGET"
+        pools = ", ".join(f"{k}={v}" for k, v in sorted(self.pools.items())) or "none"
         return (
-            f"PARAMETER BUDGET [{self.target_class}]: {self.free_parameters} free parameters / "
-            f"{self.n_measured} measured values = budget {self.budget:.1f}, "
-            f"utilisation {self.utilisation:.0%} — {status}"
+            f"PARAMETER BUDGET: {self.free_parameters} free parameters / {self.n_measured} "
+            f"pooled measured values = budget {self.budget:.1f}, "
+            f"utilisation {self.utilisation:.0%} — {status}\n"
+            f"  pools: {pools}"
         )
 
 

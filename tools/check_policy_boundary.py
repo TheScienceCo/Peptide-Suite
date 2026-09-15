@@ -86,6 +86,12 @@ RATIONALE_PATTERNS = [
 ENGINE_ROOTS = ("peptide_suite/",)
 EXEMPT_PATH_PARTS = ("/tests/", "/static/", "/data/")
 
+# Exact-by-SI-definition constants. Exempt because a value that cannot vary is
+# not a coefficient: putting it behind the policy artifact would invite someone
+# to change something that is true by definition. The exemption is one file and
+# that file is the whole argument for it.
+EXEMPT_FILES = ("peptide_suite/core/constants.py",)
+
 
 def staged_files():
     out = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
@@ -101,6 +107,7 @@ def all_files():
 def is_engine_source(path: str) -> bool:
     return (path.endswith(".py")
             and any(path.startswith(r) for r in ENGINE_ROOTS)
+            and path not in EXEMPT_FILES
             and not any(part in f"/{path}" for part in EXEMPT_PATH_PARTS))
 
 

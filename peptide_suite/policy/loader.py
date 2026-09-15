@@ -210,7 +210,7 @@ def validate_document(document: Dict[str, Any], *, verify_integrity: bool = True
 
     _check_key_block(document["weights"], FEATURE_FAMILIES, "weights", problems, lambda v: float(v))
     _check_key_block(document["thresholds"], THRESHOLDS, "thresholds", problems,
-                     lambda v: float(v["value"]))
+                     lambda v: float(v["value"] if isinstance(v, dict) else v))
 
     for weight_id in sorted(document["weights"]):
         if weight_id not in families:
@@ -272,7 +272,8 @@ def load_policy(path: Optional[Path] = None, *, verify_integrity: bool = True) -
         provenance=dict(document["provenance"]),
         digest=document["integrity"]["digest"],
         _weights={k: float(v) for k, v in document["weights"].items()},
-        _thresholds={k: float(v["value"]) for k, v in document["thresholds"].items()},
+        _thresholds={k: float(v["value"] if isinstance(v, dict) else v)
+                     for k, v in document["thresholds"].items()},
         _families=dict(document["feature_families"]),
         _aggregate_terms=dict(document["aggregate_terms"]),
         source_path=path,
