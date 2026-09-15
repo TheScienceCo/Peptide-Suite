@@ -37,6 +37,7 @@ VALID_SEMANTIC_TYPES = {
 VALID_PACK_KINDS = {"demonstration", "production"}
 VALID_REDUCTIONS = {"sum", "mean", "max_abs", "min", "max", "count_above_threshold"}
 VALID_AGGREGATE_TIERS = {"QM", "SEMIEMPIRICAL", "CLASSICAL_SIM", "MEASURED_STRUCTURE"}
+VALID_BASES = {"derived", "placeholder_midpoint"}
 
 TOP_LEVEL_REQUIRED = {
     "schema_version", "policy_version", "pack_kind", "provenance",
@@ -88,6 +89,7 @@ class Policy:
     _thresholds: Dict[str, float]
     _families: Dict[str, Dict[str, Any]]
     _aggregate_terms: Dict[str, Dict[str, Any]]
+    _threshold_basis: Dict[str, str]
     source_path: Optional[Path] = None
 
     @property
@@ -121,14 +123,33 @@ class Policy:
     def declared_aggregate_terms(self) -> List[str]:
         return sorted(self._aggregate_terms)
 
+    def threshold_basis(self, threshold_id: str) -> Optional[str]:
+        """Where a threshold's value came from, or None if the pack did not say."""
+        return self._threshold_basis.get(threshold_id)
+
+    @property
+    def placeholder_thresholds(self) -> List[str]:
+        """
+        Thresholds standing in for a value nobody derived.
+
+        A caller that consumes one of these is producing a shape, not a result,
+        and is expected to say so in its output.
+        """
+        return sorted(k for k, v in self._threshold_basis.items()
+                      if v == "placeholder_midpoint")
+
     @property
     def free_parameters(self) -> int:
         return len(self._weights) + len(self._thresholds)
 
     def banner(self) -> str:
         kind = "DEMONSTRATION PACK — not the production policy" if self.is_demonstration else "production policy"
-        return (f"policy {self.policy_version} ({kind}), "
+        line = (f"policy {self.policy_version} ({kind}), "
                 f"{self.free_parameters} free parameters, digest {self.digest[:12]}")
+        placeholders = self.placeholder_thresholds
+        if placeholders:
+            line += f" — {len(placeholders)} of {len(self._thresholds)} thresholds are placeholders"
+        return line
 
 
 def _check_key_block(block: Dict[str, Any], required: Dict[str, KeySpec],
@@ -213,6 +234,28 @@ def validate_document(document: Dict[str, Any], *, verify_integrity: bool = True
     _check_key_block(document["thresholds"], THRESHOLDS, "thresholds", problems,
                      lambda v: float(v["value"] if isinstance(v, dict) else v))
 
+    # A threshold may declare where its value came from. The distinction that
+    # matters is derived-from-something versus stood-in-for: a placeholder is
+    # admissible in a demonstration pack and never in a production one, which is
+    # what stops a demo pack from being relabelled and shipped.
+    for threshold_id, entry in sorted(document["thresholds"].items()):
+        if not isinstance(entry, dict):
+            continue
+        basis = entry.get("basis")
+        if basis is None:
+            continue
+        if basis not in VALID_BASES:
+            problems.append(
+                f"thresholds: '{threshold_id}' declares basis '{basis}', "
+                f"not one of {sorted(VALID_BASES)}"
+            )
+        elif basis == "placeholder_midpoint" and document["pack_kind"] == "production":
+            problems.append(
+                f"thresholds: '{threshold_id}' is a placeholder, which a production pack "
+                f"may not contain. Either derive the value or keep the pack marked "
+                f"demonstration."
+            )
+
     for weight_id in sorted(document["weights"]):
         if weight_id not in families:
             problems.append(
@@ -283,5 +326,7 @@ def load_policy(path: Optional[Path] = None, *, verify_integrity: bool = True) -
                      for k, v in document["thresholds"].items()},
         _families=dict(document["feature_families"]),
         _aggregate_terms=dict(document["aggregate_terms"]),
+        _threshold_basis={k: v["basis"] for k, v in document["thresholds"].items()
+                          if isinstance(v, dict) and "basis" in v},
         source_path=path,
     )

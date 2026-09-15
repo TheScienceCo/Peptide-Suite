@@ -1,0 +1,394 @@
+{
+  "aggregate_terms": {
+    "agg.594f5d96ea65": {
+      "max_inputs": 8,
+      "reduction": "mean",
+      "source_tiers": [
+        "CLASSICAL_SIM"
+      ]
+    },
+    "agg.b23f8993c76d": {
+      "max_inputs": 8,
+      "reduction": "mean",
+      "source_tiers": [
+        "CLASSICAL_SIM"
+      ]
+    }
+  },
+  "feature_families": {
+    "discovery.expression_component": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "discovery.literature_component": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "evidence.tier_biochemical_principle": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "evidence.tier_direct_experimental": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "evidence.tier_homolog_experimental": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "evidence.tier_inference_only": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.aggregation": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.albumin_fcrn": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.functional_selectivity": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.immunogenicity": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.potency": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.proteolytic_half_life": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.solubility": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "objective.synthesizability": {
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ]
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "digest": "d2776212a88c93700722509d0f7fdfba48a6ad8c04cffefa56b292ab3f71cc89"
+  },
+  "pack_kind": "demonstration",
+  "policy_version": "1.0.0",
+  "provenance": {
+    "created_by": "tools/make_demo_policy.py",
+    "created_utc": "2026-01-01T00:00:00Z",
+    "derivation": "DEMONSTRATION PACK. No value here was fitted to data. Weights are uniform. Thresholds are either derived from a stated source or the arithmetic midpoint of their declared range, marked per key by the 'basis' field. Output produced under this pack shows the shape of a result and carries no claim about its magnitude.",
+    "n_measured": 0,
+    "target_class": "none"
+  },
+  "schema_version": "1.0.0",
+  "thresholds": {
+    "chemistry.burial_pka_shift": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "ph",
+      "units": "pH units",
+      "valid_range": [
+        -5.0,
+        5.0
+      ],
+      "value": 0.0
+    },
+    "chemistry.endosomal_ph": {
+      "basis": "derived",
+      "semantic_type": "ph",
+      "units": "pH",
+      "valid_range": [
+        0.0,
+        14.0
+      ],
+      "value": 5.5
+    },
+    "chemistry.interstitial_ph": {
+      "basis": "derived",
+      "semantic_type": "ph",
+      "units": "pH",
+      "valid_range": [
+        0.0,
+        14.0
+      ],
+      "value": 6.5
+    },
+    "chemistry.reference_ph": {
+      "basis": "derived",
+      "semantic_type": "ph",
+      "units": "pH",
+      "valid_range": [
+        0.0,
+        14.0
+      ],
+      "value": 7.4
+    },
+    "confidence.high_cutoff": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "confidence.material_contribution_cutoff": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "confidence.medium_cutoff": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "conservation.conserved_entropy_cutoff": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "dimensionless",
+      "units": "bits",
+      "valid_range": [
+        0.0,
+        4.5
+      ],
+      "value": 2.25
+    },
+    "conservation.min_distinct_sequences": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "sequences",
+      "valid_range": [
+        2.0,
+        1000.0
+      ],
+      "value": 3.0
+    },
+    "conservation.tolerance_sigmoid_inflection": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "dimensionless",
+      "units": "bits",
+      "valid_range": [
+        0.0,
+        4.5
+      ],
+      "value": 2.25
+    },
+    "conservation.tolerance_sigmoid_steepness": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "dimensionless",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        20.0
+      ],
+      "value": 10.0
+    },
+    "conservation.variable_entropy_cutoff": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "dimensionless",
+      "units": "bits",
+      "valid_range": [
+        0.0,
+        4.5
+      ],
+      "value": 2.25
+    },
+    "identification.containment_confidence": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "identification.exact_match_confidence": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "identification.min_containment_length": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "residues",
+      "valid_range": [
+        3.0,
+        50.0
+      ],
+      "value": 6.0
+    },
+    "identification.peptide_length_ceiling": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "residues",
+      "valid_range": [
+        10.0,
+        1000.0
+      ],
+      "value": 100.0
+    },
+    "identification.similarity_floor": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "parameter_budget.measured_ratio_divisor": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "dimensionless",
+      "valid_range": [
+        1.0,
+        1000.0
+      ],
+      "value": 10.0
+    },
+    "preorganization.propensity_to_helicity_scale": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "dimensionless",
+      "units": "fraction_per_kcal",
+      "valid_range": [
+        0.0,
+        5.0
+      ],
+      "value": 2.5
+    },
+    "structure_gate.max_interface_pae": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "angstrom",
+      "units": "angstrom",
+      "valid_range": [
+        0.0,
+        35.0
+      ],
+      "value": 17.5
+    },
+    "structure_gate.min_iptm": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "bounded_unit",
+      "units": "dimensionless",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.5
+    },
+    "structure_gate.min_plddt": {
+      "basis": "derived",
+      "semantic_type": "dimensionless",
+      "units": "pLDDT",
+      "valid_range": [
+        0.0,
+        100.0
+      ],
+      "value": 70.0
+    },
+    "structure_gate.min_seed_count": {
+      "basis": "placeholder_midpoint",
+      "semantic_type": "count",
+      "units": "seeds",
+      "valid_range": [
+        1.0,
+        100.0
+      ],
+      "value": 50.5
+    }
+  },
+  "weights": {
+    "discovery.expression_component": 0.071429,
+    "discovery.literature_component": 0.071429,
+    "evidence.tier_biochemical_principle": 0.071429,
+    "evidence.tier_direct_experimental": 0.071429,
+    "evidence.tier_homolog_experimental": 0.071429,
+    "evidence.tier_inference_only": 0.071429,
+    "objective.aggregation": 0.071429,
+    "objective.albumin_fcrn": 0.071429,
+    "objective.functional_selectivity": 0.071429,
+    "objective.immunogenicity": 0.071429,
+    "objective.potency": 0.071429,
+    "objective.proteolytic_half_life": 0.071429,
+    "objective.solubility": 0.071429,
+    "objective.synthesizability": 0.071429
+  }
+}
