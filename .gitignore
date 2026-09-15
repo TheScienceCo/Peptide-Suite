@@ -19,3 +19,25 @@ logs/prediction_calibration.jsonl
 .idea/
 *.swp
 *.swo
+
+# ---------------------------------------------------------------------------
+# Policy artifacts  [Addendum 1 section 4 — never-commit list]
+#
+# The scoring policy is proprietary. Only the demonstration pack may be
+# committed. These rules are deliberately deny-by-default: a new policy file
+# with an unanticipated name is blocked rather than allowed, because the cost
+# of over-blocking is an explicit override and the cost of under-blocking is an
+# irreversible disclosure.
+# ---------------------------------------------------------------------------
+policy/*
+!policy/README.md
+!policy/demo.*.json
+
+# Production naming conventions, blocked explicitly wherever they appear
+*.policy.json
+*policy.prod*.json
+*policy.production*.json
+*.private.json
+**/policy.prod*
+**/policy.production*
+**/*_policy_weights*

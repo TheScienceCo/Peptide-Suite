@@ -1,0 +1,19 @@
+name: policy-boundary
+
+on: [push, pull_request]
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Addendum 1 section 4: blocks any policy artifact that is not the demo
+      # pack, and fails if inlined-coefficient or weighting-rationale counts
+      # rise above the recorded debt.
+      - name: Engine/policy boundary
+        run: python tools/check_policy_boundary.py --scope all
+      - name: Tests
+        run: python -m unittest discover -s peptide_suite/tests -t .
