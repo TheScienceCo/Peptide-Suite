@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 from peptide_suite.core.epistemics import (
     Assumption, AssumptionKind, Claim, check_corpus_leakage,
 )
+from peptide_suite.core.electrostatics import compute_profile
 from peptide_suite.core.native_context import NativeContextAnalyzer
 from peptide_suite.core.physics_tiers import LiabilityClass, PhysicsStack
 from peptide_suite.core.preorganization import PreOrganizationAnalyzer
@@ -74,6 +75,20 @@ class TransformWorkflow:
 
         physics = self.physics.run(seq, ph=formulation_ph)
         native = self.native.analyze(seq, is_internal_fragment=is_internal_fragment)
+        # Titrated across the compartments the policy names, rather than
+        # collapsed to a pI: which residue carries the charge, and whether that
+        # changes between compartments, is the part a design decision turns on.
+        # Termini are always counted: an uncapped internal fragment really does
+        # carry them, which is the whole reason they are worth flagging. Whether
+        # they are a property of the peptide or an artefact of excision is a
+        # separate statement, made below rather than by dropping the charge.
+        electrostatics = compute_profile(seq, include_termini=True)
+        if is_internal_fragment:
+            electrostatics.notes.insert(0, (
+                "The terminal charges counted here are artefacts of excision, not properties "
+                "of this sequence in its native setting. Capping changes them; evaluate that "
+                "before reading anything else into the charge profile."
+            ))
 
         transformations: List[Transformation] = []
 
@@ -103,6 +118,7 @@ class TransformWorkflow:
             "sequence": seq,
             "physics": physics,
             "native_context": native,
+            "electrostatics": electrostatics,
             "transformations": emitted,
             "rejected": rejected,
             "weights": {o.value: weights.get(o, 0.0) for o in Objective},

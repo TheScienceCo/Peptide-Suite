@@ -7,6 +7,6 @@ never raise them.
 
 ---
 {
-  "coefficients_in_engine": 70,
+  "coefficients_in_engine": 59,
   "weighting_rationale_in_prose": 4
 }

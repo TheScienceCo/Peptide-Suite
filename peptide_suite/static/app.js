@@ -816,6 +816,8 @@ function renderTransformResults(d) {
 
   // --- charge vs pH
   out.append(renderChargeCurve(p));
+  const titration = renderTitration(d.electrostatics);
+  if (titration) out.append(titration);
 
   // --- liabilities
   if (p.liabilities.length) {
@@ -878,6 +880,96 @@ function renderTransformResults(d) {
   }
 
   out.append(tc);
+}
+
+// Per-residue titration across the compartment series. A table rather than a
+// curve: the question is which residue carries the charge and whether that
+// changes between compartments, and a net-charge curve answers neither.
+//
+// "Changes state" is marked with a glyph and a word, never by colour alone --
+// the switchable and static rows have to stay distinguishable to a reader who
+// cannot separate the two hues.
+function renderTitration(e) {
+  if (!e) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, "Protonation by compartment"));
+  card.append(el("div", "kv", e.summary));
+
+  const labels = Object.keys(e.compartments);
+
+  if (e.titrations.length) {
+    const table = el("table", "titration");
+    const head = el("tr");
+    head.append(el("th", null, "Residue"), el("th", null, "Group"),
+              el("th", null, "Charge"), el("th", null, "pKa"));
+    labels.forEach((l) => head.append(el("th", null, `${l} (pH ${e.compartments[l]})`)));
+    head.append(el("th", null, "Across range"));
+    table.append(head);
+
+    e.titrations.forEach((t) => {
+      const row = el("tr", t.is_switchable ? "switchable" : null);
+      // Protonated fraction is the same physics for an acid and a base, but it
+      // means opposite things: a fully protonated lysine is charged, a fully
+      // protonated glutamate is neutral. The sign column says which, so the
+      // percentages can stay comparable without being misread.
+      const physio = t.points[0];
+      const sign = physio.effective_charge > 0.05 ? "+"
+                 : physio.effective_charge < -0.05 ? "\u2212" : "0";
+      row.append(el("td", "res", `${t.residue}${t.display_position}`));
+      row.append(el("td", "grp", t.group));
+      const chg = el("td", "sign", sign);
+      chg.title = `effective charge at pH ${physio.ph}: ${physio.effective_charge.toFixed(2)}`;
+      row.append(chg);
+      row.append(el("td", "num", `${t.pka}`));
+
+      labels.forEach((label) => {
+        const point = t.points.find((p) => p.compartment === label);
+        const cell = el("td", "frac");
+        const bar = el("div", "fracbar");
+        const fill = el("div", "fracfill");
+        fill.style.width = `${Math.round(point.protonated_fraction * 100)}%`;
+        bar.append(fill);
+        cell.append(el("span", "fracnum", `${Math.round(point.protonated_fraction * 100)}%`), bar);
+        cell.title = `protonated fraction ${point.protonated_fraction.toFixed(3)}`;
+        row.append(cell);
+      });
+
+      const verdict = el("td", "verdict");
+      verdict.append(
+        el("span", "glyph", t.is_switchable ? "\u25C6" : "\u25CB"),
+        el("span", null, t.is_switchable
+          ? `changes (${Math.round(t.protonation_swing * 100)} pts)`
+          : "no change")
+      );
+      row.append(verdict);
+      table.append(row);
+    });
+
+    const wrap = el("div", "tablewrap");
+    wrap.append(table);
+    card.append(wrap);
+    card.append(el("div", "footnote",
+      `Protonated fraction from Henderson-Hasselbalch. Protonated means charged for a base ` +
+      `(K, R, H) and neutral for an acid (D, E, C, Y) \u2014 the charge column gives the sign ` +
+      `at physiological pH. A residue counts as changing when its protonated fraction moves ` +
+      `by at least ${Math.round(e.switch_threshold * 100)} points across the range.`));
+
+    e.titrations.filter((t) => t.uncertainty_note).forEach((t) => {
+      card.append(notice(`${t.residue}${t.display_position}: ${t.uncertainty_note}`));
+    });
+  }
+
+  const net = el("div", "netcharge");
+  labels.forEach((label) => {
+    const b = el("div", "stat");
+    b.append(el("div", "k", `net charge, ${label}`),
+             el("div", "v", e.net_charge[label].toFixed(2)));
+    net.append(b);
+  });
+  card.append(net);
+
+  (e.notes || []).forEach((n) => card.append(notice(n)));
+  return card;
 }
 
 function renderChargeCurve(p) {

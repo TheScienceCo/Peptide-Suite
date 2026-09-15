@@ -6,9 +6,11 @@ Equation #11 reference: pH = pKa + log([A-]/[HA])
 Rearranged: alpha (fraction charged) = 1 / (1 + 10^(pKa - pH))
 """
 
+import json
 import logging
-from typing import Dict, Tuple
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -32,25 +34,35 @@ class ChargeCalculator:
     Adjusts based on local context (buried vs surface).
     """
 
-    # Literature pKa values (Stryer, Nelson&Cox)
-    # For side chains (not backbone)
-    SIDECHAIN_PKA = {
-        "D": 3.9,   # Aspartic acid (carboxyl)
-        "E": 4.3,   # Glutamic acid (carboxyl)
-        "H": 6.0,   # Histidine (imidazole) - context dependent, 6-7 typical
-        "K": 10.5,  # Lysine (amino)
-        "R": 12.5,  # Arginine (guanidinium)
-        "C": 8.3,   # Cysteine (thiol) - context dependent
-        "Y": 10.1,  # Tyrosine (phenol) - context dependent
-    }
+    # pKa values are measured literature quantities, so they live in reference
+    # data with their sources and their spread across those sources, not in this
+    # module. The burial shift applied on top of them is a modelling choice and
+    # comes from the policy.
+    _REFERENCE = None
 
-    # Backbone N-terminus and C-terminus
-    NTERM_PKA = 9.0
-    CTERM_PKA = 3.5
+    @classmethod
+    def reference(cls) -> Dict:
+        if cls._REFERENCE is None:
+            path = Path(__file__).parent.parent / "data" / "pka_reference.json"
+            cls._REFERENCE = json.loads(path.read_text())
+        return cls._REFERENCE
 
-    # Context-based pKa shifts (buried residues shift down/up)
-    # Very rough: buried residues ~0.5 pH units lower pKa
-    BURIAL_SHIFT = -0.5
+    @classmethod
+    def sidechain_pka(cls) -> Dict[str, float]:
+        return {aa: entry["pka"] for aa, entry in cls.reference()["sidechain"].items()}
+
+    @classmethod
+    def pka_entry(cls, aa: str) -> Optional[Dict]:
+        return cls.reference()["sidechain"].get(aa)
+
+    @classmethod
+    def terminal_pka(cls, which: str) -> float:
+        return cls.reference()["terminal"][which]["pka"]
+
+    @staticmethod
+    def burial_shift() -> float:
+        from ..runtime import threshold
+        return threshold("chemistry.burial_pka_shift")
 
     def __init__(self):
         pass
@@ -79,7 +91,7 @@ class ChargeCalculator:
         residue = residue.upper()
 
         # Determine pKa
-        if residue not in self.SIDECHAIN_PKA:
+        if residue not in self.sidechain_pka():
             # Non-ionizable residue
             return ChargeState(
                 residue=residue,
@@ -91,14 +103,18 @@ class ChargeCalculator:
                 confidence="high",
             )
 
-        pka = self.SIDECHAIN_PKA[residue]
+        pka = self.sidechain_pka()[residue]
 
-        # Adjust for burial (very rough)
+        entry = self.pka_entry(residue)
+
         if is_buried:
-            pka += self.BURIAL_SHIFT
-            confidence = "low"  # Context-dependent
-        else:
-            confidence = "high"
+            pka += self.burial_shift()
+
+        # Confidence tracks the pKa's own spread, not just burial. A histidine
+        # on the surface is still the least determined charge in the peptide,
+        # because its cited pKa spans the range that decides whether it is
+        # charged at physiological pH at all.
+        confidence = "low" if (is_buried or entry.get("context_dependent")) else "high"
 
         # Henderson-Hasselbalch: alpha = 1 / (1 + 10^(pKa - pH))
         # This gives fraction ionized (proton-free state)
@@ -118,8 +134,12 @@ class ChargeCalculator:
             # So effective charge = +(1 - alpha) = +(protonated fraction)
             effective_charge = (1.0 - alpha)
         elif residue == "Y":
-            # Tyrosine: rarely ionized at physio pH, treat as mostly neutral
-            effective_charge = -alpha if alpha > 0.2 else 0.0
+            # Tyrosine is acidic like D/E/C. It was previously zeroed below
+            # alpha = 0.2, which put a step discontinuity in the titration curve
+            # -- the charge jumped from 0 to -0.2 across a hundredth of a pH
+            # unit. Its ionization at physiological pH is small, and small is
+            # what the equation already says.
+            effective_charge = -alpha
         else:
             effective_charge = 0.0
 
@@ -181,9 +201,9 @@ class ChargeCalculator:
             return {"n_terminus": 0.0, "c_terminus": 0.0}
 
         # N-terminal amino group: protonated (+1) below its pKa
-        n_term = 1.0 / (1.0 + 10.0 ** (ph - self.NTERM_PKA))
+        n_term = 1.0 / (1.0 + 10.0 ** (ph - self.terminal_pka('n_terminus')))
         # C-terminal carboxyl: deprotonated (-1) above its pKa
-        c_term = -1.0 / (1.0 + 10.0 ** (self.CTERM_PKA - ph))
+        c_term = -1.0 / (1.0 + 10.0 ** (self.terminal_pka('c_terminus') - ph))
 
         return {"n_terminus": n_term, "c_terminus": c_term}
 

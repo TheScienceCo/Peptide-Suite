@@ -135,6 +135,53 @@ def encode_effect(effect) -> Dict:
     }
 
 
+def encode_electrostatics(profile) -> Dict:
+    """
+    Per-residue titration across the compartment series.
+
+    Sent as a table rather than a single pI: pI says where net charge crosses
+    zero and nothing about which residue carries it, which is the part a
+    substitution decision turns on.
+    """
+    return {
+        "compartments": profile.compartments,
+        "net_charge": {k: round(v, 3) for k, v in profile.net_charge.items()},
+        "terminal_charges": {
+            label: {k: round(v, 3) for k, v in charges.items()}
+            for label, charges in profile.terminal_charges.items()
+        },
+        "switch_threshold": round(profile.switch_threshold, 3),
+        "summary": profile.summary(),
+        "notes": profile.notes,
+        "titrations": [
+            {
+                "position": t.position,
+                "display_position": t.display_position,
+                "residue": t.residue,
+                "pka": t.pka,
+                "group": t.group,
+                "cited_range": t.cited_range,
+                "context_dependent": t.context_dependent,
+                "protonation_swing": round(t.protonation_swing, 3),
+                "charge_swing": round(t.charge_swing, 3),
+                "is_switchable": t in profile.switchable,
+                "note": t.note,
+                "uncertainty_note": t.uncertainty_note(profile.switch_threshold),
+                "points": [
+                    {
+                        "compartment": pt.compartment,
+                        "ph": pt.ph,
+                        "protonated_fraction": round(pt.protonated_fraction, 4),
+                        "effective_charge": round(pt.effective_charge, 4),
+                    }
+                    for pt in t.points
+                ],
+            }
+            for t in profile.titrations
+        ],
+    }
+
+
 def encode_recommendation(rec: SubstitutionRecommendation) -> Dict:
     return {
         "position": rec.position,
@@ -585,6 +632,7 @@ def transform(req: TransformRequest) -> Dict:
         "sequence": result["sequence"],
         "physics": encode_physics(result["physics"]),
         "native_context": encode_native_context(result["native_context"]),
+        "electrostatics": encode_electrostatics(result["electrostatics"]),
         "transformations": [encode_transformation(t) for t in result["transformations"]],
         "rejected": result["rejected"],
         "weights": result["weights"],

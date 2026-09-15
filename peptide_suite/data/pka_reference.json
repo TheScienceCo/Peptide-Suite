@@ -1,0 +1,41 @@
+{
+  "_about": [
+    "Side-chain and terminal pKa values used by the Henderson-Hasselbalch charge",
+    "calculation.",
+    "",
+    "These are measured literature values for model compounds, not fitted scoring",
+    "coefficients, which is why they live here rather than in the policy artifact:",
+    "they are shared, citable and the same for everyone. What the policy does own",
+    "is the burial shift applied on top of them (chemistry.burial_pka_shift), which",
+    "is a modelling choice.",
+    "",
+    "Each entry records the spread across commonly cited sources, because that",
+    "spread is the honest uncertainty on any charge computed from it. Where the",
+    "spread is wide the value is marked context_dependent, and anything drawn from",
+    "it should be reported as approximate rather than as a determined number."
+  ],
+
+  "source": {
+    "primary": "Model-compound pKa values as tabulated in standard biochemistry texts (Nelson & Cox, Lehninger Principles of Biochemistry; Berg, Tymoczko & Stryer, Biochemistry).",
+    "note": "Values for free amino acids in water at 25 C. A residue inside a peptide, and especially inside a folded structure, can differ substantially."
+  },
+
+  "sidechain": {
+    "D": {"pka": 3.9,  "group": "beta-carboxyl",  "cited_range": [3.5, 4.1],  "context_dependent": false},
+    "E": {"pka": 4.3,  "group": "gamma-carboxyl", "cited_range": [4.1, 4.5],  "context_dependent": false},
+    "H": {"pka": 6.0,  "group": "imidazole",      "cited_range": [6.0, 7.0],  "context_dependent": true,
+          "note": "The one side chain that titrates inside the physiological-to-endosomal window, so its assumed pKa drives any pH-switching conclusion."},
+    "C": {"pka": 8.3,  "group": "thiol",          "cited_range": [8.0, 8.5],  "context_dependent": true,
+          "note": "Strongly perturbed by local environment; active-site cysteines can fall below 5."},
+    "Y": {"pka": 10.1, "group": "phenol",         "cited_range": [9.6, 10.3], "context_dependent": true},
+    "K": {"pka": 10.5, "group": "epsilon-amino",  "cited_range": [10.0, 10.8],"context_dependent": false},
+    "R": {"pka": 12.5, "group": "guanidinium",    "cited_range": [12.0, 12.5],"context_dependent": false}
+  },
+
+  "terminal": {
+    "n_terminus": {"pka": 9.0, "group": "alpha-amino",    "cited_range": [8.0, 9.5], "context_dependent": true,
+                   "note": "Varies with the identity of the first residue."},
+    "c_terminus": {"pka": 3.5, "group": "alpha-carboxyl", "cited_range": [3.1, 3.8], "context_dependent": true,
+                   "note": "Varies with the identity of the last residue."}
+  }
+}
