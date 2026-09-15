@@ -14,9 +14,15 @@ from pathlib import Path
 
 from peptide_suite.policy import (
     FEATURE_FAMILIES, THRESHOLDS, PolicyError, PolicyNotFound,
-    PolicyValidationError, compute_digest, load_policy, validate_document,
+    PolicyValidationError, compute_digest, load_policy, mint_term_id,
+    validate_document,
 )
 from peptide_suite.policy.loader import SCHEMA_VERSION
+
+# A fixture salt and a fixture label. Neither is policy: the point of the
+# constant is only that the same id comes back on every run.
+FIXTURE_SALT = b"unit-test-salt-not-a-real-one"
+FIXTURE_TERM = mint_term_id("fixture aggregate term", FIXTURE_SALT)
 
 
 def make_document(**overrides):
@@ -44,7 +50,7 @@ def make_document(**overrides):
             for tid, spec in THRESHOLDS.items()
         },
         "aggregate_terms": {
-            "interface.dispersion_fraction": {
+            FIXTURE_TERM: {
                 "source_tiers": ["QM"], "reduction": "mean", "max_inputs": 12,
             }
         },
@@ -174,15 +180,41 @@ class TestStrictValidation(unittest.TestCase):
     def test_aggregate_term_with_measured_source_rejected(self):
         """MEASURED is a regression target, not an aggregate source."""
         doc = make_document()
-        doc["aggregate_terms"]["interface.dispersion_fraction"]["source_tiers"] = ["MEASURED"]
+        doc["aggregate_terms"][FIXTURE_TERM]["source_tiers"] = ["MEASURED"]
         problems = validate_document(doc, verify_integrity=False)
         self.assertTrue(any("invalid source tiers" in p for p in problems))
 
     def test_aggregate_term_unbounded_inputs_rejected(self):
         doc = make_document()
-        doc["aggregate_terms"]["interface.dispersion_fraction"]["max_inputs"] = 5000
+        doc["aggregate_terms"][FIXTURE_TERM]["max_inputs"] = 5000
         problems = validate_document(doc, verify_integrity=False)
         self.assertTrue(any("max_inputs" in p for p in problems))
+
+    def test_legible_aggregate_term_name_rejected(self):
+        """
+        Addendum 1 section 2: a readable term name discloses which physics the
+        policy found predictive. The load path refuses it rather than warning,
+        because a warning still ships the artifact.
+        """
+        doc = make_document()
+        doc["aggregate_terms"]["interface.dispersion_fraction"] = doc["aggregate_terms"].pop(
+            FIXTURE_TERM
+        )
+        problems = validate_document(doc, verify_integrity=False)
+        self.assertTrue(
+            any("not an opaque identifier" in p for p in problems),
+            f"legible term name was accepted; problems were {problems}",
+        )
+
+    def test_near_miss_opaque_shapes_rejected(self):
+        """Wrong length, uppercase hex and a wrong prefix are all not opaque ids."""
+        for bad in ("agg.0123456789", "agg.0123456789abc", "agg.0123456789AB",
+                    "aggregate.0123456789ab", "agg.0123456789zz"):
+            with self.subTest(term_id=bad):
+                doc = make_document()
+                doc["aggregate_terms"][bad] = doc["aggregate_terms"].pop(FIXTURE_TERM)
+                problems = validate_document(doc, verify_integrity=False)
+                self.assertTrue(any("not an opaque identifier" in p for p in problems))
 
     def test_every_problem_is_reported_not_just_the_first(self):
         doc = make_document()

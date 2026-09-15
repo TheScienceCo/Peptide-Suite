@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .opaque import is_opaque_term_id
 from .registry import FEATURE_FAMILIES, THRESHOLDS, KeySpec, free_parameter_count
 
 SCHEMA_VERSION = "1.0.0"
@@ -219,8 +220,14 @@ def validate_document(document: Dict[str, Any], *, verify_integrity: bool = True
             )
 
     for term_id, term in sorted(document["aggregate_terms"].items()):
-        if not KEY_PATTERN.match(term_id):
-            problems.append(f"aggregate_terms: '{term_id}' is not a valid namespaced key")
+        # Aggregate terms are the one block whose key names are withheld. A
+        # legible name here would disclose which physics the policy found
+        # predictive, which is the finding itself rather than its magnitude.
+        if not is_opaque_term_id(term_id):
+            problems.append(
+                f"aggregate_terms: '{term_id}' is not an opaque identifier (agg.<12 hex>). "
+                f"Aggregate-term names are withheld; mint one with mint_term_id(label, salt)."
+            )
         bad_tiers = set(term.get("source_tiers", [])) - VALID_AGGREGATE_TIERS
         if bad_tiers:
             problems.append(f"aggregate_terms: '{term_id}' declares invalid source tiers {sorted(bad_tiers)}")

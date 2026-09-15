@@ -41,3 +41,15 @@ policy/*
 **/policy.prod*
 **/policy.production*
 **/*_policy_weights*
+
+# Term legend and minting salt  [Addendum 1 section 2 — opaque aggregate terms]
+#
+# The legend maps opaque identifiers back to human labels. Committing it undoes
+# the opacity entirely: the artifact's agg.<hex> keys become readable again and
+# the reader learns which physics the policy weights. The salt is worse — it
+# regenerates the whole legend from a guessed wordlist.
+*term_legend*.json
+*.legend.json
+policy/legend*
+.term_salt
+*.salt
