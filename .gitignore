@@ -32,6 +32,8 @@ logs/prediction_calibration.jsonl
 policy/*
 !policy/README.md
 !policy/demo.*.json
+!policy/schema.json
+!policy/BOUNDARY_DEBT.txt
 
 # Production naming conventions, blocked explicitly wherever they appear
 *.policy.json

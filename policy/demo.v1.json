@@ -131,14 +131,14 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "d2776212a88c93700722509d0f7fdfba48a6ad8c04cffefa56b292ab3f71cc89"
+    "digest": "dd8f61ec9c8509d3856b505cc148235ba0ea999c656831b7ce4ad57ee8c1b299"
   },
   "pack_kind": "demonstration",
   "policy_version": "1.0.0",
   "provenance": {
     "created_by": "tools/make_demo_policy.py",
     "created_utc": "2026-01-01T00:00:00Z",
-    "derivation": "DEMONSTRATION PACK. No value here was fitted to data. Weights are uniform. Thresholds are either derived from a stated source or the arithmetic midpoint of their declared range, marked per key by the 'basis' field. Output produced under this pack shows the shape of a result and carries no claim about its magnitude.",
+    "derivation": "DEMONSTRATION PACK. No value here was fitted to data. Weights are uniform, except the four evidence-tier weights, which are spaced evenly because the hierarchy is ordinal and the engine enforces that ordering. Thresholds are either derived from a stated source or the arithmetic midpoint of their declared range, marked per key by the 'basis' field. Output produced under this pack shows the shape of a result and carries no claim about its magnitude.",
     "n_measured": 0,
     "target_class": "none"
   },
@@ -192,7 +192,7 @@
         0.0,
         1.0
       ],
-      "value": 0.5
+      "value": 0.75
     },
     "confidence.material_contribution_cutoff": {
       "basis": "placeholder_midpoint",
@@ -212,7 +212,7 @@
         0.0,
         1.0
       ],
-      "value": 0.5
+      "value": 0.25
     },
     "conservation.conserved_entropy_cutoff": {
       "basis": "placeholder_midpoint",
@@ -222,7 +222,7 @@
         0.0,
         4.5
       ],
-      "value": 2.25
+      "value": 1.125
     },
     "conservation.min_distinct_sequences": {
       "basis": "derived",
@@ -262,7 +262,7 @@
         0.0,
         4.5
       ],
-      "value": 2.25
+      "value": 3.375
     },
     "identification.containment_confidence": {
       "basis": "placeholder_midpoint",
@@ -378,10 +378,10 @@
   "weights": {
     "discovery.expression_component": 0.071429,
     "discovery.literature_component": 0.071429,
-    "evidence.tier_biochemical_principle": 0.071429,
-    "evidence.tier_direct_experimental": 0.071429,
-    "evidence.tier_homolog_experimental": 0.071429,
-    "evidence.tier_inference_only": 0.071429,
+    "evidence.tier_biochemical_principle": 0.5,
+    "evidence.tier_direct_experimental": 1.0,
+    "evidence.tier_homolog_experimental": 0.75,
+    "evidence.tier_inference_only": 0.25,
     "objective.aggregation": 0.071429,
     "objective.albumin_fcrn": 0.071429,
     "objective.functional_selectivity": 0.071429,

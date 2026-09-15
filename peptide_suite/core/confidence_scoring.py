@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
-from . import EvidenceTier, ConfidenceLevel, Effect
+from . import EvidenceTier, ConfidenceLevel, Effect, evidence_weight
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +27,26 @@ class ConfidenceScorer:
     Tracks predictions for later Brier-score calibration against test panel.
     """
 
-    # Evidence tier base weights (Bayesian-flavored)
-    TIER_WEIGHTS = {
-        EvidenceTier.DIRECT_EXPERIMENTAL: 1.0,
-        EvidenceTier.HOMOLOG_EXPERIMENTAL: 0.8,
-        EvidenceTier.BIOCHEMICAL_PRINCIPLE: 0.6,
-        EvidenceTier.INFERENCE_ONLY: 0.3,
-    }
+    @staticmethod
+    def tier_weight(tier: EvidenceTier) -> float:
+        return evidence_weight(tier)
 
-    # Confidence thresholds (adjustable based on calibration)
-    CONFIDENCE_THRESHOLDS = {
-        ConfidenceLevel.HIGH: 0.7,
-        ConfidenceLevel.MEDIUM: 0.4,
-        ConfidenceLevel.LOW: 0.0,
-    }
+    @staticmethod
+    def confidence_thresholds():
+        """
+        Where the coarse confidence labels begin. Calibrated quantities, so the
+        policy supplies them.
+
+        Only the two upper bands have a cutoff. LOW is what remains below
+        MEDIUM, not a band with a floor of its own — writing a floor for it
+        would put a number in the engine that describes nothing, and it could
+        then disagree with the bottom of the score range.
+        """
+        from ..runtime import threshold
+        return {
+            ConfidenceLevel.HIGH: threshold("confidence.high_cutoff"),
+            ConfidenceLevel.MEDIUM: threshold("confidence.medium_cutoff"),
+        }
 
     def __init__(self, calibration_log_path: str = "logs/prediction_calibration.jsonl"):
         self.calibration_log = Path(calibration_log_path)
@@ -74,7 +80,7 @@ class ConfidenceScorer:
             Effect object with confidence score and level
         """
         # Base score from tier weight
-        base_score = self.TIER_WEIGHTS[evidence_tier]
+        base_score = self.tier_weight(evidence_tier)
 
         # Apply modifier (e.g., if multiple papers agree, keep high;
         # if one marginal paper, multiply down)
@@ -100,9 +106,10 @@ class ConfidenceScorer:
 
     def _score_to_level(self, score: float) -> ConfidenceLevel:
         """Convert numeric score to confidence level."""
-        if score >= self.CONFIDENCE_THRESHOLDS[ConfidenceLevel.HIGH]:
+        cutoffs = self.confidence_thresholds()
+        if score >= cutoffs[ConfidenceLevel.HIGH]:
             return ConfidenceLevel.HIGH
-        elif score >= self.CONFIDENCE_THRESHOLDS[ConfidenceLevel.MEDIUM]:
+        elif score >= cutoffs[ConfidenceLevel.MEDIUM]:
             return ConfidenceLevel.MEDIUM
         else:
             return ConfidenceLevel.LOW

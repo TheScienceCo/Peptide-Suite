@@ -104,6 +104,35 @@ def all_files():
     return [f for f in out.splitlines() if f.strip()]
 
 
+def staged_added_lines():
+    """
+    Line numbers this commit adds or changes, per file.
+
+    The staged check has to be scoped to these rather than to whole files.
+    Flagging every pre-existing violation in a file the commit happens to touch
+    makes unrelated work impossible -- migrating one constant out of a module
+    would be blocked by the other eighty still in it -- and a check that blocks
+    honest work gets deleted, which costs more than the violations it caught.
+    The ratchet on --scope all is what holds the totals down.
+    """
+    out = subprocess.run(["git", "diff", "--cached", "-U0", "--diff-filter=ACM"],
+                         cwd=REPO, capture_output=True, text=True).stdout
+    added = {}
+    current = None
+    for line in out.splitlines():
+        if line.startswith("+++ b/"):
+            current = line[6:]
+            added.setdefault(current, set())
+        elif line.startswith("@@") and current is not None:
+            # @@ -old,n +new,m @@
+            match = re.search(r"\+(\d+)(?:,(\d+))?", line)
+            if match:
+                start = int(match.group(1))
+                count = int(match.group(2) or 1)
+                added[current].update(range(start, start + count))
+    return added
+
+
 def is_engine_source(path: str) -> bool:
     return (path.endswith(".py")
             and any(path.startswith(r) for r in ENGINE_ROOTS)
@@ -209,12 +238,19 @@ def main():
         print("  Only policy/demo.*.json may enter the repository.\n")
 
     if args.scope == "staged":
-        # A new violation in newly staged code blocks outright.
-        for label, vlist in (("coefficient inlined in engine", coeff_v),
-                             ("weighting rationale in prose", rationale_v)):
+        # A violation on a line this commit introduces blocks outright. A
+        # pre-existing one in the same file does not: it is already counted in
+        # the debt, and the --scope all ratchet is what stops it growing.
+        added = staged_added_lines()
+
+        def introduced(vlist):
+            return [v for v in vlist if v[1] in added.get(v[0], set())]
+
+        for label, vlist in (("coefficient inlined in engine", introduced(coeff_v)),
+                             ("weighting rationale in prose", introduced(rationale_v))):
             if vlist:
                 failed = True
-                print(f"BLOCKED — {label} ({len(vlist)}):\n")
+                print(f"BLOCKED — {label} introduced by this commit ({len(vlist)}):\n")
                 for f, ln, _, text in vlist[:12]:
                     print(f"    {f}:{ln}: {text}")
                 if len(vlist) > 12:

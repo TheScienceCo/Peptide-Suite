@@ -7,11 +7,34 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 
 class EvidenceTier(Enum):
-    """Hierarchical evidence confidence levels (Bayesian-flavored)."""
-    DIRECT_EXPERIMENTAL = 1.0
-    HOMOLOG_EXPERIMENTAL = 0.8
-    BIOCHEMICAL_PRINCIPLE = 0.6
-    INFERENCE_ONLY = 0.3
+    """
+    Hierarchical evidence confidence levels.
+
+    The member values are names, not numbers. The tier a claim sits in is a
+    fact about where the claim came from and belongs in the engine; how much
+    that tier is worth is a fitted quantity and belongs in the policy. Carrying
+    the weight as the enum value conflated the two, and made the weight
+    impossible to change without editing the engine.
+    """
+    DIRECT_EXPERIMENTAL = "DIRECT_EXPERIMENTAL"
+    HOMOLOG_EXPERIMENTAL = "HOMOLOG_EXPERIMENTAL"
+    BIOCHEMICAL_PRINCIPLE = "BIOCHEMICAL_PRINCIPLE"
+    INFERENCE_ONLY = "INFERENCE_ONLY"
+
+
+# Feature-family key for each tier's weight, declared by peptide_suite.policy.
+_TIER_POLICY_KEY = {
+    EvidenceTier.DIRECT_EXPERIMENTAL:   "evidence.tier_direct_experimental",
+    EvidenceTier.HOMOLOG_EXPERIMENTAL:  "evidence.tier_homolog_experimental",
+    EvidenceTier.BIOCHEMICAL_PRINCIPLE: "evidence.tier_biochemical_principle",
+    EvidenceTier.INFERENCE_ONLY:        "evidence.tier_inference_only",
+}
+
+
+def evidence_weight(tier: "EvidenceTier") -> float:
+    """What the active policy says a claim at this tier is worth."""
+    from ..runtime import weight
+    return weight(_TIER_POLICY_KEY[tier])
 
 
 class ConfidenceLevel(Enum):
@@ -138,10 +161,12 @@ class FindPeptidesResult:
                 setattr(self, field_name, [])
 
 
-# Shannon entropy over fewer than this many sequences carries no conservation
-# information (a single sequence is 0 at every position by construction), so it
-# is reported as unavailable rather than as a computed value.
-MIN_HOMOLOGS_FOR_CONSERVATION = 3
+# Shannon entropy over too few sequences carries no conservation information (a
+# single sequence is 0 at every position by construction), so it is reported as
+# unavailable rather than as a computed value. How few is a policy question.
+def min_homologs_for_conservation() -> int:
+    from ..runtime import int_threshold
+    return int_threshold("conservation.min_distinct_sequences")
 
 
 @dataclass

@@ -19,28 +19,32 @@ class TestConfidenceScoring(unittest.TestCase):
     def setUp(self):
         self.scorer = ConfidenceScorer()
 
-    def test_score_effect_high_evidence(self):
-        """High-tier evidence should produce high confidence."""
-        effect = self.scorer.score_effect(
-            description="Test effect",
-            evidence_tier=EvidenceTier.DIRECT_EXPERIMENTAL,
-            reasoning="Direct observation",
+    # These used to assert specific scores and band names. Both are policy now,
+    # so the assertions are the orderings the engine actually guarantees: a
+    # better-evidenced claim scores higher and never lands in a worse band.
+    ORDER = [ConfidenceLevel.LOW, ConfidenceLevel.MEDIUM, ConfidenceLevel.HIGH]
+
+    def _score(self, tier):
+        return self.scorer.score_effect(
+            description="Test effect", evidence_tier=tier, reasoning="fixture",
         )
 
+    def test_evidence_tier_is_preserved(self):
+        effect = self._score(EvidenceTier.DIRECT_EXPERIMENTAL)
         self.assertEqual(effect.evidence_tier, EvidenceTier.DIRECT_EXPERIMENTAL)
-        self.assertGreaterEqual(effect.score, 0.8)
-        self.assertEqual(effect.confidence, ConfidenceLevel.HIGH)
 
-    def test_score_effect_low_evidence(self):
-        """Low-tier evidence should produce low confidence."""
-        effect = self.scorer.score_effect(
-            description="Test effect",
-            evidence_tier=EvidenceTier.INFERENCE_ONLY,
-            reasoning="Pure inference",
-        )
+    def test_better_evidence_scores_strictly_higher(self):
+        tiers = [EvidenceTier.DIRECT_EXPERIMENTAL, EvidenceTier.HOMOLOG_EXPERIMENTAL,
+                 EvidenceTier.BIOCHEMICAL_PRINCIPLE, EvidenceTier.INFERENCE_ONLY]
+        scores = [self._score(t).score for t in tiers]
+        for upper, lower in zip(scores, scores[1:]):
+            self.assertGreater(upper, lower)
 
-        self.assertLess(effect.score, 0.5)
-        self.assertEqual(effect.confidence, ConfidenceLevel.LOW)
+    def test_better_evidence_never_lands_in_a_worse_band(self):
+        direct = self._score(EvidenceTier.DIRECT_EXPERIMENTAL)
+        inference = self._score(EvidenceTier.INFERENCE_ONLY)
+        self.assertGreaterEqual(self.ORDER.index(direct.confidence),
+                                self.ORDER.index(inference.confidence))
 
     def test_combine_effect_scores(self):
         """Combining effects should weight them appropriately."""
@@ -60,8 +64,12 @@ class TestConfidenceScoring(unittest.TestCase):
 
         # Net should be positive (benefit outweighs cost)
         self.assertGreater(net_score, 0)
-        # Combined confidence should be worse of the two
-        self.assertEqual(combined_conf, ConfidenceLevel.MEDIUM)
+        # Combined confidence is no better than the worse input. Asserting a
+        # specific label here would bake in a set of cutoffs, which now come
+        # from the policy: the invariant is the ordering, not the band name.
+        order = [ConfidenceLevel.LOW, ConfidenceLevel.MEDIUM, ConfidenceLevel.HIGH]
+        worse = min(primary.confidence, off_target.confidence, key=order.index)
+        self.assertLessEqual(order.index(combined_conf), order.index(worse))
 
 
 class TestChargeCalculator(unittest.TestCase):

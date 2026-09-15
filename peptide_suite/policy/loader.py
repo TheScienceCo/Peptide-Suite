@@ -39,6 +39,28 @@ VALID_REDUCTIONS = {"sum", "mean", "max_abs", "min", "max", "count_above_thresho
 VALID_AGGREGATE_TIERS = {"QM", "SEMIEMPIRICAL", "CLASSICAL_SIM", "MEASURED_STRUCTURE"}
 VALID_BASES = {"derived", "placeholder_midpoint"}
 
+# The evidence hierarchy is ordinal by construction: a claim backed by direct
+# measurement outranks one backed by a homolog, which outranks one backed by a
+# general principle, which outranks an inference. How far apart the tiers sit is
+# a fitted quantity and belongs to the policy. Which way they are ordered is not,
+# and a pack that inverts or flattens them has broken the engine's meaning of
+# evidence rather than reweighted it.
+EVIDENCE_TIER_ORDER = (
+    "evidence.tier_direct_experimental",
+    "evidence.tier_homolog_experimental",
+    "evidence.tier_biochemical_principle",
+    "evidence.tier_inference_only",
+)
+
+# Thresholds that only mean anything relative to each other. A pack that sets
+# them equal has not chosen a stricter policy, it has deleted a band: with
+# high == medium, nothing can ever be MEDIUM, and the label silently stops
+# existing rather than becoming rare.
+ORDERED_THRESHOLD_GROUPS = (
+    ("confidence.high_cutoff", "confidence.medium_cutoff"),
+    ("conservation.variable_entropy_cutoff", "conservation.conserved_entropy_cutoff"),
+)
+
 TOP_LEVEL_REQUIRED = {
     "schema_version", "policy_version", "pack_kind", "provenance",
     "integrity", "feature_families", "weights", "thresholds", "aggregate_terms",
@@ -139,6 +161,10 @@ class Policy:
                       if v == "placeholder_midpoint")
 
     @property
+    def n_thresholds(self) -> int:
+        return len(self._thresholds)
+
+    @property
     def free_parameters(self) -> int:
         return len(self._weights) + len(self._thresholds)
 
@@ -233,6 +259,32 @@ def validate_document(document: Dict[str, Any], *, verify_integrity: bool = True
     _check_key_block(document["weights"], FEATURE_FAMILIES, "weights", problems, lambda v: float(v))
     _check_key_block(document["thresholds"], THRESHOLDS, "thresholds", problems,
                      lambda v: float(v["value"] if isinstance(v, dict) else v))
+
+    weights = document["weights"]
+    if all(k in weights for k in EVIDENCE_TIER_ORDER):
+        ordered = [(k, float(weights[k])) for k in EVIDENCE_TIER_ORDER]
+        for (upper_id, upper), (lower_id, lower) in zip(ordered, ordered[1:]):
+            if upper <= lower:
+                problems.append(
+                    f"weights: evidence tiers must be strictly decreasing, but "
+                    f"'{upper_id}' = {upper} does not exceed '{lower_id}' = {lower}. "
+                    f"The policy sets how far apart the tiers sit; it does not get to "
+                    f"reorder or flatten them."
+                )
+
+    for group in ORDERED_THRESHOLD_GROUPS:
+        entries = document["thresholds"]
+        if not all(k in entries for k in group):
+            continue
+        values = [(k, float(entries[k]["value"] if isinstance(entries[k], dict) else entries[k]))
+                  for k in group]
+        for (upper_id, upper), (lower_id, lower) in zip(values, values[1:]):
+            if upper <= lower:
+                problems.append(
+                    f"thresholds: '{upper_id}' = {upper} must exceed '{lower_id}' = {lower}. "
+                    f"These are bands, and equal cutoffs delete the band between them rather "
+                    f"than narrowing it."
+                )
 
     # A threshold may declare where its value came from. The distinction that
     # matters is derived-from-something versus stood-in-for: a placeholder is

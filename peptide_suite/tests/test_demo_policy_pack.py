@@ -19,7 +19,11 @@ from peptide_suite.policy import (
     FEATURE_FAMILIES, THRESHOLDS, PolicyValidationError, compute_digest,
     is_opaque_term_id, load_policy, validate_document,
 )
-from peptide_suite.policy.loader import SCHEMA_VERSION
+from peptide_suite.policy.loader import (
+    EVIDENCE_TIER_ORDER, ORDERED_THRESHOLD_GROUPS, SCHEMA_VERSION,
+)
+
+ORDERED_MEMBERS = {k for group in ORDERED_THRESHOLD_GROUPS for k in group}
 
 REPO = Path(__file__).resolve().parents[2]
 PACK = REPO / "policy" / "demo.v1.json"
@@ -62,13 +66,39 @@ class TestPackIsVisiblyUnfitted(unittest.TestCase):
         self.assertIn("DEMONSTRATION PACK", banner)
         self.assertIn("placeholder", banner)
 
-    def test_weights_are_uniform(self):
+    def test_non_tier_weights_are_uniform(self):
         """
         No weight here was fitted. Equal weights state that; a spread of numbers
         would imply someone had measured which family mattered more.
+
+        The evidence tiers are the one exception, and only because the engine
+        requires them ordered — see below.
         """
-        values = set(load_document()["weights"].values())
+        weights = load_document()["weights"]
+        values = {v for k, v in weights.items() if k not in EVIDENCE_TIER_ORDER}
         self.assertEqual(len(values), 1, f"demo weights are not uniform: {sorted(values)}")
+
+    def test_evidence_tiers_are_strictly_decreasing(self):
+        """
+        The hierarchy is ordinal by construction. A pack that flattens it has
+        not reweighted the engine, it has removed the meaning of evidence.
+        """
+        weights = load_document()["weights"]
+        ordered = [weights[k] for k in EVIDENCE_TIER_ORDER]
+        for upper, lower in zip(ordered, ordered[1:]):
+            self.assertGreater(upper, lower)
+
+    def test_evidence_tier_spacing_is_mechanical(self):
+        """
+        Evenly spaced at (n-i)/n. The spacing satisfies the ordering constraint
+        and is otherwise chosen by nothing — it is not a claim about how much
+        more a measurement is worth than an inference.
+        """
+        weights = load_document()["weights"]
+        n = len(EVIDENCE_TIER_ORDER)
+        for i, key in enumerate(EVIDENCE_TIER_ORDER):
+            with self.subTest(tier=key):
+                self.assertAlmostEqual(weights[key], (n - i) / n, places=5)
 
     def test_every_placeholder_is_exactly_the_declared_midpoint(self):
         """
@@ -77,11 +107,25 @@ class TestPackIsVisiblyUnfitted(unittest.TestCase):
         prevent.
         """
         for tid, entry in load_document()["thresholds"].items():
-            if entry["basis"] != "placeholder_midpoint":
+            if entry["basis"] != "placeholder_midpoint" or tid in ORDERED_MEMBERS:
                 continue
             lo, hi = THRESHOLDS[tid].valid_range
             with self.subTest(threshold=tid):
                 self.assertAlmostEqual(entry["value"], (lo + hi) / 2.0, places=5)
+
+    def test_ordered_threshold_bands_are_not_collapsed(self):
+        """
+        Members of an ordered group cannot all sit on the midpoint: equal
+        cutoffs delete the band between them, so a label like MEDIUM silently
+        stops existing rather than becoming rare.
+        """
+        entries = load_document()["thresholds"]
+        for group in ORDERED_THRESHOLD_GROUPS:
+            values = [entries[k]["value"] for k in group]
+            for (upper_id, upper), (lower_id, lower) in zip(
+                    zip(group, values), zip(group[1:], values[1:])):
+                with self.subTest(pair=(upper_id, lower_id)):
+                    self.assertGreater(upper, lower)
 
     def test_every_threshold_declares_a_basis(self):
         for tid, entry in load_document()["thresholds"].items():
@@ -159,6 +203,55 @@ class TestPackUsesOpaqueTerms(unittest.TestCase):
 
     def test_pack_declares_terms(self):
         self.assertGreater(len(load_policy(PACK).declared_aggregate_terms), 0)
+
+
+class TestCommittedPolicyFilesAreActuallyTracked(unittest.TestCase):
+    """
+    The .gitignore rules for policy/ are deny-by-default, which is right for an
+    artifact directory and has one failure mode: a file that is supposed to be
+    committed is silently never added. Nothing surfaces it — the file exists on
+    disk, the tools read it, and it is simply absent from every clone.
+
+    That already happened once to schema.json and BOUNDARY_DEBT.txt. This test
+    is the check that would have caught it.
+    """
+
+    def _tracked(self):
+        import subprocess
+        out = subprocess.run(["git", "ls-files", "policy/"],
+                             cwd=REPO, capture_output=True, text=True).stdout
+        return set(out.split())
+
+    def test_files_the_boundary_check_allowlists_are_committed(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_policy_boundary", REPO / "tools" / "check_policy_boundary.py")
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        tracked = self._tracked()
+        for path in sorted(checker.ALLOWED_POLICY_FILES):
+            with self.subTest(path=path):
+                self.assertIn(path, tracked,
+                              f"{path} is allowlisted by the boundary check but is not "
+                              f"tracked by git; a .gitignore rule is swallowing it")
+
+    def test_demo_pack_is_committed(self):
+        self.assertIn("policy/demo.v1.json", self._tracked())
+
+    def test_no_unexpected_policy_file_is_committed(self):
+        """The other direction: nothing in policy/ is tracked that should not be."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_policy_boundary", REPO / "tools" / "check_policy_boundary.py")
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        for path in sorted(self._tracked()):
+            allowed = (path in checker.ALLOWED_POLICY_FILES
+                       or checker.ALLOWED_POLICY_GLOB.match(path))
+            with self.subTest(path=path):
+                self.assertTrue(allowed, f"{path} is committed but is not an allowed policy file")
 
 
 class TestGeneratorIsReproducible(unittest.TestCase):

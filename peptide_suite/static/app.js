@@ -46,6 +46,37 @@ function notice(text, kind = "warn", glyph = "!") {
   return n;
 }
 
+// A score is meaningless without knowing what weighted it. Every scored
+// response carries its policy provenance, and it is rendered above the results
+// rather than below them: a caveat placed after the numbers is read after the
+// reader has already formed a view.
+function policyNotice(policy) {
+  if (!policy) return null;
+  if (!policy.is_demonstration) {
+    return notice(
+      `Scored under policy ${policy.policy_version} (${policy.digest}).`,
+      "info", "i"
+    );
+  }
+  const n = el("div", "notice");
+  n.append(
+    el("span", "glyph", "!"),
+    (() => {
+      const body = el("span", null);
+      body.append(el("strong", null, "Demonstration policy pack. "));
+      body.append(document.createTextNode(
+        `No weight in this pack was fitted to data, and ${policy.n_placeholder_thresholds} of ` +
+        `${policy.n_thresholds} thresholds are placeholders. The evidence tiers, the ` +
+        `computed physical quantities and the reasoning behind each candidate are real. ` +
+        `The overall ranking magnitudes are not a claim. (policy ${policy.policy_version}, ` +
+        `${policy.digest})`
+      ));
+      return body;
+    })()
+  );
+  return n;
+}
+
 function meter(label, value, variant) {
   const m = el("div", "meter");
   const l = el("div", "ml");
@@ -279,6 +310,8 @@ async function runScan(sequence, goal) {
 
 function renderOptimizeResults(data) {
   const out = $("#opt-results");
+  const pn = policyNotice(data.policy);
+  if (pn) out.append(pn);
   const ctx = data.context;
   const hitPositions = new Set(data.recommendations.map((r) => r.position));
 
@@ -565,6 +598,8 @@ async function onFind() {
 
 function renderFindResults(r) {
   const out = $("#find-results");
+  const pn = policyNotice(r.policy);
+  if (pn) out.append(pn);
 
   if (r.cell_types.length) {
     const c = el("div", "card");
@@ -734,6 +769,8 @@ async function onTransform() {
 
 function renderTransformResults(d) {
   const out = $("#transform-results");
+  const pn = policyNotice(d.policy);
+  if (pn) out.append(pn);
   const p = d.physics;
 
   // --- how far the physics actually got

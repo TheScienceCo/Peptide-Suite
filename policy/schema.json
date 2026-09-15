@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thescienceco.dev/peptide-suite/policy/schema/1.0.0",
+  "title": "Peptide Suite scoring policy artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "pack_kind",
+    "provenance",
+    "integrity",
+    "feature_families",
+    "weights",
+    "thresholds",
+    "aggregate_terms"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "policy_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "pack_kind": { "type": "string", "enum": ["demonstration", "production"] },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_utc", "created_by", "derivation"],
+      "properties": {
+        "created_utc": { "type": "string" },
+        "created_by": { "type": "string", "minLength": 1 },
+        "derivation": { "type": "string", "minLength": 1 },
+        "source_dataset": { "type": "string" },
+        "n_measured": { "type": "integer", "minimum": 0 },
+        "target_class": { "type": "string" }
+      }
+    },
+
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": { "type": "string", "enum": ["sha256"] },
+        "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+
+    "feature_families": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["semantic_type", "units", "valid_range"],
+          "properties": {
+            "semantic_type": {
+              "type": "string",
+              "enum": [
+                "bounded_unit",
+                "signed_unit",
+                "probability",
+                "energy_kcal_per_mol",
+                "ph",
+                "angstrom",
+                "count",
+                "fraction",
+                "dimensionless"
+              ]
+            },
+            "units": { "type": "string" },
+            "valid_range": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      }
+    },
+
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$": { "type": "number" }
+      }
+    },
+
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value"],
+          "properties": {
+            "value": { "type": "number" },
+            "basis": { "type": "string", "enum": ["derived", "placeholder_midpoint"] },
+            "semantic_type": {
+              "type": "string",
+              "enum": [
+                "bounded_unit",
+                "signed_unit",
+                "probability",
+                "energy_kcal_per_mol",
+                "ph",
+                "angstrom",
+                "count",
+                "fraction",
+                "dimensionless"
+              ]
+            },
+            "units": { "type": "string" },
+            "valid_range": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      }
+    },
+
+    "aggregate_terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^agg\\.[0-9a-f]{12}$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_tiers", "reduction", "max_inputs"],
+          "properties": {
+            "source_tiers": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": ["QM", "SEMIEMPIRICAL", "CLASSICAL_SIM", "MEASURED_STRUCTURE"]
+              }
+            },
+            "reduction": {
+              "type": "string",
+              "enum": ["sum", "mean", "max_abs", "min", "max", "count_above_threshold"]
+            },
+            "max_inputs": { "type": "integer", "minimum": 1, "maximum": 64 }
+          }
+        }
+      }
+    }
+  }
+}

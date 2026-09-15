@@ -85,9 +85,15 @@ class FunctionInferencer:
             best = max(best, matches)
         return best / len(short)
 
-    # Below this length a "contained peptide" hit is chance, not signal:
-    # every tetrapeptide occurs somewhere in a long enough sequence.
-    MIN_CONTAINMENT_LENGTH = 6
+    @staticmethod
+    def _min_containment_length() -> int:
+        """
+        Below some length a "contained peptide" hit is chance, not signal: every
+        short enough subsequence occurs somewhere in a long enough sequence.
+        Where that length falls is a policy question.
+        """
+        from ..runtime import int_threshold
+        return int_threshold("identification.min_containment_length")
 
     def _match_known_peptide(self, seq: str) -> Optional[FunctionInference]:
         """
@@ -99,6 +105,7 @@ class FunctionInferencer:
         peptide, and a precursor or construct that contains one.
         """
         exact, contains, fragment_of, similar = None, [], [], []
+        min_containment = self._min_containment_length()
 
         for name, entry in self.reference["exact_peptides"].items():
             ref = entry["sequence"].upper()
@@ -107,9 +114,9 @@ class FunctionInferencer:
                 exact = (name, entry)
                 break
 
-            if len(ref) >= self.MIN_CONTAINMENT_LENGTH and ref in seq:
+            if len(ref) >= min_containment and ref in seq:
                 contains.append((name, entry, seq.index(ref), len(ref)))
-            elif len(seq) >= self.MIN_CONTAINMENT_LENGTH and seq in ref:
+            elif len(seq) >= min_containment and seq in ref:
                 fragment_of.append((name, entry, ref.index(seq), len(seq)))
             elif abs(len(seq) - len(ref)) <= max(len(ref) * 0.5, 8):
                 identity = self._identity(seq, ref)
@@ -163,12 +170,20 @@ class FunctionInferencer:
         if similar:
             similar.sort(key=lambda h: h[2], reverse=True)
             name, entry, identity = similar[0]
+            ref_len = len(entry["sequence"])
+            # Identity is computed over the shorter of the two sequences, so a
+            # bare percentage overstates the match whenever the lengths differ:
+            # eight residues aligning perfectly inside a fifteen-mer is not
+            # "100% identity" to the fifteen-mer. The span goes in the claim.
+            span = min(len(seq), ref_len)
+            span_note = (f" over {span} of {ref_len} residues"
+                         if span != ref_len or len(seq) != ref_len else "")
             return self._peptide_hit(
                 name, entry, confidence=0.70 + (identity - 0.80) * 1.2,
-                basis=f"{identity:.0%} identity to {name}",
+                basis=f"{identity:.0%} identity to {name}{span_note}",
                 claim_text=f"Sequence closely resembles {name}: {entry['function']}",
                 caveats=[
-                    f"Not an exact match ({identity:.0%} identity to {name}). The differences may "
+                    f"Not an exact match ({identity:.0%} identity{span_note}). The differences may "
                     f"be exactly the positions that matter, so treat the functional assignment as "
                     f"provisional.",
                 ],
@@ -593,9 +608,10 @@ class FunctionInferencer:
             )
         if any(k in blob for k in ("hormone", "receptor agonist", "secreted", "signaling")):
             return "protease_resistance", (
-                "UniProt annotates this as a secreted signalling molecule. Circulating peptide "
-                "hormones are typically exposure-limited, so proteolytic stability is usually "
-                "the first thing worth fixing."
+                "UniProt annotates this as a secreted signalling molecule, which routes it to "
+                "the protease-resistance lane. That lane is scored from documented P1 "
+                "specificities rather than estimated, so it is the one with real evidence "
+                "behind it; pick a different goal if this peptide's limit lies elsewhere."
             )
         return "protease_resistance", (
             "No annotation clearly indicated a goal, so this defaults to the highest-confidence "

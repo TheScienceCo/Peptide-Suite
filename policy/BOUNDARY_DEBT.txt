@@ -1,0 +1,12 @@
+Engine/policy boundary debt.  [Addendum 1 section 4]
+
+Violations outstanding from code written before the boundary was enforced.
+The check fails if any count rises above these numbers, so the retrofit can
+only move one way. Lower these as modules migrate to the policy artifact;
+never raise them.
+
+---
+{
+  "coefficients_in_engine": 70,
+  "weighting_rationale_in_prose": 4
+}

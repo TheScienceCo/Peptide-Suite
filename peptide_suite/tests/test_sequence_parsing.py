@@ -9,7 +9,7 @@ parsing problem. These tests pin the formats sequences actually arrive in.
 import unittest
 
 from peptide_suite.core.charge_calculator import ChargeCalculator
-from peptide_suite.core.peptide_manager import PEPTIDE_LENGTH_CEILING, PeptideManager
+from peptide_suite.core.peptide_manager import PeptideManager, peptide_length_ceiling
 from peptide_suite.core.physics_tiers import Tier0Sequence
 from peptide_suite.core.uniprot_client import parse_fasta_header
 
@@ -88,8 +88,9 @@ class TestProteinVersusPeptide(unittest.TestCase):
         self.assertIn("full-length protein", result["note"])
 
     def test_boundary(self):
-        self.assertFalse(self.pm.classify_length("A" * PEPTIDE_LENGTH_CEILING)["is_protein"])
-        self.assertTrue(self.pm.classify_length("A" * (PEPTIDE_LENGTH_CEILING + 1))["is_protein"])
+        ceiling = peptide_length_ceiling()
+        self.assertFalse(self.pm.classify_length("A" * ceiling)["is_protein"])
+        self.assertTrue(self.pm.classify_length("A" * (ceiling + 1))["is_protein"])
 
 
 class TestTerminalCharges(unittest.TestCase):

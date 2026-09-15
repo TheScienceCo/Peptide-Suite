@@ -26,9 +26,12 @@ AMBIGUITY_CODES = {
 
 ACCEPTED_AAS = CANONICAL_AAS | set(AMBIGUITY_CODES)
 
-# Anything longer than this is a protein, not a peptide. The distinction changes
-# what the analysis can honestly claim, so it is surfaced rather than ignored.
-PEPTIDE_LENGTH_CEILING = 100
+# Past some length a sequence is a protein, not a peptide. The distinction
+# changes what the analysis can honestly claim, so it is surfaced rather than
+# ignored. Where the line falls is a policy question.
+def peptide_length_ceiling() -> int:
+    from ..runtime import int_threshold
+    return int_threshold("identification.peptide_length_ceiling")
 
 
 class PeptideManager:
@@ -122,7 +125,7 @@ class PeptideManager:
         first and analyse that.
         """
         n = len(sequence)
-        if n <= PEPTIDE_LENGTH_CEILING:
+        if n <= peptide_length_ceiling():
             return {"is_protein": False, "length": n, "note": ""}
 
         return {

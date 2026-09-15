@@ -17,7 +17,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from peptide_suite.core import PeptideContext, SubstitutionRecommendation
+from peptide_suite.runtime import load_active_policy
+from peptide_suite.core import PeptideContext, SubstitutionRecommendation, evidence_weight
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
 from peptide_suite.core.function_inference import FunctionInferencer
@@ -30,6 +31,20 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Load the policy before the app object exists, so a misconfigured deployment
+# refuses to start rather than serving requests that fail one at a time. The
+# server has no usable behaviour without coefficients, so failing here is the
+# whole point; there is nothing to degrade to.
+_policy = load_active_policy()
+logger.info("Loaded %s", _policy.banner())
+if _policy.is_demonstration:
+    logger.warning(
+        "Running on a DEMONSTRATION policy pack. Numbers this server returns show the "
+        "shape of a result and carry no claim about magnitude. %d of %d thresholds are "
+        "placeholders.",
+        len(_policy.placeholder_thresholds), _policy.n_thresholds,
+    )
 
 app = FastAPI(
     title="Peptide Suite",
@@ -47,6 +62,31 @@ _scorer = ConfidenceScorer()
 
 
 # ---- serialization ---------------------------------------------------------
+
+def stamp_policy(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Attach the policy provenance to a scored response.
+
+    A score is not interpretable without knowing what weighted it. The banner in
+    the server log is not visible to a caller, and a caller that received a
+    number has already been given something it may act on, so the provenance
+    travels with the number rather than being available on request.
+    """
+    payload["policy"] = {
+        "policy_version": _policy.policy_version,
+        "pack_kind": _policy.pack_kind,
+        "digest": _policy.digest[:12],
+        "is_demonstration": _policy.is_demonstration,
+        "n_placeholder_thresholds": len(_policy.placeholder_thresholds),
+        "n_thresholds": _policy.n_thresholds,
+    }
+    if _policy.is_demonstration:
+        payload["policy"]["warning"] = (
+            "Scores below were weighted by a demonstration policy pack. No weight in it "
+            "was fitted to data. The ordering and the shape of the output are real; the "
+            "magnitudes are not a claim."
+        )
+    return payload
 
 def encode(obj: Any) -> Any:
     """Recursively convert dataclasses and enums to JSON-safe structures."""
@@ -84,7 +124,7 @@ def encode_effect(effect) -> Dict:
         "category": effect.category,
         "description": effect.description,
         "evidence_tier": effect.evidence_tier.name,
-        "evidence_weight": effect.evidence_tier.value,
+        "evidence_weight": evidence_weight(effect.evidence_tier),
         "confidence": effect.confidence.value,
         "score": round(effect.score, 3),
         "magnitude": round(effect.magnitude, 3),
@@ -340,12 +380,12 @@ def optimize(req: OptimizeRequest) -> Dict:
             ),
         )
 
-    return {
+    return stamp_policy({
         "context": encode_context(ctx),
         "ph": req.ph,
         "recommendations": [encode_recommendation(r) for r in recs],
         "scan_size": len(ctx.sequence) * 19,
-    }
+    })
 
 
 @app.post("/api/find-peptides")
@@ -360,7 +400,7 @@ def find_peptides(req: FindRequest) -> Dict:
         logger.exception("Find peptides failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-    payload = encode(result)
+    payload = stamp_policy(encode(result))
     # asdict() flattens enums to their values; restore tier names for display.
     for bucket in ("known_answers", "candidates"):
         for i, entry in enumerate(payload.get(bucket, [])):
@@ -541,7 +581,7 @@ def transform(req: TransformRequest) -> Dict:
         logger.exception("Transform failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {
+    return stamp_policy({
         "sequence": result["sequence"],
         "physics": encode_physics(result["physics"]),
         "native_context": encode_native_context(result["native_context"]),
@@ -550,13 +590,34 @@ def transform(req: TransformRequest) -> Dict:
         "weights": result["weights"],
         "scalarization_note": result["scalarization_note"],
         "comparability_warning": result["comparability_warning"],
-    }
+    })
 
 
 @app.get("/api/calibration")
 def calibration() -> Dict:
     """Prediction-vs-outcome log summary, for the Brier-score check."""
     return _scorer.get_calibration_summary()
+
+
+@app.get("/api/policy")
+def policy_info():
+    """
+    What produced the numbers this server returns.
+
+    Exposed because a caller cannot interpret a score without knowing whether it
+    came from a fitted policy or a demonstration pack, and a banner printed once
+    into a server log is not available to the caller.
+    """
+    return {
+        "policy_version": _policy.policy_version,
+        "pack_kind": _policy.pack_kind,
+        "digest": _policy.digest,
+        "is_demonstration": _policy.is_demonstration,
+        "free_parameters": _policy.free_parameters,
+        "placeholder_thresholds": _policy.placeholder_thresholds,
+        "banner": _policy.banner(),
+        "derivation": _policy.provenance.get("derivation", ""),
+    }
 
 
 # ---- static frontend -------------------------------------------------------

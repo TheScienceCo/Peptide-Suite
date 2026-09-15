@@ -15,7 +15,7 @@ from peptide_suite.core import (
     PeptideContext,
     SubstitutionRecommendation,
     ConfidenceLevel,
-    MIN_HOMOLOGS_FOR_CONSERVATION,
+    min_homologs_for_conservation,
 )
 from peptide_suite.core.peptide_manager import PeptideManager, CANONICAL_AAS
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
@@ -119,7 +119,8 @@ class OptimizeWorkflow:
         distinct = list(dict.fromkeys([peptide_context.sequence] + list(homologs)))
         peptide_context.homolog_count = len(distinct)
         peptide_context.known_homologs = distinct
-        peptide_context.conservation_available = len(distinct) >= MIN_HOMOLOGS_FOR_CONSERVATION
+        min_homologs = min_homologs_for_conservation()
+        peptide_context.conservation_available = len(distinct) >= min_homologs
 
         if peptide_context.conservation_available:
             msa = self.conservation.build_msa_from_sequences(distinct)
@@ -132,7 +133,7 @@ class OptimizeWorkflow:
             conservation_profile = {}
             note = (
                 f"Conservation entropy NOT computed: only {len(distinct)} distinct sequence(s) "
-                f"available, {MIN_HOMOLOGS_FOR_CONSERVATION} required. Entropy over a single "
+                f"available, {min_homologs} required. Entropy over a single "
                 f"sequence is 0 at every position by construction and carries no information, "
                 f"so no conservation claim is made and no conservation penalty is applied."
             )

@@ -27,6 +27,7 @@ from peptide_suite.core import (
     FindPeptidesResult,
     EvidenceTier,
     ConfidenceLevel,
+    evidence_weight,
 )
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
@@ -97,7 +98,7 @@ class FindPeptidesWorkflow:
                     ontology_id=ct.get("ontology_id", ""),
                     relationship=ct.get("relationship", ""),
                     source=source_label,
-                    confidence=source_tier.value,
+                    confidence=evidence_weight(source_tier),
                 )
             )
 

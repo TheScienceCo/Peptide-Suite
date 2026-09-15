@@ -17,12 +17,25 @@ from peptide_suite.policy import (
     PolicyValidationError, compute_digest, load_policy, mint_term_id,
     validate_document,
 )
-from peptide_suite.policy.loader import SCHEMA_VERSION
+from peptide_suite.policy.loader import (
+    EVIDENCE_TIER_ORDER, ORDERED_THRESHOLD_GROUPS, SCHEMA_VERSION,
+)
 
 # A fixture salt and a fixture label. Neither is policy: the point of the
 # constant is only that the same id comes back on every run.
 FIXTURE_SALT = b"unit-test-salt-not-a-real-one"
 FIXTURE_TERM = mint_term_id("fixture aggregate term", FIXTURE_SALT)
+
+
+def _fixture_threshold(tid, spec):
+    lo, hi = spec.valid_range
+    for group in ORDERED_THRESHOLD_GROUPS:
+        if tid in group:
+            # Descending across the middle half, by position in the group.
+            top, bottom = lo + 0.75 * (hi - lo), lo + 0.25 * (hi - lo)
+            rank, size = group.index(tid), len(group)
+            return top if size == 1 else top - rank * (top - bottom) / (size - 1)
+    return (lo + hi) / 2
 
 
 def make_document(**overrides):
@@ -42,9 +55,16 @@ def make_document(**overrides):
                   "valid_range": list(spec.valid_range)}
             for fid, spec in FEATURE_FAMILIES.items()
         },
-        "weights": {fid: 0.5 for fid in FEATURE_FAMILIES},
+        # Evidence tiers must be strictly decreasing; the rest are fixture values.
+        "weights": {
+            fid: (1.0 - 0.2 * EVIDENCE_TIER_ORDER.index(fid)) if fid in EVIDENCE_TIER_ORDER
+            else 0.5
+            for fid in FEATURE_FAMILIES
+        },
+        # Midpoint values, except members of an ordered band group: those are
+        # spread so the fixture does not trip the band-collapse rule.
         "thresholds": {
-            tid: {"value": (spec.valid_range[0] + spec.valid_range[1]) / 2,
+            tid: {"value": _fixture_threshold(tid, spec),
                   "semantic_type": spec.semantic_type, "units": spec.units,
                   "valid_range": list(spec.valid_range)}
             for tid, spec in THRESHOLDS.items()

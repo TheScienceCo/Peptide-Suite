@@ -77,12 +77,52 @@ DERIVED = {
 }
 
 
+# The evidence hierarchy is ordinal, and validate_document enforces it, so the
+# demo pack cannot leave these uniform like the rest. They are spaced evenly
+# across the range instead -- (n-i)/n -- which satisfies the ordering while
+# still being chosen by nothing. The spacing is not a claim about how much more
+# a measurement is worth than an inference.
+from peptide_suite.policy.loader import EVIDENCE_TIER_ORDER, ORDERED_THRESHOLD_GROUPS
+
+
+def evidence_tier_weights() -> dict:
+    n = len(EVIDENCE_TIER_ORDER)
+    return {key: round((n - i) / n, 6) for i, key in enumerate(EVIDENCE_TIER_ORDER)}
+
+
 def midpoint(lo: float, hi: float) -> float:
     return round((lo + hi) / 2.0, 6)
 
 
+def group_placeholder(lo: float, hi: float, rank: int, size: int) -> float:
+    """
+    A placeholder for one member of an ordered group.
+
+    Members of a group cannot all take the midpoint: equal cutoffs delete the
+    band between them, and the engine rejects that. They are spread evenly
+    across the middle half of the range instead, descending by rank. Still
+    chosen by nothing -- it just does not collapse a band while being chosen by
+    nothing.
+    """
+    span = hi - lo
+    top, bottom = lo + 0.75 * span, lo + 0.25 * span
+    if size == 1:
+        return round(midpoint(lo, hi), 6)
+    step = (top - bottom) / (size - 1)
+    return round(top - rank * step, 6)
+
+
+def ordered_group_rank(threshold_id: str):
+    for group in ORDERED_THRESHOLD_GROUPS:
+        if threshold_id in group:
+            return group.index(threshold_id), len(group)
+    return None
+
+
 def build() -> dict:
     uniform = round(1.0 / len(FEATURE_FAMILIES), 6)
+    weights = {fid: uniform for fid in FEATURE_FAMILIES}
+    weights.update(evidence_tier_weights())
 
     thresholds = {}
     for tid, spec in THRESHOLDS.items():
@@ -90,7 +130,11 @@ def build() -> dict:
             value, _source = DERIVED[tid]
             basis = "derived"
         else:
-            value = midpoint(*spec.valid_range)
+            rank = ordered_group_rank(tid)
+            if rank is None:
+                value = midpoint(*spec.valid_range)
+            else:
+                value = group_placeholder(*spec.valid_range, *rank)
             basis = "placeholder_midpoint"
         thresholds[tid] = {
             "value": value,
@@ -109,7 +153,9 @@ def build() -> dict:
             "created_by": "tools/make_demo_policy.py",
             "derivation": (
                 "DEMONSTRATION PACK. No value here was fitted to data. Weights are "
-                "uniform. Thresholds are either derived from a stated source or the "
+                "uniform, except the four evidence-tier weights, which are spaced "
+                "evenly because the hierarchy is ordinal and the engine enforces that "
+                "ordering. Thresholds are either derived from a stated source or the "
                 "arithmetic midpoint of their declared range, marked per key by the "
                 "'basis' field. Output produced under this pack shows the shape of a "
                 "result and carries no claim about its magnitude."
@@ -126,7 +172,7 @@ def build() -> dict:
             }
             for fid, spec in FEATURE_FAMILIES.items()
         },
-        "weights": {fid: uniform for fid in FEATURE_FAMILIES},
+        "weights": weights,
         "thresholds": thresholds,
         "aggregate_terms": {
             mint_term_id(label, DEMO_SALT): {
@@ -156,7 +202,11 @@ def main() -> int:
     derived = sum(1 for t in document["thresholds"].values() if t["basis"] == "derived")
     placeholder = len(document["thresholds"]) - derived
     print(f"Wrote {OUTPUT.relative_to(REPO)}")
-    print(f"  {len(document['weights'])} weights, uniform at {document['weights'][next(iter(document['weights']))]}")
+    tiers = evidence_tier_weights()
+    non_tier = {k: v for k, v in document["weights"].items() if k not in tiers}
+    print(f"  {len(document['weights'])} weights: {len(non_tier)} uniform at "
+          f"{next(iter(set(non_tier.values())))}, {len(tiers)} evidence tiers "
+          f"spaced {sorted(tiers.values(), reverse=True)}")
     print(f"  {len(document['thresholds'])} thresholds: {derived} derived, {placeholder} placeholder")
     print(f"  digest {document['integrity']['digest'][:12]}")
     return 0
