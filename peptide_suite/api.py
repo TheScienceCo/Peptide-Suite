@@ -209,6 +209,8 @@ def encode_context(ctx: PeptideContext) -> Dict:
         "inferred_function": ctx.inferred_function,
         "confirmed_goal": ctx.confirmed_goal,
         "homolog_count": ctx.homolog_count,
+        "homolog_source": ctx.homolog_source,
+        "homolog_source_detail": ctx.homolog_source_detail,
         "conservation_available": ctx.conservation_available,
         "conservation_entropy": {str(k): round(v, 3) for k, v in (ctx.conservation_entropy or {}).items()},
         "data_notes": ctx.data_notes,

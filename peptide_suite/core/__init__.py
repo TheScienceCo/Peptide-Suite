@@ -178,6 +178,11 @@ class PeptideContext:
     confirmed_goal: str = ""
     target_organism: str = "human"
     known_homologs: List[str] = None
+    # Where the homologs came from. Conservation entropy is only as good as
+    # this field: the same number means something different if the alignment
+    # came from a database than if it came from a file in this repository.
+    homolog_source: str = ""
+    homolog_source_detail: str = ""
     conservation_entropy: Dict[int, float] = None  # position -> Shannon entropy
     homolog_count: int = 0
     conservation_available: bool = False

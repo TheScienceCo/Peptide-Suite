@@ -308,6 +308,14 @@ async function runScan(sequence, goal) {
   }
 }
 
+const HOMOLOG_SOURCE_LABEL = {
+  LIVE: "database",
+  CACHED: "cached lookup",
+  LOCAL_FIXTURE: "bundled fixture",
+  UNAVAILABLE: "none obtained",
+  CALLER_SUPPLIED: "supplied by you",
+};
+
 function renderOptimizeResults(data) {
   const out = $("#opt-results");
   const pn = policyNotice(data.policy);
@@ -326,8 +334,18 @@ function renderOptimizeResults(data) {
   addStat("Candidates scanned", `${data.scan_size}`);
   addStat("pH", `${data.ph}`);
   addStat("Homologs", `${ctx.homolog_count}`);
+  // The provenance sits next to the count, not in a footnote. The same number
+  // of homologs means something different depending on where they came from,
+  // and conservation is only as good as this.
+  addStat("Homolog source", HOMOLOG_SOURCE_LABEL[ctx.homolog_source] || "\u2014", true);
   addStat("Conservation", ctx.conservation_available ? "computed" : "unavailable", true);
   out.append(stats);
+
+  if (ctx.homolog_source_detail && ctx.homolog_source !== "CALLER_SUPPLIED") {
+    out.append(notice(ctx.homolog_source_detail,
+                      ctx.homolog_source === "LOCAL_FIXTURE" ? "warn" : "info",
+                      ctx.homolog_source === "LOCAL_FIXTURE" ? "!" : "i"));
+  }
 
   // --- limitations, stated before any results
   ctx.data_notes.forEach((n) => out.append(notice(n)));

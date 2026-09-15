@@ -18,7 +18,8 @@ from peptide_suite.core import (
     min_homologs_for_conservation,
 )
 from peptide_suite.core.peptide_manager import PeptideManager, CANONICAL_AAS
-from peptide_suite.core.evidence_retrieval import EvidenceRetriever
+from peptide_suite.core.evidence_retrieval import EvidenceRetriever, RetrievalSource
+from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.conservation import ConservationAnalyzer
 from peptide_suite.core.substitution_predictor import SubstitutionPredictor
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
@@ -34,6 +35,7 @@ class OptimizeWorkflow:
     def __init__(self):
         self.peptide_manager = PeptideManager()
         self.evidence_retriever = EvidenceRetriever()
+        self.inferencer = FunctionInferencer()
         self.conservation = ConservationAnalyzer()
         self.predictor = SubstitutionPredictor()
         self.confidence_scorer = ConfidenceScorer()
@@ -101,17 +103,22 @@ class OptimizeWorkflow:
 
         if homologs:
             logger.info(f"Using {len(homologs)} caller-supplied homolog(s)")
-            homolog_source = "caller-supplied"
-        else:
-            homologs, homolog_status = self.evidence_retriever.retrieve_homologs(
-                peptide_context.name
+            peptide_context.homolog_source = "CALLER_SUPPLIED"
+            peptide_context.homolog_source_detail = (
+                f"{len(homologs)} homolog(s) supplied with the request."
             )
-            homolog_source = "NCBI"
+        else:
+            retrieval = self.evidence_retriever.retrieve_homologs(peptide_context.name)
+            homologs = retrieval.payload
+            peptide_context.homolog_source = retrieval.source.value
+            peptide_context.homolog_source_detail = retrieval.describe()
             if not homologs:
-                logger.warning(f"No homologs found ({homolog_status}). Using query peptide only.")
+                logger.warning(f"No homologs obtained: {retrieval.detail}")
                 homologs = [peptide_context.sequence]
             else:
-                logger.info(f"Retrieved {len(homologs)} homologs from NCBI")
+                logger.info(f"{len(homologs)} homolog(s): {retrieval.describe()}")
+
+
 
         # The query sequence is part of its own alignment, and only distinct
         # sequences carry information: duplicates would make every position look
@@ -121,6 +128,20 @@ class OptimizeWorkflow:
         peptide_context.known_homologs = distinct
         min_homologs = min_homologs_for_conservation()
         peptide_context.conservation_available = len(distinct) >= min_homologs
+
+        # Conservation over fixture sequences is arithmetically the same and
+        # evidentially different, so the distinction rides with the result. It
+        # is stated only when conservation was actually computed: claiming
+        # "conservation below is computed over bundled sequences" when nothing
+        # was computed is its own false statement.
+        if (peptide_context.conservation_available
+                and peptide_context.homolog_source == RetrievalSource.LOCAL_FIXTURE.value):
+            peptide_context.data_notes.append(
+                "The conservation entropy below is computed over sequences bundled with "
+                "this repository, not retrieved from a sequence database. Treat it as a "
+                "demonstration of the calculation, not as evidence that these positions "
+                "are conserved across the real homolog family."
+            )
 
         if peptide_context.conservation_available:
             msa = self.conservation.build_msa_from_sequences(distinct)
@@ -159,18 +180,30 @@ class OptimizeWorkflow:
         return peptide_context, top_recommendations
 
     def _parse_input(self, input_str: str) -> PeptideContext:
-        """Parse input (sequence or name) into PeptideContext."""
-        # Try loading as sequence first
+        """
+        Parse input (sequence or name) into PeptideContext.
+
+        A parsed sequence also gets identified, because the name is not
+        cosmetic: everything downstream that looks a peptide up -- homologs,
+        function, native context -- keys on it. Leaving it "unnamed_peptide"
+        meant a recognised peptide was still anonymous to every later step, and
+        the homolog lookup could never match anything.
+        """
         try:
             sequence, name = self.peptide_manager.load_sequence(input_str)
-            return PeptideContext(sequence=sequence, name=name)
         except ValueError:
-            # Might be a gene name; treat as such
             name = input_str.strip()
-            # For now, we can't resolve to sequence without NCBI access
-            # but store name for evidence retrieval
             logger.warning(f"Could not parse as sequence. Treating '{name}' as gene/peptide name.")
             return PeptideContext(sequence="", name=name)
+
+        context = PeptideContext(sequence=sequence, name=name)
+        if not name or name == "unnamed_peptide":
+            inference = self.inferencer.infer(sequence)
+            if inference.is_identification and inference.matched_name:
+                context.name = inference.matched_name
+                context.inferred_function = inference.claim
+                logger.info(f"Identified as {inference.matched_name}: {inference.basis}")
+        return context
 
     def _run_substitution_scan(
         self,

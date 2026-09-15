@@ -639,29 +639,12 @@ class ParameterBudget:
 # Policy pack interface (weights live behind this; see Addendum 1)
 # ---------------------------------------------------------------------------
 
-class PolicyPack:
-    """
-    Interface to the private scoring policy.
-
-    This engine holds feature-family names, licensing and gates. The numeric
-    weights attached to those families are supplied by the policy pack and are
-    never hardcoded here. The base class raises so that an unloaded policy fails
-    loudly rather than scoring with implicit zeros.
-
-    NOTE: the concrete loading and protection mechanism is specified in
-    Addendum 1, which I have not seen. This is a placeholder interface shaped to
-    the separation Addendum 2 describes; confirm it against Addendum 1 before
-    anything depends on its exact signature.
-    """
-
-    def weight_for(self, feature_family: str) -> float:
-        raise NotImplementedError(
-            "No policy pack is loaded. Weights are private policy and are not part of "
-            "this engine; load a policy pack before scoring."
-        )
-
-    def declared_aggregate_terms(self) -> List[str]:
-        raise NotImplementedError("No policy pack is loaded.")
+# The policy interface this module once sketched now exists for real, in
+# peptide_suite.policy. It is not re-exported here: two names for the source of
+# coefficients is how a caller ends up holding the one that raises, or worse,
+# the one that quietly returns a default.
+#
+#     from peptide_suite.runtime import weight, threshold
 
 
 # ---------------------------------------------------------------------------

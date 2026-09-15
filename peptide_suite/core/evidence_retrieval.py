@@ -11,12 +11,59 @@ All external queries are wrapped in error handling and caching.
 
 import logging
 import json
-from typing import List, Dict, Optional, Tuple
-from pathlib import Path
-from functools import lru_cache
 import time
+from dataclasses import dataclass
+from enum import Enum
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+class RetrievalSource(Enum):
+    """
+    Where a piece of evidence actually came from.
+
+    This exists because a status string is not provenance. The previous version
+    returned "retrieved 3 homologs from NCBI" for sequences read out of a
+    bundled JSON fixture, and conservation entropy computed from them was then
+    presented as homolog evidence. The difference between a database and a file
+    in this repository is the difference between a finding and a fixture, and it
+    has to be carried in a field that a caller cannot accidentally reword.
+    """
+    LIVE = "LIVE"                    # actually fetched from the named service
+    CACHED = "CACHED"                # fetched live earlier and cached since
+    LOCAL_FIXTURE = "LOCAL_FIXTURE"  # read from a file in this repository
+    UNAVAILABLE = "UNAVAILABLE"      # not wired up, or the attempt failed
+
+
+@dataclass
+class Retrieval:
+    """A retrieval result and the truth about where it came from."""
+    payload: Any
+    source: RetrievalSource
+    detail: str
+    service: str = ""
+
+    @property
+    def is_evidence(self) -> bool:
+        """
+        Whether this may be cited as external evidence.
+
+        A fixture may be used -- it is real sequence data and useful for a
+        demonstration -- but it is not evidence that anything outside this
+        repository agrees with, so it does not qualify.
+        """
+        return self.source in (RetrievalSource.LIVE, RetrievalSource.CACHED)
+
+    def describe(self) -> str:
+        if self.source is RetrievalSource.LOCAL_FIXTURE:
+            return (f"{self.detail} This is bundled fixture data, not a retrieval. "
+                    f"Nothing outside this repository was consulted.")
+        if self.source is RetrievalSource.UNAVAILABLE:
+            return self.detail
+        return self.detail
 
 
 class EvidenceRetriever:
@@ -39,20 +86,49 @@ class EvidenceRetriever:
         return self.cache_dir / f"{query_type}_{safe_name}.json"
 
     def _load_cache(self, cache_path: Path) -> Optional[Dict]:
-        """Load cached result if exists."""
-        if cache_path.exists():
-            try:
-                with open(cache_path, "r") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Cache load failed for {cache_path}: {e}")
-        return None
+        """
+        Load a cached result, but only one this version wrote.
 
-    def _save_cache(self, cache_path: Path, data: Dict) -> None:
-        """Save result to cache."""
+        An entry without the LIVE marker was written by the version that cached
+        fabricated and fixture data, so it cannot be distinguished from a real
+        retrieval by inspection. Treating it as a cache miss is what makes the
+        fix retroactive: without this, a machine that ever ran the old code
+        keeps serving laundered provenance forever, and the poisoned entries are
+        invisible because they look exactly like good ones.
+        """
+        if not cache_path.exists():
+            return None
+        try:
+            with open(cache_path, "r") as f:
+                entry = json.load(f)
+        except Exception as e:
+            logger.warning(f"Cache load failed for {cache_path}: {e}")
+            return None
+
+        if not isinstance(entry, dict) or entry.get("_source") != RetrievalSource.LIVE.value:
+            logger.warning(
+                f"Ignoring cache entry {cache_path.name}: it carries no live-retrieval marker, "
+                f"so it predates provenance tracking and its origin cannot be established."
+            )
+            return None
+        return entry
+
+    def _save_cache(self, cache_path: Path, data: Dict, source: RetrievalSource) -> None:
+        """
+        Save a result to cache, but only if it was actually retrieved.
+
+        Caching anything else launders its provenance: a fixture written to the
+        cache comes back on the next call as a cache hit, and a cache hit reads
+        as "we fetched this once". After one run the fabricated and the real
+        would have been indistinguishable, which is worse than never caching at
+        all.
+        """
+        if source is not RetrievalSource.LIVE:
+            logger.debug(f"Not caching {cache_path.name}: source is {source.value}, not LIVE")
+            return
         try:
             with open(cache_path, "w") as f:
-                json.dump(data, f)
+                json.dump({"_source": source.value, "_cached_utc": time.time(), **data}, f)
         except Exception as e:
             logger.warning(f"Cache save failed for {cache_path}: {e}")
 
@@ -63,137 +139,140 @@ class EvidenceRetriever:
         gene_name: str,
         organism: str = "human",
         max_homologs: int = 30,
-    ) -> Tuple[List[str], str]:
+    ) -> Retrieval:
         """
-        Retrieve homologous sequences from NCBI RefSeq.
+        Retrieve homologous sequences.
 
-        Args:
-            gene_name: Gene symbol (e.g., "IGF1", "INS", "GCG")
-            organism: Organism name (e.g., "human", "mouse")
-            max_homologs: Max sequences to return
-
-        Returns:
-            Tuple of (sequence_list, status_message)
-            - If NCBI API unavailable, returns empty list + warning message
+        Returns a Retrieval, not a (list, string) pair, so the caller has to
+        read the source off a field rather than off prose it is free to
+        paraphrase. The paraphrase is how "read from a bundled fixture" became
+        "retrieved 3 homologs from NCBI".
             - Sequences are aligned (gaps indicated by '-')
         """
         cache_key = f"{gene_name}_{organism}"
         cache_path = self._get_cache_path(cache_key, "homologs")
 
-        # Check cache first
         cached = self._load_cache(cache_path)
         if cached:
-            logger.info(f"Using cached homologs for {gene_name} ({len(cached.get('sequences', []))} sequences)")
-            return cached.get("sequences", []), "cached"
+            sequences = cached.get("sequences", [])
+            logger.info(f"Using cached homologs for {gene_name} ({len(sequences)} sequences)")
+            return Retrieval(
+                payload=sequences,
+                source=RetrievalSource.CACHED,
+                detail=f"{len(sequences)} homolog(s) from a previous live NCBI retrieval",
+                service="NCBI Entrez",
+            )
 
-        # Attempt NCBI query
-        logger.info(f"Attempting NCBI homolog retrieval for {gene_name}...")
+        # Live retrieval is not wired up. Saying so is the whole point: the
+        # previous version called a fixture reader here and reported its output
+        # as an NCBI result.
+        fixture = self._fixture_homologs(gene_name)
+        if fixture:
+            return Retrieval(
+                payload=fixture,
+                source=RetrievalSource.LOCAL_FIXTURE,
+                detail=(f"{len(fixture)} homolog(s) read from the bundled test panel for "
+                        f"{gene_name}."),
+                service="peptide_suite/data/test_panel.json",
+            )
+
+        return Retrieval(
+            payload=[],
+            source=RetrievalSource.UNAVAILABLE,
+            detail=("NCBI Entrez retrieval is not wired up in this build and no bundled "
+                    "sequences exist for this peptide, so no homologs were obtained."),
+            service="NCBI Entrez",
+        )
+
+    def _fixture_homologs(self, gene_name: str) -> List[str]:
+        """
+        Homologs bundled with the repository, for peptides in the test panel.
+
+        Real sequences, useful for exercising the conservation path without a
+        network. They are returned tagged as a fixture and never cached, so
+        nothing downstream can mistake them for a database answer.
+        """
+        panel_path = Path(__file__).parent.parent / "data" / "test_panel.json"
+        if not panel_path.exists():
+            return []
         try:
-            # In production: use Biopython Entrez here
-            # For now, return a placeholder workflow message
-            homologs = self._mock_homolog_retrieval(gene_name, organism)
-
-            if homologs:
-                self._save_cache(cache_path, {"sequences": homologs})
-                return homologs, f"retrieved {len(homologs)} homologs from NCBI"
-            else:
-                return [], "No homologs found in NCBI (or API unavailable)"
-
+            panel = json.loads(panel_path.read_text())
         except Exception as e:
-            logger.warning(f"NCBI homolog retrieval failed: {e}")
-            return [], f"Error retrieving homologs: {e}"
+            logger.debug(f"Could not load test panel: {e}")
+            return []
+        # Matched on alphanumerics only. The panel is keyed "BPC157" while the
+        # reference set names the same peptide "BPC-157", so an exact match on
+        # the raw name never fired and this whole branch was unreachable.
+        def normalise(name: str) -> str:
+            return "".join(c for c in name.upper() if c.isalnum())
 
-    def _mock_homolog_retrieval(self, gene_name: str, organism: str) -> List[str]:
-        """
-        Placeholder for production NCBI queries.
-        In real usage, would query NCBI Entrez/RefSeq via Biopython.
-        """
-        # Check if there's a test_panel.json with pre-computed homologs
-        test_panel_path = Path(__file__).parent.parent / "data" / "test_panel.json"
-        if test_panel_path.exists():
-            try:
-                with open(test_panel_path, "r") as f:
-                    panel = json.load(f)
-                    key = gene_name.upper()
-                    if key in panel:
-                        return panel[key].get("homologs", [])
-            except Exception as e:
-                logger.debug(f"Could not load test panel: {e}")
-
-        # Fallback: return the query peptide itself (will use for self-comparison)
-        logger.info(f"No test panel found. Returning placeholder for {gene_name}.")
+        wanted = normalise(gene_name)
+        for key, entry in panel.items():
+            if normalise(key) == wanted and isinstance(entry, dict):
+                return list(entry.get("homologs", []))
         return []
 
     def retrieve_literature_context(
         self, gene_name: str, keyword: str = ""
-    ) -> Tuple[List[Dict], str]:
+    ) -> Retrieval:
         """
         Retrieve relevant PubMed articles.
 
-        Returns:
-            Tuple of (article_list, status_message)
-            Each article is {"pmid": "...", "title": "...", "abstract": "..."}
+        Each article is {"pmid": ..., "title": ..., "abstract": ...}.
         """
         cache_key = f"{gene_name}_{keyword}"
         cache_path = self._get_cache_path(cache_key, "literature")
 
         cached = self._load_cache(cache_path)
         if cached:
-            return cached.get("articles", []), "cached"
+            articles = cached.get("articles", [])
+            return Retrieval(
+                payload=articles,
+                source=RetrievalSource.CACHED,
+                detail=f"{len(articles)} article(s) from a previous live PubMed retrieval",
+                service="PubMed E-utilities",
+            )
 
-        logger.info(f"Attempting PubMed retrieval for {gene_name}...")
-        try:
-            # Placeholder: would use Biopython Medline or direct EUtils
-            articles = self._mock_literature_retrieval(gene_name, keyword)
-            self._save_cache(cache_path, {"articles": articles})
-            return articles, f"retrieved {len(articles)} relevant papers (or cached/mocked)"
-        except Exception as e:
-            logger.warning(f"Literature retrieval failed: {e}")
-            return [], f"Error retrieving literature: {e}"
-
-    def _mock_literature_retrieval(self, gene_name: str, keyword: str) -> List[Dict]:
-        """Placeholder for PubMed queries."""
-        return [
-            {
-                "pmid": "0000001",
-                "title": f"[Mocked] Structure and function of {gene_name}",
-                "abstract": "This is a placeholder abstract for calibration testing.",
-            }
-        ]
+        # There is no honest offline version of a literature search. The
+        # previous version returned an invented PMID and an abstract reading
+        # "This is a placeholder abstract for calibration testing", then cached
+        # it, after which it came back as a cache hit with no marker at all.
+        return Retrieval(
+            payload=[],
+            source=RetrievalSource.UNAVAILABLE,
+            detail=("PubMed retrieval is not wired up in this build, so no literature was "
+                    "consulted. Any claim below rests on sequence computation or on the "
+                    "bundled reference set, not on a literature search."),
+            service="PubMed E-utilities",
+        )
 
     # ====== UniProt Queries ======
 
-    def retrieve_uniprot_data(self, gene_name: str) -> Tuple[Optional[Dict], str]:
-        """
-        Retrieve UniProt protein data (annotations, tissue expression hints).
-
-        Returns:
-            Tuple of (data_dict, status_message)
-        """
+    def retrieve_uniprot_data(self, gene_name: str) -> Retrieval:
+        """Retrieve UniProt protein data (annotations, tissue expression hints)."""
         cache_path = self._get_cache_path(gene_name, "uniprot")
 
         cached = self._load_cache(cache_path)
         if cached:
-            return cached, "cached"
+            return Retrieval(
+                payload=cached,
+                source=RetrievalSource.CACHED,
+                detail="annotation from a previous live UniProt retrieval",
+                service="UniProt",
+            )
 
-        logger.info(f"Attempting UniProt retrieval for {gene_name}...")
-        try:
-            data = self._mock_uniprot_retrieval(gene_name)
-            if data:
-                self._save_cache(cache_path, data)
-            return data, "retrieved (or mocked)"
-        except Exception as e:
-            logger.warning(f"UniProt retrieval failed: {e}")
-            return None, f"Error retrieving UniProt data: {e}"
-
-    def _mock_uniprot_retrieval(self, gene_name: str) -> Optional[Dict]:
-        """Placeholder for UniProt API queries."""
-        return {
-            "gene_name": gene_name,
-            "primary_function": "To be inferred from literature",
-            "known_modifications": [],
-            "tissue_specificity": "To be queried from Human Protein Atlas",
-        }
+        # The previous version returned a dict whose fields read "To be inferred
+        # from literature" and "To be queried from Human Protein Atlas". Those
+        # are not annotations; shaped like annotations, they are worse than
+        # nothing, because a caller sees populated fields.
+        return Retrieval(
+            payload=None,
+            source=RetrievalSource.UNAVAILABLE,
+            detail=("UniProt retrieval is not wired up in this build (and is blocked by the "
+                    "container's egress policy), so no annotation was obtained. Identification "
+                    "falls back to the local reference set."),
+            service="UniProt",
+        )
 
     # ====== Function Inference ======
 

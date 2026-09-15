@@ -11,7 +11,7 @@ import unittest
 
 from peptide_suite.core.provenance import (
     UNRESOLVED, AggregateTerm, AggregateTermRegistry, Capability, ClaimTrace,
-    LicenseViolation, ParameterBudget, PolicyPack, ProvenanceTier, Quantity,
+    LicenseViolation, ParameterBudget, ProvenanceTier, Quantity,
     ReceptorComplex,
     StructureGate, UnresolvedValue, licensing_table_markdown,
 )
@@ -387,12 +387,30 @@ class TestClaimTraceability(unittest.TestCase):
 
 
 class TestPolicyPackSeparation(unittest.TestCase):
-    """Weights are private policy; the engine must not score without one loaded."""
+    """
+    Weights are private policy; the engine must not score without one loaded.
+
+    This module used to carry its own PolicyPack sketch, written before
+    Addendum 1 existed. The real one now lives in peptide_suite.policy and the
+    sketch is gone -- two names for the source of coefficients is how a caller
+    ends up holding the wrong one.
+    """
 
     def test_unloaded_policy_raises_rather_than_scoring_with_zeros(self):
-        with self.assertRaises(NotImplementedError) as ctx:
-            PolicyPack().weight_for("interface_electrostatics")
-        self.assertIn("private", str(ctx.exception).lower())
+        from peptide_suite import runtime
+        saved = runtime._active
+        runtime.clear_active_policy()
+        try:
+            with self.assertRaises(runtime.PolicyNotLoaded) as ctx:
+                runtime.weight("evidence.tier_direct_experimental")
+        finally:
+            runtime.set_active_policy(saved)
+        self.assertIn("will not substitute defaults", str(ctx.exception))
+
+    def test_provenance_module_exposes_no_policy_sketch(self):
+        """A second policy interface is a second place to forget the boundary."""
+        from peptide_suite.core import provenance
+        self.assertFalse(hasattr(provenance, "PolicyPack"))
 
     def test_engine_module_contains_no_weights(self):
         """A weight literal in the engine is a boundary violation."""
