@@ -176,3 +176,87 @@ class TestReferenceDataIntegrity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNameResolution(unittest.TestCase):
+    """
+    Typing a name must work. Many peptide and protein names are themselves valid
+    amino acid strings — "laminin" is L-A-M-I-N-I-N, "oxytocin" is
+    O-X-Y-T-O-C-I-N — so a sequence-first parser silently analyses a short
+    peptide nobody asked about instead of looking the name up.
+    """
+
+    def setUp(self):
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
+
+    def test_common_names_resolve(self):
+        for query, expected in [
+            ("GLP-1", "GLP-1 (7-37)"),
+            ("glp1", "GLP-1 (7-37)"),
+            ("oxytocin", "Oxytocin"),
+            ("Substance P", "Substance P"),
+            ("LL-37", "LL-37"),
+            ("bpc157", "BPC-157"),
+            ("melittin", "Melittin"),
+        ]:
+            hit = self.fi.resolve_name(query)
+            self.assertIsNotNone(hit, f"'{query}' did not resolve")
+            self.assertEqual(hit[0], expected)
+
+    def test_names_that_are_also_valid_sequences_still_resolve(self):
+        """The whole point: these parse as peptides, so they must be checked as names first."""
+        for query in ("oxytocin", "melittin", "laminin"):
+            self.assertTrue(
+                self.fi.resolve_name(query) or self.fi.lookup_protein_by_name(query),
+                f"'{query}' resolved as neither a peptide name nor a protein name",
+            )
+
+    def test_protein_name_resolves_with_analysable_motifs(self):
+        hit = self.fi.lookup_protein_by_name("laminin")
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["gene"], "LAMA2")
+        motifs = {m["motif"] for m in hit["derived_motifs"]}
+        self.assertIn("IKVAV", motifs)
+        self.assertIn("YIGSR", motifs)
+
+    def test_unknown_name_resolves_to_nothing(self):
+        self.assertIsNone(self.fi.resolve_name("zzzznotapeptide"))
+        self.assertIsNone(self.fi.lookup_protein_by_name("zzzznotapeptide"))
+
+
+class TestBidirectionalSequenceMatching(unittest.TestCase):
+    """A pasted sequence relates to a known peptide in four ways, not just one."""
+
+    def setUp(self):
+        self.fi = FunctionInferencer(uniprot=UniProtClient(enabled=False))
+
+    def test_exact(self):
+        r = self.fi.infer(GLP1)
+        self.assertEqual(r.matched_name, "GLP-1 (7-37)")
+        self.assertIn("Exact", r.basis)
+
+    def test_query_containing_a_known_peptide(self):
+        """An expression construct with tags around a known peptide."""
+        construct = "MKTIIALSYIFCLVFA" + GLP1 + "GRRRSHHHHHH"
+        r = self.fi.infer(construct)
+        self.assertEqual(r.matched_name, "GLP-1 (7-37)")
+        self.assertIn("Contains", r.basis)
+        self.assertTrue(any("contains" in c.lower() for c in r.caveats))
+
+    def test_fragment_of_a_known_peptide(self):
+        r = self.fi.infer(GLP1[4:22])
+        self.assertEqual(r.matched_name, "GLP-1 (7-37)")
+        self.assertIn("Fragment", r.basis)
+        self.assertTrue(any("fragment" in c.lower() for c in r.caveats))
+
+    def test_short_fragments_do_not_match_by_chance(self):
+        """A tetrapeptide occurs in something by chance; that is not identification."""
+        r = self.fi.infer("GTFTS")
+        self.assertNotEqual(r.level, 1)
+
+    def test_database_covers_the_common_peptides(self):
+        """Regression guard: the reference set must stay large enough to be useful."""
+        self.assertGreaterEqual(len(self.fi.reference["exact_peptides"]), 40)
+        for expected in ("Oxytocin", "Substance P", "LL-37", "Melittin",
+                         "Angiotensin II", "Bradykinin", "Somatostatin-14"):
+            self.assertIn(expected, self.fi.reference["exact_peptides"])

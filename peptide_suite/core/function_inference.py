@@ -85,50 +85,193 @@ class FunctionInferencer:
             best = max(best, matches)
         return best / len(short)
 
+    # Below this length a "contained peptide" hit is chance, not signal:
+    # every tetrapeptide occurs somewhere in a long enough sequence.
+    MIN_CONTAINMENT_LENGTH = 6
+
     def _match_known_peptide(self, seq: str) -> Optional[FunctionInference]:
-        best, best_id = None, 0.0
+        """
+        Match against the reference set in both directions.
+
+        A pasted sequence relates to a known peptide in four ways, and only one
+        of them is equality. Checking only for equality — or only for similar
+        length — misses the two most common real cases: a fragment of a known
+        peptide, and a precursor or construct that contains one.
+        """
+        exact, contains, fragment_of, similar = None, [], [], []
 
         for name, entry in self.reference["exact_peptides"].items():
             ref = entry["sequence"].upper()
+
             if seq == ref:
-                identity = 1.0
-            elif abs(len(seq) - len(ref)) > max(len(ref) * 0.5, 8):
-                continue
-            else:
+                exact = (name, entry)
+                break
+
+            if len(ref) >= self.MIN_CONTAINMENT_LENGTH and ref in seq:
+                contains.append((name, entry, seq.index(ref), len(ref)))
+            elif len(seq) >= self.MIN_CONTAINMENT_LENGTH and seq in ref:
+                fragment_of.append((name, entry, ref.index(seq), len(seq)))
+            elif abs(len(seq) - len(ref)) <= max(len(ref) * 0.5, 8):
                 identity = self._identity(seq, ref)
+                if identity >= 0.80:
+                    similar.append((name, entry, identity))
 
-            if identity > best_id:
-                best, best_id = (name, entry), identity
+        if exact:
+            name, entry = exact
+            return self._peptide_hit(
+                name, entry, confidence=0.95,
+                basis=f"Exact sequence match to {name}",
+                claim_text=f"Sequence matches {name}: {entry['function']}",
+            )
 
-        if best is None or best_id < 0.80:
-            return None
+        if contains:
+            # The longest contained peptide is the most specific identification
+            contains.sort(key=lambda h: h[3], reverse=True)
+            name, entry, at, length = contains[0]
+            others = [h[0] for h in contains[1:]]
+            return self._peptide_hit(
+                name, entry, confidence=0.88,
+                basis=f"Contains the full {name} sequence at position {at + 1}-{at + length}",
+                claim_text=f"Contains {name} ({length} residues at position {at + 1})",
+                caveats=[
+                    f"Your sequence is {len(seq)} residues and contains {name} ({length} residues) "
+                    f"within it. The surrounding residues are not part of {name} and may change "
+                    f"its behaviour — a contained peptide is not necessarily an active one.",
+                ] + ([f"Also contains: {', '.join(others)}."] if others else []),
+                extra={"contained_at": at + 1, "contained_length": length},
+            )
 
-        name, entry = best
-        exact = best_id >= 0.999
+        if fragment_of:
+            fragment_of.sort(key=lambda h: h[3], reverse=True)
+            name, entry, at, length = fragment_of[0]
+            coverage = length / len(entry["sequence"])
+            return self._peptide_hit(
+                name, entry, confidence=0.70 + 0.2 * coverage,
+                basis=(
+                    f"Fragment of {name}: residues {at + 1}-{at + length} of "
+                    f"{len(entry['sequence'])} ({coverage:.0%} coverage)"
+                ),
+                claim_text=f"Fragment of {name}, residues {at + 1}-{at + length}",
+                caveats=[
+                    f"This is a {coverage:.0%} fragment of {name}, not the whole peptide. The "
+                    f"annotated function describes the full sequence; whether this fragment "
+                    f"retains it depends on where the active region sits. Both termini here are "
+                    f"excision artefacts.",
+                ],
+            )
 
+        if similar:
+            similar.sort(key=lambda h: h[2], reverse=True)
+            name, entry, identity = similar[0]
+            return self._peptide_hit(
+                name, entry, confidence=0.70 + (identity - 0.80) * 1.2,
+                basis=f"{identity:.0%} identity to {name}",
+                claim_text=f"Sequence closely resembles {name}: {entry['function']}",
+                caveats=[
+                    f"Not an exact match ({identity:.0%} identity to {name}). The differences may "
+                    f"be exactly the positions that matter, so treat the functional assignment as "
+                    f"provisional.",
+                ],
+            )
+
+        return None
+
+    def _peptide_hit(self, name, entry, confidence, basis, claim_text,
+                     caveats=None, extra=None) -> FunctionInference:
         return FunctionInference(
             inferred_function=entry["function"],
             suggested_goal=entry["suggested_goal"],
             goal_reason=entry["goal_reason"],
-            confidence=0.95 if exact else 0.70 + (best_id - 0.80) * 1.2,
-            basis=(
-                f"Exact sequence match to {name}" if exact
-                else f"{best_id:.0%} identity to {name}"
-            ),
+            confidence=round(min(0.95, confidence), 2),
+            basis=basis,
             level=1,
             matched_name=name,
+            parent_protein=entry.get("family", ""),
             claim=Claim.retrieved(
-                f"Sequence {'matches' if exact else 'closely resembles'} {name}: {entry['function']}",
+                claim_text,
                 citations=[f"local reference cache entry '{name}' (unverified — confirm against UniProt)"],
                 tested=False,
             ),
-            caveats=(
-                [] if exact else
-                [f"Not an exact match ({best_id:.0%} identity to {name}). The differences may "
-                 f"be exactly the positions that matter, so treat the functional assignment as "
-                 f"provisional."]
-            ),
+            caveats=caveats or [],
         )
+
+    def resolve_name(self, query: str) -> Optional[Tuple[str, Dict]]:
+        """
+        Look up a reference peptide by name rather than by sequence.
+
+        Someone who knows what they want should be able to type "GLP-1" instead
+        of hunting down the sequence first.
+        """
+        q = query.strip().lower()
+        if not q:
+            return None
+
+        peptides = self.reference["exact_peptides"]
+
+        for name, entry in peptides.items():
+            if name.lower() == q:
+                return name, entry
+
+        # Normalised comparison: "glp1" should find "GLP-1 (7-37)"
+        def norm(s):
+            return "".join(ch for ch in s.lower() if ch.isalnum())
+
+        nq = norm(q)
+        candidates = [(n, e) for n, e in peptides.items() if norm(n).startswith(nq)]
+        if not candidates:
+            candidates = [(n, e) for n, e in peptides.items() if nq and nq in norm(n)]
+        if not candidates:
+            candidates = [(n, e) for n, e in peptides.items() if nq and nq in norm(e.get("family", ""))]
+
+        if candidates:
+            # Shortest name is the least qualified, so the most canonical
+            candidates.sort(key=lambda c: len(c[0]))
+            return candidates[0]
+        return None
+
+    def lookup_protein_by_name(self, query: str) -> Optional[Dict]:
+        """
+        Resolve a name that is a protein rather than a reference peptide.
+
+        Typing "laminin" should not dead-end: the function ontology knows about
+        these even when no peptide sequence for them exists locally. Returns
+        what is known plus the derived motifs that ARE analysable, so the answer
+        is a route forward rather than a miss.
+        """
+        q = query.strip().lower()
+        if not q:
+            return None
+
+        ontology_path = Path(__file__).parent.parent / "data" / "function_ontology.json"
+        try:
+            with open(ontology_path) as f:
+                ontology = json.load(f)
+        except Exception:
+            return None
+
+        for domain, spec in ontology.items():
+            if domain.startswith("_"):
+                continue
+            for bucket in ("established_peptides", "candidate_peptides"):
+                for entry in spec.get(bucket, []):
+                    name = entry.get("name", "").lower()
+                    gene = entry.get("gene", "").lower()
+                    if q in name or (gene and q == gene) or (len(q) > 3 and q in name.replace("-", "")):
+                        derived = [
+                            {"motif": m, "function": e["function"]}
+                            for m, e in self.reference["bioactive_motifs"].items()
+                            if q in e.get("parent_protein", "").lower()
+                        ]
+                        return {
+                            "name": entry["name"],
+                            "gene": entry.get("gene", ""),
+                            "uniprot": entry.get("uniprot", ""),
+                            "rationale": entry.get("rationale", ""),
+                            "biological_process": spec.get("go_name", domain),
+                            "go_term": spec.get("go_term", ""),
+                            "derived_motifs": derived,
+                        }
+        return None
 
     # ---- level 2: bioactive motif ---------------------------------------
 

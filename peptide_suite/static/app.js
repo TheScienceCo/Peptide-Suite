@@ -16,7 +16,9 @@ const EXAMPLES = {
     { label: "GLP-1 (7-37)", seq: "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG" },
     { label: "Insulin A-chain", seq: "GIVEQCCTSICSLYQLENYCN" },
     { label: "Glucagon", seq: "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT" },
-    { label: "IGF-1 fragment", seq: "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT" },
+    { label: "Oxytocin", seq: "CYIQNCPLG" },
+    { label: "LL-37", seq: "LLGDFFRKSKEKIGKEFKRIVQRIKDFLRNLVPRTES" },
+    { label: "name: laminin", seq: "laminin" },
   ],
   queries: ["myelinating peptides", "wound healing", "angiogenesis", "antimicrobial", "appetite regulation"],
 };
@@ -72,7 +74,7 @@ async function onAnalyze() {
   $("#opt-results").innerHTML = "";
 
   if (!input) {
-    $("#gate-slot").append(notice("Enter a peptide sequence to analyze.", "error", "×"));
+    $("#gate-slot").append(notice("Enter a peptide sequence or a peptide name.", "error", "×"));
     return;
   }
 
@@ -90,6 +92,41 @@ async function onAnalyze() {
 function renderGate(info) {
   const slot = $("#gate-slot");
   slot.innerHTML = "";
+
+  // A name that matched a protein rather than a peptide: report what is known
+  // and which derived motifs can actually be analysed.
+  if (!info.sequence && info.protein_match) {
+    const m = info.protein_match;
+    const box = el("div", "gate");
+    box.append(el("h2", null, `${m.name}${m.gene ? ` (${m.gene})` : ""}`));
+    box.append(el("p", "reasoning", m.rationale));
+    box.append(el("div", "kv",
+      `Biological process: ${m.biological_process}${m.go_term ? ` (${m.go_term})` : ""}` +
+      `${m.uniprot ? ` · UniProt ${m.uniprot}` : ""}`));
+
+    if (m.derived_motifs.length) {
+      box.append(notice(
+        "This is a full-length protein, so there is no single sequence to optimise. " +
+        "The derived motifs below are short, analysable, and have characterised activity — " +
+        "paste one to run the workflows on it.", "info", "i"));
+      m.derived_motifs.forEach((d) => {
+        const row = el("div", "celltype");
+        const h = el("div");
+        h.append(el("span", "n", d.motif));
+        row.append(h, el("div", "r", d.function));
+        const use = el("button", "chip", `Analyse ${d.motif}`);
+        use.addEventListener("click", () => { $("#seq").value = d.motif; onAnalyze(); });
+        row.append(use);
+        box.append(row);
+      });
+    } else {
+      box.append(notice(
+        "No short analysable motif is on file for this protein. Paste the specific region " +
+        "you are interested in, or use the Find peptides tab to search by function.", "warn", "!"));
+    }
+    slot.append(box);
+    return;
+  }
 
   if (info.parse_error) {
     slot.append(notice(`Could not read that as a peptide sequence — ${info.parse_error}`, "error", "×"));

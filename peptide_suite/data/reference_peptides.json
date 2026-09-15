@@ -1,133 +1,429 @@
 {
-  "_comment": "Reference sequences and bioactive motifs for sequence-based function inference. Every entry requires verification against UniProt or primary literature before being relied on — this is a local cache, not an authority. Sequences here are included only where they are well established; where a sequence was uncertain it was left out rather than approximated, because a wrong sequence produces confidently wrong downstream analysis.",
-
+  "_comment": "Reference sequences and bioactive motifs for sequence-based identification. This is a curated local cache, not an authority: every entry should be confirmed against UniProt or primary literature before being relied on. Sequences are included only where well established; uncertain ones were left out rather than approximated, because a wrong sequence produces confidently wrong downstream analysis. Peptides containing non-canonical residues (D-amino acids, Aib, beta-alanine, pyroglutamate, amidation) cannot be fully represented in one-letter code and are noted where included.",
   "exact_peptides": {
-    "GLP-1(7-37)": {
+    "GLP-1 (7-37)": {
       "sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",
-      "gene": "GCG",
-      "function": "Incretin hormone: glucose-dependent insulin secretion, satiety, gastric emptying delay via GLP-1R",
       "family": "glucagon superfamily",
+      "function": "Incretin hormone: glucose-dependent insulin secretion, satiety, delayed gastric emptying via GLP-1R",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Native GLP-1 has a circulating half-life of roughly two minutes due to DPP-4 cleavage at position 2. Protease resistance is the dominant liability for this scaffold."
+      "goal_reason": "Native GLP-1 has a ~2 minute half-life due to DPP-4 cleavage at position 2. Protease resistance is the dominant liability."
+    },
+    "GLP-1 (7-36) amide": {
+      "sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGR",
+      "family": "glucagon superfamily",
+      "function": "The predominant circulating GLP-1 form; amidated C-terminus",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Same DPP-4 liability at position 2 as GLP-1(7-37); already C-terminally amidated."
+    },
+    "GLP-2": {
+      "sequence": "HADGSFSDEMNTILDNLAARDFINWLIQTKITD",
+      "family": "glucagon superfamily",
+      "function": "Intestinotrophic hormone: promotes intestinal mucosal growth via GLP-2R",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "DPP-4 substrate; teduglutide is the clinical analog stabilised at position 2."
     },
     "Glucagon": {
       "sequence": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT",
-      "gene": "GCG",
-      "function": "Counter-regulatory hormone: raises blood glucose via GCGR",
       "family": "glucagon superfamily",
+      "function": "Counter-regulatory hormone: raises blood glucose via GCGR",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Shares the DPP-4-susceptible N-terminus of the glucagon superfamily."
+      "goal_reason": "Shares the DPP-4-susceptible N-terminus of the glucagon superfamily; also poorly soluble at neutral pH."
+    },
+    "Oxyntomodulin": {
+      "sequence": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNTKRNRNNIA",
+      "family": "glucagon superfamily",
+      "function": "Dual GLP-1R/GCGR agonist: reduces food intake and increases energy expenditure",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "DPP-4 substrate with a very short half-life; the basis of dual-agonist programmes."
+    },
+    "GIP (1-42)": {
+      "sequence": "YAEGTFISDYSIAMDKIHQQDFVNWLLAQKGKKNDWKHNITQ",
+      "family": "glucagon superfamily",
+      "function": "Glucose-dependent insulinotropic polypeptide: incretin acting via GIPR",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Cleaved by DPP-4 at position 2; tirzepatide uses Aib at that position."
+    },
+    "Exendin-4 (exenatide)": {
+      "sequence": "HGEGTFTSDLSKQMEEEAVRLFIEWLKNGGPSSGAPPPS",
+      "family": "glucagon superfamily",
+      "function": "GLP-1R agonist from Gila monster venom; naturally DPP-4 resistant via Gly at position 2",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Already DPP-4 resistant (Gly2), so proteolysis is not the limiting property; the Trp-cage C-terminal extension drives receptor affinity."
     },
     "Insulin A-chain": {
       "sequence": "GIVEQCCTSICSLYQLENYCN",
-      "gene": "INS",
-      "function": "A-chain of insulin; disulfide-linked to the B-chain in the mature hormone",
       "family": "insulin superfamily",
+      "function": "A-chain of insulin; disulfide-linked to the B-chain in the mature hormone",
       "suggested_goal": "binding_affinity",
-      "goal_reason": "An isolated chain is not the functional unit. The cysteines here form interchain disulfides, so this is a fragment of a binary complex rather than a standalone peptide."
+      "goal_reason": "An isolated chain is not the functional unit \u2014 the cysteines form interchain disulfides."
     },
     "Insulin B-chain": {
       "sequence": "FVNQHLCGSHLVEALYLVCGERGFFYTPKT",
-      "gene": "INS",
-      "function": "B-chain of insulin; carries the receptor-binding surface",
       "family": "insulin superfamily",
+      "function": "B-chain of insulin; carries the receptor-binding surface and the hexamer interface",
       "suggested_goal": "binding_affinity",
-      "goal_reason": "Carries the primary receptor-binding determinants, but only in the disulfide-linked complex with the A-chain."
+      "goal_reason": "B28-B29 determine monomer/hexamer equilibrium \u2014 the basis of fast-acting analogs (lispro, aspart)."
+    },
+    "Amylin (IAPP)": {
+      "sequence": "KCNTATCATQRLANFLVHSSNNFGAILSSTNVGSNTY",
+      "family": "calcitonin family",
+      "function": "Co-secreted with insulin; slows gastric emptying and suppresses glucagon",
+      "suggested_goal": "aggregation_propensity",
+      "goal_reason": "Human amylin is strongly amyloidogenic \u2014 the 20-29 region drives fibril formation. Pramlintide substitutes prolines there."
+    },
+    "PYY (3-36)": {
+      "sequence": "IKPEAPGEDASPEELNRYYASLRHYLNLVTRQRY",
+      "family": "NPY family",
+      "function": "Anorexigenic gut hormone acting on the Y2 receptor",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Itself a DPP-4 product of PYY(1-36); further degraded in circulation."
+    },
+    "Neuropeptide Y": {
+      "sequence": "YPSKPDNPGEDAPAEDMARYYSALRHYINLITRQRY",
+      "family": "NPY family",
+      "function": "Orexigenic neuropeptide; also vasoconstrictive via Y1",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "DPP-4 converts NPY(1-36) to NPY(3-36), switching receptor selectivity from Y1 to Y2 \u2014 proteolysis changes function, not just duration."
+    },
+    "Ghrelin (human)": {
+      "sequence": "GSSFLSPEHQRVQQRKESKKPPAKLQPR",
+      "family": "ghrelin family",
+      "function": "Orexigenic hormone; requires Ser3 octanoylation for GHSR activity",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "The Ser3 octanoyl ester is rapidly hydrolysed by esterases, which inactivates the peptide independently of proteolysis."
     },
     "Oxytocin": {
       "sequence": "CYIQNCPLG",
-      "gene": "OXT",
+      "family": "neurohypophysial",
       "function": "Uterine contraction, milk ejection, social bonding via OXTR",
-      "family": "neurohypophysial",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Short cyclic peptide with a very short plasma half-life; exposure is the limiting property."
+      "goal_reason": "Short disulfide-cyclised nonapeptide with a very short plasma half-life."
     },
-    "Vasopressin": {
+    "Vasopressin (AVP)": {
       "sequence": "CYFQNCPRG",
-      "gene": "AVP",
-      "function": "Antidiuresis and vasoconstriction via V1/V2 receptors",
       "family": "neurohypophysial",
+      "function": "Antidiuresis and vasoconstriction via V1/V2 receptors",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Short half-life; desmopressin is the clinical precedent for stabilising this scaffold."
+      "goal_reason": "Short half-life; desmopressin (dDAVP) is the clinical precedent for stabilising this scaffold."
     },
     "Substance P": {
       "sequence": "RPKPQQFFGLM",
-      "gene": "TAC1",
-      "function": "Neurokinin-1 receptor agonist: pain transmission, neurogenic inflammation",
       "family": "tachykinin",
+      "function": "NK1 receptor agonist: pain transmission, neurogenic inflammation",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Rapidly degraded by neprilysin and ACE; the C-terminal Met is also an oxidation liability."
+      "goal_reason": "Degraded by neprilysin and ACE; the C-terminal Met is also an oxidation liability."
     },
     "Bradykinin": {
       "sequence": "RPPGFSPFR",
-      "gene": "KNG1",
-      "function": "Vasodilation, vascular permeability, pain via B2 receptor",
       "family": "kinin",
+      "function": "Vasodilation, vascular permeability, pain via the B2 receptor",
       "suggested_goal": "protease_resistance",
       "goal_reason": "Half-life under a minute; degraded by ACE and neprilysin."
     },
+    "Angiotensin II": {
+      "sequence": "DRVYIHPF",
+      "family": "renin-angiotensin",
+      "function": "Vasoconstriction and aldosterone release via AT1",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Rapidly cleaved by aminopeptidases and ACE2."
+    },
+    "Angiotensin I": {
+      "sequence": "DRVYIHPFHL",
+      "family": "renin-angiotensin",
+      "function": "Inactive precursor converted to angiotensin II by ACE",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Its function is to be cleaved \u2014 ACE removes the C-terminal His-Leu."
+    },
+    "Met-enkephalin": {
+      "sequence": "YGGFM",
+      "family": "opioid",
+      "function": "Endogenous delta/mu opioid agonist",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Half-life of minutes; degraded by enkephalinase (neprilysin) and aminopeptidase N. The C-terminal Met also oxidises."
+    },
+    "Leu-enkephalin": {
+      "sequence": "YGGFL",
+      "family": "opioid",
+      "function": "Endogenous delta opioid agonist",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Same rapid enkephalinase and aminopeptidase degradation as Met-enkephalin."
+    },
+    "Dynorphin A (1-17)": {
+      "sequence": "YGGFLRRIRPKLKWDNQ",
+      "family": "opioid",
+      "function": "Endogenous kappa opioid receptor agonist",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Highly cationic and rapidly processed; the YGGFL N-terminus is the opioid pharmacophore."
+    },
+    "Beta-endorphin": {
+      "sequence": "YGGFMTSEKSQTPLVTLFKNAIIKNAYKKGE",
+      "family": "opioid",
+      "function": "Endogenous mu opioid agonist derived from POMC",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Long for an opioid peptide; the YGGFM N-terminus carries the pharmacophore and is the exopeptidase entry point."
+    },
+    "Somatostatin-14": {
+      "sequence": "AGCKNFFWKTFTSC",
+      "family": "somatostatin",
+      "function": "Inhibits growth hormone, insulin and glucagon release via SSTR1-5",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Half-life of ~3 minutes; octreotide is the stabilised D-amino-acid analog."
+    },
+    "GnRH (LHRH)": {
+      "sequence": "QHWSYGLRPG",
+      "family": "GnRH",
+      "function": "Stimulates LH and FSH release from the pituitary",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Cleaved at Gly6-Leu7; all clinical analogs substitute position 6, typically with a D-amino acid."
+    },
+    "alpha-MSH": {
+      "sequence": "SYSMEHFRWGKPV",
+      "family": "melanocortin",
+      "function": "Melanocortin receptor agonist: pigmentation, appetite, inflammation",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "The HFRW core is the pharmacophore; Met4 is an oxidation liability."
+    },
+    "ACTH (1-24)": {
+      "sequence": "SYSMEHFRWGKPVGKKRRPVKVYP",
+      "family": "melanocortin",
+      "function": "Adrenocorticotropic fragment retaining full steroidogenic activity",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Shares the alpha-MSH HFRW core plus the polybasic 15-24 extension that drives MC2R affinity."
+    },
+    "Calcitonin (salmon)": {
+      "sequence": "CSNLSTCVLGKLSQELHKLQTYPRTNTGSGTP",
+      "family": "calcitonin family",
+      "function": "Inhibits osteoclast-mediated bone resorption; more potent than the human form",
+      "suggested_goal": "aggregation_propensity",
+      "goal_reason": "Salmon calcitonin fibrillates readily in solution, which is the main formulation problem."
+    },
+    "CGRP (alpha, human)": {
+      "sequence": "ACDTATCVTHRLAGLLSRSGGVVKNNFVPTNVGSKAF",
+      "family": "calcitonin family",
+      "function": "Potent vasodilator; central to migraine pathophysiology",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Receptor identity depends on RAMP1 association with CLR \u2014 the accessory subunit determines the pharmacology."
+    },
+    "TRH": {
+      "sequence": "QHP",
+      "family": "TRH",
+      "function": "Thyrotropin-releasing hormone (pyroglutamyl-His-Pro-amide)",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "A tripeptide whose N-terminal pyroglutamate and C-terminal amide are both required; cleaved by TRH-degrading ectoenzyme."
+    },
+    "Bombesin": {
+      "sequence": "EQRLGNQWAVGHLM",
+      "family": "bombesin family",
+      "function": "GRP receptor agonist: stimulates gastrin release, mitogenic in several tumours",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "The C-terminal WAVGHLM heptapeptide is the pharmacophore; Met is an oxidation liability."
+    },
+    "DSIP": {
+      "sequence": "WAGGDASGE",
+      "family": "sleep peptide",
+      "function": "Delta sleep-inducing peptide; reported sleep-modulating and stress-protective activity",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Small, highly anionic, and rapidly cleared; mechanistic evidence remains limited."
+    },
     "LL-37": {
       "sequence": "LLGDFFRKSKEKIGKEFKRIVQRIKDFLRNLVPRTES",
-      "gene": "CAMP",
-      "function": "Cathelicidin host-defence peptide: membrane-disrupting antimicrobial, immunomodulatory",
       "family": "cathelicidin",
+      "function": "Human cathelicidin: membrane-disrupting antimicrobial and immunomodulator",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Cationic amphipathic helix. Activity depends on the amphipathic fold, so constraint moves and protease resistance both apply; salt sensitivity is the other classic liability."
+      "goal_reason": "Cationic amphipathic helix. Activity depends on the amphipathic fold, and it is salt-sensitive and protease-labile."
+    },
+    "Magainin 2": {
+      "sequence": "GIGKFLHSAKKFGKAFVGEIMNS",
+      "family": "magainin",
+      "function": "Amphibian antimicrobial peptide; forms toroidal pores in bacterial membranes",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Classic cationic amphipathic helix \u2014 activity is fold-dependent, so constraint moves apply alongside stability."
+    },
+    "Melittin": {
+      "sequence": "GIGAVLKVLTTGLPALISWIKRKRQQ",
+      "family": "bee venom",
+      "function": "Principal cytolytic component of bee venom; lyses both bacterial and mammalian membranes",
+      "suggested_goal": "functional_selectivity",
+      "goal_reason": "Potently haemolytic as well as antimicrobial \u2014 the problem is selectivity for bacterial over mammalian membranes, not potency."
+    },
+    "Indolicidin": {
+      "sequence": "ILPWKWPWWPWRR",
+      "family": "cathelicidin",
+      "function": "Trp-rich bovine antimicrobial peptide",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Five tryptophans make this exceptionally oxidation- and photo-sensitive."
+    },
+    "HNP-1 (alpha-defensin 1)": {
+      "sequence": "ACYCRIPACIAGERRYGTCIYQGRLWAFCC",
+      "family": "defensin",
+      "function": "Neutrophil alpha-defensin: antimicrobial, three disulfide bonds",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Six cysteines in a defined connectivity make it already protease-stable; correct disulfide pairing is the real constraint."
     },
     "BPC-157": {
       "sequence": "GEPPPGKPADDAGLV",
-      "gene": "",
-      "function": "Synthetic pentadecapeptide derived from a gastric juice protein fragment; reported in tissue-repair models",
       "family": "synthetic",
+      "function": "Synthetic pentadecapeptide from a gastric juice protein fragment; reported in tissue-repair models",
       "suggested_goal": "protease_resistance",
-      "goal_reason": "Human clinical evidence is limited. Reported stability in gastric juice is the distinguishing claim for this peptide, so proteolytic behaviour is the property most worth examining."
+      "goal_reason": "Reported stability in gastric juice is its distinguishing claim, so proteolytic behaviour is what is worth examining. Human clinical evidence is limited."
+    },
+    "Thymosin beta-4": {
+      "sequence": "SDKPDMAEIEKFDKSKLKKTETQEKNPLPSKETIEQEKQAGES",
+      "family": "thymosin",
+      "function": "Actin-sequestering peptide; reported to accelerate wound closure and angiogenesis",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Highly charged and intrinsically disordered, so it is broadly protease-accessible."
+    },
+    "GHK": {
+      "sequence": "GHK",
+      "family": "matrikine",
+      "function": "Copper-binding tripeptide; reported to stimulate collagen synthesis and wound repair",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Activity depends on Cu(II) chelation by the His imidazole and the N-terminal amine \u2014 the metal complex is the active species."
+    },
+    "Matrixyl (KTTKS)": {
+      "sequence": "KTTKS",
+      "family": "procollagen fragment",
+      "function": "Procollagen I C-terminal fragment; feedback signal stimulating collagen synthesis",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "A pentapeptide with free termini is a straightforward exopeptidase substrate; the palmitoylated form is used for skin penetration."
+    },
+    "Argireline (acetyl hexapeptide-3)": {
+      "sequence": "EEMQRR",
+      "family": "SNAP-25 mimetic",
+      "function": "SNAP-25 N-terminal mimetic; competitively interferes with SNARE complex assembly",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Acts by competing with SNAP-25 for the SNARE complex, so affinity for that interface is the limiting property."
+    },
+    "Semax": {
+      "sequence": "MEHFPGP",
+      "family": "ACTH fragment",
+      "function": "ACTH(4-7) analog with a Pro-Gly-Pro extension; reported nootropic and neuroprotective",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "The C-terminal Pro-Gly-Pro was added specifically to slow degradation of the ACTH(4-7) core."
+    },
+    "Selank": {
+      "sequence": "TKPRPGP",
+      "family": "tuftsin analog",
+      "function": "Tuftsin (TKPR) analog with a Pro-Gly-Pro extension; reported anxiolytic",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Same Pro-Gly-Pro stabilisation strategy as Semax applied to the tuftsin core."
+    },
+    "Tuftsin": {
+      "sequence": "TKPR",
+      "family": "immunopeptide",
+      "function": "Phagocytosis-stimulating tetrapeptide from the IgG Fc region",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "A free tetrapeptide is rapidly cleaved by aminopeptidases."
+    },
+    "Epitalon": {
+      "sequence": "AEDG",
+      "family": "synthetic",
+      "function": "Synthetic tetrapeptide; reported telomerase-modulating and geroprotective activity",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "A free tetrapeptide with minimal structure; mechanistic evidence is limited."
+    },
+    "Glutathione": {
+      "sequence": "ECG",
+      "family": "tripeptide",
+      "function": "Principal intracellular antioxidant (gamma-Glu-Cys-Gly)",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "The gamma-linkage between Glu and Cys is what makes it resistant to ordinary aminopeptidases \u2014 a standard alpha-peptide of this sequence is not glutathione."
+    },
+    "Carnosine": {
+      "sequence": "AH",
+      "family": "dipeptide",
+      "function": "Beta-alanyl-histidine: antioxidant and pH buffer in muscle and brain",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Cleaved by serum carnosinase. Note the beta-alanine is not representable in one-letter code, so this entry is an approximation of the residue identity only."
+    },
+    "TAT (47-57)": {
+      "sequence": "YGRKKRRQRRR",
+      "family": "cell-penetrating",
+      "function": "HIV-1 TAT protein transduction domain; carries cargo across membranes",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Extremely cationic and trypsin-labile \u2014 eight of eleven residues are Arg or Lys."
+    },
+    "Penetratin": {
+      "sequence": "RQIKIWFQNRRMKWKK",
+      "family": "cell-penetrating",
+      "function": "Antennapedia homeodomain third helix; cell-penetrating peptide",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Cationic and trypsin-labile; uptake depends on the amphipathic helical character."
+    },
+    "Polyarginine (R8)": {
+      "sequence": "RRRRRRRR",
+      "family": "cell-penetrating",
+      "function": "Octaarginine: prototypical cationic cell-penetrating peptide",
+      "suggested_goal": "protease_resistance",
+      "goal_reason": "Every residue is a trypsin P1 site. D-arginine versions are the standard fix."
     }
   },
-
   "bioactive_motifs": {
     "IKVAV": {
       "parent_protein": "Laminin alpha-1 chain",
       "gene": "LAMA1",
-      "location": "LG domain region of the alpha-1 chain",
-      "function": "Neurite outgrowth, cell adhesion and migration; widely used to functionalise scaffolds for neural regeneration",
+      "function": "Neurite outgrowth, cell adhesion and migration; widely used to functionalise neural scaffolds",
       "suggested_goal": "binding_affinity",
-      "goal_reason": "A short adhesion motif excised from a very large basement-membrane protein. Its activity is presentation-dependent — density, spacing and multivalency dominate — so binding and its structural context matter more than half-life.",
-      "native_context_note": "This is an internal fragment of a multi-thousand-residue ECM protein. Both termini are excision artefacts, and in the native protein the motif is displayed on a folded domain rather than as a free peptide."
+      "goal_reason": "A short adhesion motif from a very large basement-membrane protein. Activity is presentation-dependent \u2014 density, spacing and multivalency dominate over half-life.",
+      "native_context_note": "Internal fragment of a multi-thousand-residue ECM protein. Both termini are excision artefacts, and natively the motif sits on a folded domain."
     },
     "YIGSR": {
       "parent_protein": "Laminin beta-1 chain",
       "gene": "LAMB1",
-      "location": "Domain III of the beta-1 chain",
-      "function": "Cell adhesion via the 67 kDa laminin receptor; reported anti-metastatic and anti-angiogenic activity",
+      "function": "Cell adhesion via the 67 kDa laminin receptor; reported anti-metastatic and anti-angiogenic",
       "suggested_goal": "binding_affinity",
       "goal_reason": "Adhesion motif whose activity depends on receptor engagement and presentation rather than circulating exposure.",
-      "native_context_note": "Internal fragment of laminin beta-1. Free termini are excision artefacts."
+      "native_context_note": "Internal fragment of laminin beta-1; free termini are excision artefacts."
     },
     "RKRLQVQLSIRT": {
-      "parent_protein": "Laminin alpha-1 chain, LG4 module (the peptide commonly designated AG73)",
+      "parent_protein": "Laminin alpha-1 LG4 module (AG73)",
       "gene": "LAMA1",
-      "location": "LG4 module",
-      "function": "Syndecan-binding; cell adhesion, spreading and neurite outgrowth",
+      "function": "Syndecan binding; cell adhesion, spreading and neurite outgrowth",
       "suggested_goal": "binding_affinity",
-      "goal_reason": "Heparin/syndecan binding is charge-driven, so charge engineering and presentation dominate over proteolytic stability.",
+      "goal_reason": "Syndecan binding is charge-driven, so charge engineering and presentation dominate over proteolytic stability.",
       "native_context_note": "Internal fragment of the laminin alpha-1 LG4 module; strongly cationic, which is the basis of its syndecan binding."
     },
+    "PHSRN": {
+      "parent_protein": "Fibronectin type III repeat 9",
+      "gene": "FN1",
+      "function": "Synergy site that cooperates with RGD for alpha5beta1 integrin binding",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Only functional at a defined spacing from an RGD motif \u2014 the geometry between the two sites is the design variable.",
+      "native_context_note": "Internal fragment of fibronectin; acts together with RGD rather than alone."
+    },
     "RGD": {
-      "parent_protein": "Integrin-binding motif found in fibronectin, vitronectin, and several other matrix proteins",
+      "parent_protein": "Integrin-binding motif (fibronectin, vitronectin and others)",
       "gene": "",
-      "location": "Various",
       "function": "Integrin-mediated cell adhesion",
       "suggested_goal": "binding_affinity",
-      "goal_reason": "Integrin selectivity depends almost entirely on the conformation the RGD is presented in — cyclic RGD peptides differ from linear ones by orders of magnitude in both affinity and integrin subtype selectivity.",
-      "native_context_note": "A three-residue motif is too short to be specific on its own. Flanking residues and conformational constraint determine which integrin it engages.",
-      "min_length_warning": "RGD alone is only three residues. A match here indicates the motif is present, not that the peptide's function is adhesion."
+      "goal_reason": "Integrin subtype selectivity depends almost entirely on the conformation the RGD is presented in \u2014 cyclic and linear RGD differ by orders of magnitude.",
+      "native_context_note": "A three-residue motif is not specific on its own; flanking residues and conformational constraint determine which integrin it engages.",
+      "min_length_warning": "'RGD' is only 3 residues. A match indicates the motif is present, not that the peptide's function is adhesion."
+    },
+    "REDV": {
+      "parent_protein": "Fibronectin alternatively spliced IIICS region",
+      "gene": "FN1",
+      "function": "Endothelial-cell-selective adhesion via alpha4beta1",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Selected for endothelial selectivity over platelet adhesion, so selectivity rather than raw affinity is the objective.",
+      "native_context_note": "Internal fragment of the fibronectin IIICS region.",
+      "min_length_warning": "'REDV' is only 4 residues. A match indicates the motif is present, not that the peptide's function is adhesion."
+    },
+    "DGEA": {
+      "parent_protein": "Collagen type I",
+      "gene": "COL1A1",
+      "function": "alpha2beta1 integrin binding motif",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "Collagen-mimetic adhesion depends on triple-helical presentation, which a linear peptide does not reproduce.",
+      "native_context_note": "Excised from a triple-helical protein; the isolated linear peptide lacks the native conformation.",
+      "min_length_warning": "'DGEA' is only 4 residues. A match indicates the motif is present, not that the peptide's function is adhesion."
     }
   },
-
   "family_signatures": {
     "_comment": "Physicochemical signatures used when no sequence or motif match is found. These are heuristics over computed Tier 0 properties and are reported as INFERRED, never as identification.",
     "cationic_amphipathic_amp": {
-      "description": "Cationic amphipathic helix — the host-defence / antimicrobial peptide profile",
+      "description": "Cationic amphipathic helix \u2014 the host-defence / antimicrobial peptide profile",
       "min_net_charge": 3.0,
       "min_hydrophobic_moment": 0.35,
       "min_length": 12,
@@ -136,7 +432,7 @@
       "goal_reason": "Antimicrobial peptides are typically protease-labile and lose activity on proteolysis. Activity also depends on the amphipathic fold, so constraint moves are the other productive direction."
     },
     "disulfide_rich": {
-      "description": "Disulfide-rich scaffold — defensin, knottin, or growth-factor-like fold",
+      "description": "Disulfide-rich scaffold \u2014 defensin, knottin, or growth-factor-like fold",
       "min_cysteines": 6,
       "requires_even_cysteines": true,
       "suggested_goal": "binding_affinity",

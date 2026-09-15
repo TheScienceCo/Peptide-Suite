@@ -215,16 +215,55 @@ def infer_function(req: InferRequest) -> Dict:
         raise HTTPException(status_code=400, detail="Input is empty")
 
     sequence, name, parse_error = "", raw, None
-    try:
-        sequence, name = _peptides.load_sequence(raw)
-    except ValueError as e:
-        parse_error = str(e)
+    resolved_from_name = ""
+    also_readable_as_sequence = ""
+
+    # Names are resolved BEFORE sequence parsing, because many peptide and
+    # protein names are themselves valid amino acid strings: "laminin" is
+    # L-A-M-I-N-I-N and "oxytocin" is O-X-Y-T-O-C-I-N. Parsing first would
+    # silently analyse a 7-residue peptide nobody asked about.
+    by_name = _inferencer.resolve_name(raw)
+    if by_name:
+        matched_name, entry = by_name
+        sequence, name = entry["sequence"], matched_name
+        resolved_from_name = (
+            f"Interpreted '{raw.strip()}' as a name and resolved it to {matched_name} "
+            f"({len(sequence)} residues)."
+        )
+        try:
+            literal, _ = _peptides.load_sequence(raw)
+            if literal and literal != sequence:
+                also_readable_as_sequence = literal
+        except ValueError:
+            pass
 
     if not sequence:
+        try:
+            sequence, name = _peptides.load_sequence(raw)
+        except ValueError as e:
+            parse_error = str(e)
+
+    protein_by_name = _inferencer.lookup_protein_by_name(raw)
+    if protein_by_name and not by_name:
+        literal = sequence
+        return {
+            "sequence": "", "name": raw.strip(), "length": 0, "parse_error": None,
+            "inferred_function": "", "inference_confidence": 0.0,
+            "suggested_goal": None, "properties": None,
+            "protein_match": protein_by_name,
+            "also_readable_as_sequence": literal,
+        }
+
+    if not sequence:
+        # Still not a sequence. It may name a protein the ontology knows about,
+        # in which case the answer is what is known plus the analysable motifs
+        # derived from it — not a dead end.
+        protein = _inferencer.lookup_protein_by_name(raw)
         return {
             "sequence": "", "name": name, "length": 0, "parse_error": parse_error,
             "inferred_function": "", "inference_confidence": 0.0,
             "suggested_goal": None, "properties": None,
+            "protein_match": protein,
         }
 
     _cleaned, sequence_notes = _peptides.clean_sequence(raw)
@@ -237,7 +276,9 @@ def infer_function(req: InferRequest) -> Dict:
         "name": name,
         "length": len(sequence),
         "parse_error": parse_error,
-        "sequence_notes": sequence_notes,
+        "sequence_notes": ([resolved_from_name] if resolved_from_name else []) + sequence_notes,
+        "resolved_from_name": resolved_from_name,
+        "also_readable_as_sequence": also_readable_as_sequence,
         "is_protein": length_class["is_protein"],
         "length_note": length_class["note"],
         "uniprot": (
