@@ -79,6 +79,12 @@
         "gene": "MBP",
         "uniprot": "P02686",
         "rationale": "Structural myelin component rather than a signalling peptide; included because expression is highly specific to myelinating cells."
+      },
+      {
+        "name": "Laminin alpha-4 (laminin-411)",
+        "gene": "LAMA4",
+        "uniprot": "Q16363",
+        "rationale": "Laminin-411 (alpha4-beta1-gamma1) is present in the Schwann cell basal lamina alongside laminin-211 and in vascular basement membranes. Its contribution to myelination is less dominant than laminin-211, which is why it ranks as a candidate rather than established. The A4G peptide series, including A4G47 (VISLYNFREMIL) from the LG3 module, provides short synthetic sequences derived from its G domain that are analysable as peptides."
       }
     ]
   },

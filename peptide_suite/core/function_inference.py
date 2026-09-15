@@ -187,9 +187,15 @@ class FunctionInferencer:
             level=1,
             matched_name=name,
             parent_protein=entry.get("family", ""),
+            native_context_note=entry.get("native_context_note", ""),
             claim=Claim.retrieved(
                 claim_text,
-                citations=[f"local reference cache entry '{name}' (unverified — confirm against UniProt)"],
+                citations=[
+                    f"local reference cache entry '{name}'"
+                    + (" — USER-ASSERTED, not independently confirmed"
+                       if entry.get("provenance") == "USER_ASSERTED"
+                       else " (unverified — confirm against UniProt)")
+                ],
                 tested=False,
             ),
             caveats=caveats or [],
