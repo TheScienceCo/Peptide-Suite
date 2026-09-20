@@ -9,10 +9,10 @@ the enforcement has to be here and it has to raise.
 
 import unittest
 
+from peptide_suite.core.partner_module import ReceptorRecord
 from peptide_suite.core.provenance import (
     UNRESOLVED, AggregateTerm, AggregateTermRegistry, Capability, ClaimTrace,
     LicenseViolation, ParameterBudget, ProvenanceTier, Quantity,
-    ReceptorComplex,
     StructureGate, UnresolvedValue, licensing_table_markdown,
 )
 
@@ -291,8 +291,8 @@ class TestParameterBudget(unittest.TestCase):
 
     def _pooled(self, free_parameters):
         return (ParameterBudget(divisor=10.0, free_parameters=free_parameters)
-                .add_pool(ReceptorComplex("GLP1R", species="human"), 220)
-                .add_pool(ReceptorComplex("GIPR", species="human"), 160))
+                .add_pool(ReceptorRecord("GLP1R", accessory=(), species="human"), 220)
+                .add_pool(ReceptorRecord("GIPR", accessory=(), species="human"), 160))
 
     def test_within_budget(self):
         b = self._pooled(25)
@@ -311,14 +311,14 @@ class TestParameterBudget(unittest.TestCase):
     def test_pooling_sums_across_complexes(self):
         """Pooling is the point: one artifact, one parameter count, all the data."""
         single = ParameterBudget(divisor=10.0).add_pool(
-            ReceptorComplex("GLP1R", species="human"), 220)
+            ReceptorRecord("GLP1R", accessory=(), species="human"), 220)
         self.assertEqual(single.budget, 22.0)
         self.assertEqual(self._pooled(0).budget, 38.0)
 
     def test_report_line_names_the_pools(self):
         line = self._pooled(25).report_line()
-        self.assertIn("GLP1R(human)=220", line)
-        self.assertIn("GIPR(human)=160", line)
+        self.assertIn("GLP1R (human)=220", line)
+        self.assertIn("GIPR (human)=160", line)
         self.assertIn("WITHIN BUDGET", line)
 
     def test_no_measured_data_is_infinite_utilisation(self):
@@ -333,31 +333,31 @@ class TestReceptorComplexPooling(unittest.TestCase):
     """
 
     def test_accessory_subunits_distinguish_complexes(self):
-        cgrp = ReceptorComplex("CLR", ("RAMP1",), "human")
-        am1 = ReceptorComplex("CLR", ("RAMP2",), "human")
+        cgrp = ReceptorRecord("CLR", ("RAMP1",), "human")
+        am1 = ReceptorRecord("CLR", ("RAMP2",), "human")
         self.assertNotEqual(cgrp, am1)
         self.assertFalse(cgrp.poolable_with(am1))
 
     def test_identifier_includes_accessory(self):
-        self.assertIn("RAMP1", ReceptorComplex("CLR", ("RAMP1",)).identifier)
+        self.assertIn("RAMP1", ReceptorRecord("CLR", ("RAMP1",)).identifier)
 
     def test_accessory_order_does_not_matter(self):
-        a = ReceptorComplex("CTR", ("RAMP1", "RAMP3"))
-        b = ReceptorComplex("CTR", ("RAMP3", "RAMP1"))
+        a = ReceptorRecord("CTR", ("RAMP1", "RAMP3"))
+        b = ReceptorRecord("CTR", ("RAMP3", "RAMP1"))
         self.assertTrue(a.poolable_with(b))
 
     def test_pooling_different_accessory_complexes_is_refused(self):
         """Silently pooling these corrupts the training set."""
         budget = ParameterBudget(divisor=10.0)
-        budget.add_pool(ReceptorComplex("CLR", ("RAMP1",)), 40)
+        budget.add_pool(ReceptorRecord("CLR", ("RAMP1",)), 40)
         with self.assertRaises(LicenseViolation) as ctx:
-            budget.add_pool(ReceptorComplex("CLR", ("RAMP2",)), 30)
+            budget.add_pool(ReceptorRecord("CLR", ("RAMP2",)), 30)
         self.assertIn("different pharmacology", str(ctx.exception))
 
     def test_distinct_receptors_pool_freely(self):
         budget = ParameterBudget(divisor=10.0)
-        budget.add_pool(ReceptorComplex("GLP1R"), 100)
-        budget.add_pool(ReceptorComplex("GCGR"), 50)
+        budget.add_pool(ReceptorRecord("GLP1R", accessory=()), 100)
+        budget.add_pool(ReceptorRecord("GCGR", accessory=()), 50)
         self.assertEqual(budget.n_measured, 150)
 
 

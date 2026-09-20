@@ -1,0 +1,101 @@
+{
+  "_about": [
+    "Partner-peptide seed cases.  [Addendum 2 section 8, step 6f]",
+    "",
+    "LITERATURE_ASSERTED, like the native-contact golden set: these may gate a",
+    "proposal and explain one, never carry a numeric weight. Nothing here was",
+    "checked against its source in this build and every entry says so.",
+    "",
+    "Terminology, enforced throughout the codebase: these are PARTNER PEPTIDES",
+    "forming BINARY COMPLEXES. Never 'dipeptide' -- that word means a two-residue",
+    "peptide and describes a completely different molecule."
+  ],
+
+  "cases": {
+    "lacticin_3147": {
+      "peptide": "lacticin 3147",
+      "components": ["LtnA1", "LtnA2"],
+      "mode": "OBLIGATE_HETERODIMER",
+      "claim": "A two-component lantibiotic. LtnA1 binds lipid II and forms the complex that LtnA2 recognises; neither component kills alone.",
+      "why_this_case": "The cleanest obligate case in the literature. A system that scores LtnA1 in isolation is scoring a molecule with no activity.",
+      "stoichiometry": "1:1",
+      "engagement_order": "LtnA1 binds lipid II first; LtnA2 recognises the resulting complex.",
+      "related": ["plantaricin EF", "lactococcin G"],
+      "citation": "Two-component lantibiotic literature; class IIb bacteriocins for the related cases.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    },
+
+    "magainin2_pgla": {
+      "peptide": "magainin 2 + PGLa",
+      "components": ["magainin 2", "PGLa"],
+      "mode": "SYNERGISTIC",
+      "claim": "Xenopus skin antimicrobial peptides forming an antiparallel heterodimer in the membrane. Each is active alone; the combination is superadditive.",
+      "synergy_magnitude": "roughly 10-100x",
+      "magnitude_source": "project addendum section 8; not read from a primary source by this system",
+      "stoichiometry": "reported as an antiparallel heterodimer",
+      "citation": "Structurally characterised magainin/PGLa synergy literature.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    },
+
+    "conotoxin_lightning_strike_cabal": {
+      "peptide": "lightning-strike cabal",
+      "components": ["delta-conotoxin", "kappa-conotoxin"],
+      "mode": "SYNERGISTIC",
+      "claim": "A delta-conotoxin delays sodium-channel inactivation while a kappa-conotoxin blocks potassium efflux. The physiological effect belongs to the cocktail, not to any member.",
+      "why_this_case": "The purest illustration of the concept: the two components act on different channels, and neither one's mechanism predicts the combined effect. A single-peptide scorer has no way to represent this at all.",
+      "citation": "Cone snail venom cabal literature.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    },
+
+    "distinctin": {
+      "peptide": "distinctin",
+      "components": ["chain 1", "chain 2"],
+      "mode": "OBLIGATE_HETERODIMER",
+      "claim": "Natively heterodimeric, disulfide-linked antimicrobial peptide. The covalent link is part of the molecule rather than an engineering choice.",
+      "citation": "Distinctin structural characterisation.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    },
+
+    "hnp1_homodimer": {
+      "peptide": "alpha-defensin HNP1",
+      "components": ["HNP1", "HNP1"],
+      "mode": "OBLIGATE_HETERODIMER",
+      "is_homodimer": true,
+      "claim": "Dimerization is required for activity. The partner is a second copy of the same peptide.",
+      "why_this_case": "A homodimer, included because the partner requirement is identical in kind while the partner is not a different molecule. A module keyed on 'find the other peptide' misses this entirely.",
+      "citation": "Alpha-defensin structural and functional literature.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    },
+
+    "incretin_dual_agonists": {
+      "peptide": "GLP-1 + GIP, GLP-1 + glucagon",
+      "components": ["GLP-1", "GIP", "glucagon"],
+      "mode": "CHIMERIC_CANDIDATE",
+      "claim": "The two activities are fusable into a single sequence. GLP-1/GIP gave tirzepatide; GLP-1/glucagon gave retatrutide. Oxyntomodulin is the natural dual agonist and the precedent for the whole approach.",
+      "why_this_case": "The CHIMERIC_CANDIDATE precedent, and the mode most likely to be proposed wrongly: two activities being desirable together does not make them fusable, and oxyntomodulin exists as evidence that this particular pair is.",
+      "citation": "Incretin dual- and triple-agonist development literature.",
+      "citation_precision": "described_only",
+      "independently_verified": false
+    }
+  },
+
+  "ramp_complexes": {
+    "_about": [
+      "Same receptor gene, different pharmacology. These exist to make the schema",
+      "requirement concrete: a receptor record without an accessory field is",
+      "incomplete, and affinities measured against different complexes are not the",
+      "same quantity."
+    ],
+    "CLR+RAMP1": {"receptor": "CLR", "accessory": ["RAMP1"], "identity": "CGRP receptor"},
+    "CLR+RAMP2": {"receptor": "CLR", "accessory": ["RAMP2"], "identity": "AM1 receptor"},
+    "CLR+RAMP3": {"receptor": "CLR", "accessory": ["RAMP3"], "identity": "AM2 receptor"},
+    "CTR+RAMP1": {"receptor": "CTR", "accessory": ["RAMP1"], "identity": "AMY1 amylin receptor"},
+    "CTR+RAMP2": {"receptor": "CTR", "accessory": ["RAMP2"], "identity": "AMY2 amylin receptor"},
+    "CTR+RAMP3": {"receptor": "CTR", "accessory": ["RAMP3"], "identity": "AMY3 amylin receptor"}
+  }
+}

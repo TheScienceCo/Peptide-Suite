@@ -840,6 +840,8 @@ function renderTransformResults(d) {
   if (template) out.append(template);
   const contacts = renderClassifiedContacts(d.classified_contacts);
   if (contacts) out.append(contacts);
+  const partners = renderPartnerProposals(d.partner_proposals);
+  if (partners) out.append(partners);
   const requests = renderResearchRequests(d.research_requests, d.registry_is_empty);
   if (requests) out.append(requests);
 
@@ -933,6 +935,50 @@ const CONTACT_CLASS_GLYPH = {
   ESSENTIAL: "\u25C6",    // frozen
   UNRESOLVED: "\u25CB",   // unverified
 };
+
+// Co-agent proposals. Their own section, never mixed into the ranked list: a
+// partner proposal beside single-peptide ones reads as a comparable
+// alternative, and it is not — it changes what the product is.
+function renderPartnerProposals(proposals) {
+  if (!proposals || !proposals.length) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, `Partner peptides (${proposals.length})`));
+  card.append(el("div", "kv",
+    "A second peptide participating in the activity. The mode decides what ships: " +
+    "an obligate pair sold as a loose combination is two inactive peptides."));
+
+  proposals.forEach((p) => {
+    const box = el("div", "contact");
+    const head = el("div", "contact-head");
+    head.append(el("span", "n", `${p.primary} + ${p.partner}`),
+                el("span", "tag", p.mode));
+    box.append(head);
+    box.append(el("div", "r", p.rationale));
+    box.append(el("div", "footnote", p.mode_description));
+    box.append(el("div", "footnote", `Ships as: ${p.shipping_requirement}`));
+
+    const facts = [
+      p.stoichiometry && `stoichiometry ${p.stoichiometry}`,
+      p.engagement_order && `order: ${p.engagement_order}`,
+      p.synergy_index && `synergy ${p.synergy_index}`,
+      p.accessory_protein && `accessory ${p.accessory_protein}`,
+    ].filter(Boolean);
+    if (facts.length) box.append(el("div", "kv", facts.join(" \u00b7 ")));
+
+    // What is still missing is shown, not hidden: an unmet requirement is the
+    // difference between a proposal and something someone could act on.
+    (p.unmet_requirements || []).forEach((u) => box.append(notice(u, "warn", "!")));
+
+    const evidence = el("div", "eqrefs");
+    evidence.textContent =
+      `${p.citation} (${p.citation_precision}) \u00b7 confidence ${p.confidence} \u00b7 ` +
+      (p.independently_verified ? "verified here" : "not independently verified here");
+    box.append(evidence);
+    (p.notes || []).forEach((n) => box.append(el("div", "footnote", n)));
+    card.append(box);
+  });
+  return card;
+}
 
 function renderClassifiedContacts(contacts) {
   if (!contacts || !contacts.length) return null;

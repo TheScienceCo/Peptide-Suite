@@ -209,6 +209,30 @@ def encode_classified_contact(c) -> Dict:
     }
 
 
+def encode_partner_proposal(p) -> Dict:
+    """A co-agent proposal. The mode and its shipping requirement travel together."""
+    return {
+        "primary": p.primary,
+        "partner": p.partner,
+        "mode": p.mode.value,
+        "mode_description": p.mode.description,
+        "shipping_requirement": p.mode.shipping_requirement,
+        "rationale": p.rationale,
+        "stoichiometry": p.stoichiometry,
+        "engagement_order": p.engagement_order,
+        "synergy_index": p.synergy_index,
+        "accessory_protein": p.accessory_protein,
+        "citation": p.citation,
+        "citation_precision": p.citation_precision,
+        "independently_verified": p.independently_verified,
+        "confidence": p.confidence,
+        "unmet_requirements": p.unmet_requirements(),
+        "is_actionable": p.is_actionable,
+        "notes": p.notes,
+        "summary": p.summary(),
+    }
+
+
 def encode_structure_template(decision) -> Dict:
     """
     Which structure conformational claims rest on, or why none was admitted.
@@ -703,6 +727,8 @@ def transform(req: TransformRequest) -> Dict:
         "electrostatics": encode_electrostatics(result["electrostatics"]),
         "structure_template": encode_structure_template(result["structure_template"]),
         "research_requests": result["research_requests"],
+        "partner_proposals": [encode_partner_proposal(p)
+                              for p in result["partner_proposals"]],
         "classified_contacts": [encode_classified_contact(c)
                                 for c in result["classified_contacts"]],
         "scaffold_opportunities": [encode_classified_contact(c)

@@ -557,38 +557,14 @@ class AggregateTermRegistry:
 # Parameter budget
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class ReceptorComplex:
-    """
-    A receptor identity that is complete enough to pool measurements under.
-
-    A receptor gene alone is underspecified where accessory proteins determine
-    pharmacology: CLR with RAMP1 is the CGRP receptor and CLR with RAMP2 is AM1,
-    same gene, different ligand preference. Affinities measured against
-    different accessory complexes are not the same quantity, so the identifier
-    carries the accessory subunits and two complexes that differ in them will
-    not compare equal.
-    """
-    receptor: str
-    accessory: Tuple[str, ...] = ()
-    species: str = ""
-
-    @property
-    def identifier(self) -> str:
-        parts = [self.receptor]
-        if self.accessory:
-            parts.append("+".join(sorted(self.accessory)))
-        if self.species:
-            parts.append(f"({self.species})")
-        return "".join(p if i == 0 else f"+{p}" if not p.startswith("(") else p
-                       for i, p in enumerate(parts))
-
-    def poolable_with(self, other: "ReceptorComplex") -> bool:
-        return (self.receptor == other.receptor
-                and set(self.accessory) == set(other.accessory))
-
-    def __str__(self) -> str:
-        return self.identifier
+# Receptor identity lives in partner_module.ReceptorRecord, which makes the
+# distinction this class did not: an accessory list that is empty because the
+# receptor has none is a different statement from one that is empty because
+# nobody recorded it. This class defaulted the field to empty, so an unrecorded
+# record pooled with a genuinely accessory-free one -- exactly the silent
+# corruption the RAMP rule exists to prevent.
+#
+#     from peptide_suite.core.partner_module import ReceptorRecord
 
 
 @dataclass

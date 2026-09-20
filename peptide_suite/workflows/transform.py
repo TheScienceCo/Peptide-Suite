@@ -18,7 +18,12 @@ from peptide_suite.core.epistemics import (
     Assumption, AssumptionKind, Claim, check_corpus_leakage,
 )
 from peptide_suite.core.electrostatics import compute_profile
-from peptide_suite.core.contact_classifier import ContactClass, rule_proposal
+from peptide_suite.core.contact_classifier import (
+    ContactClass, EssentialSubclass, rule_proposal,
+)
+from peptide_suite.core.partner_module import (
+    PartnerCases, PartnerMode, PartnerProposal,
+)
 from peptide_suite.core.ncaa_registry import NCAARegistry, gate_proposal
 from peptide_suite.core.structure_template import (
     TemplateCandidate, blocked_moves, select_template,
@@ -102,6 +107,24 @@ class TransformWorkflow:
         # candidate the answer is tier 4: refuse.
         template = select_template(structure_candidates)
         blocked = blocked_moves(template)
+
+        # Partner analysis fires on an ESSENTIAL / PARTNER_DEPENDENT contact or
+        # on a retrieved synergy claim, per the section 8 trigger.
+        partner_proposals = list(PartnerCases.for_peptide(peptide_name))
+        if any(c.subclass is EssentialSubclass.PARTNER_DEPENDENT
+               for c in native.classified_contacts if c.subclass):
+            for contact in native.classified_contacts:
+                if contact.subclass is EssentialSubclass.PARTNER_DEPENDENT:
+                    partner_proposals.append(PartnerProposal(
+                        primary=peptide_name or seq,
+                        partner="UNRESOLVED",
+                        mode=PartnerMode.ACCESSORY_DEPENDENT,
+                        rationale=(f"The contact '{contact.contact}' is classified "
+                                   f"ESSENTIAL / PARTNER_DEPENDENT, which is the section 8 "
+                                   f"trigger. The partner itself was not identified."),
+                        citation=contact.citation,
+                        confidence=contact.confidence,
+                    ))
 
         transformations: List[Transformation] = []
 
@@ -206,6 +229,11 @@ class TransformWorkflow:
             "structure_template": template,
             "research_requests": research_requests,
             "classified_contacts": native.classified_contacts,
+            # Co-agent proposals. Kept out of the ranked list on purpose: a
+            # partner proposal ranked beside single-peptide ones reads as a
+            # comparable alternative, and it is not -- it changes what the
+            # product is.
+            "partner_proposals": partner_proposals,
             "scaffold_opportunities": [
                 c for c in native.classified_contacts
                 if c.contact_class is ContactClass.SCAFFOLD
