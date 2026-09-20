@@ -30,7 +30,7 @@ Build order from the addendum's section 13:
       (insulin, ghrelin, CCK, drosocin)
 - [x] **6f** Partner-peptide module + RAMP schema requirement
 - [x] **6g** Class B1 restricted-zone rule + affinity/efficacy/bias three-field output
-- [ ] **6h** Synthetic feasibility gate
+- [x] **6h** Synthetic feasibility gate
 - [ ] **6i** Holdout protocol rewrite (motif ablation, temporal, decoys) +
       rank-based reporting
 

@@ -21,6 +21,9 @@ from peptide_suite.core.electrostatics import compute_profile
 from peptide_suite.core.contact_classifier import (
     ContactClass, EssentialSubclass, rule_proposal,
 )
+from peptide_suite.core.synthetic_feasibility import (
+    regioselectivity_conflict, screen as screen_feasibility,
+)
 from peptide_suite.core.class_b1 import (
     Effect as B1Effect, ThreeFieldPrediction, conjugation_site_guidance,
     evaluate as evaluate_b1,
@@ -100,6 +103,10 @@ class TransformWorkflow:
         # carry them, which is the whole reason they are worth flagging. Whether
         # they are a property of the peptide or an artefact of excision is a
         # separate statement, made below rather than by dropping the charge.
+        # Synthesis and stability liabilities, computed from the sequence. No
+        # gating: none of these checks needs a structure.
+        feasibility = screen_feasibility(seq)
+
         electrostatics = compute_profile(seq, include_termini=True)
         if is_internal_fragment:
             electrostatics.notes.insert(0, (
@@ -190,6 +197,17 @@ class TransformWorkflow:
                 # from the scalar while staying visible in the vector.
                 t.discount_objectives = {Objective.POTENCY}
 
+            # A conjugation proposal inherits the regioselectivity question.
+            # This is the check a biophysics-only scorer has no way to make: the
+            # obstacle is in the chemistry of making the molecule, not in the
+            # molecule.
+            chemistry = self._conjugation_chemistry(t)
+            if chemistry:
+                conflict = regioselectivity_conflict(seq, chemistry)
+                if conflict is not None:
+                    t.notes.append(conflict.description + " " + conflict.remedy)
+                    t.feasibility_flags = [conflict]
+
             ncaa = gate_proposal(f"{t.description} {t.rationale}")
             structure_also_blocks = t.move.value in blocked
             if ncaa:
@@ -261,6 +279,7 @@ class TransformWorkflow:
             # comparable alternative, and it is not -- it changes what the
             # product is.
             "partner_proposals": partner_proposals,
+            "feasibility": feasibility,
             "class_b1": conjugation_site_guidance(seq, receptor) if receptor else
                         {"applies": False, "reason": "No receptor was specified."},
             "scaffold_opportunities": [
@@ -285,6 +304,16 @@ class TransformWorkflow:
                 "'better overall'. Compare the vectors, and treat coverage as part of the score."
             ),
         }
+
+    @staticmethod
+    def _conjugation_chemistry(t) -> str:
+        """Which conjugation chemistry a move implies, if any."""
+        text = f"{t.description} {t.rationale}".lower()
+        if any(k in text for k in ("acylat", "lipidat", "diacid", "fatty")):
+            return "acylation"
+        if any(k in text for k in ("maleimide", "thiol conjug")):
+            return "thiol"
+        return ""
 
     @staticmethod
     def _three_field_from(t) -> "ThreeFieldPrediction":

@@ -840,6 +840,8 @@ function renderTransformResults(d) {
   if (template) out.append(template);
   const contacts = renderClassifiedContacts(d.classified_contacts);
   if (contacts) out.append(contacts);
+  const feas = renderFeasibility(d.feasibility);
+  if (feas) out.append(feas);
   const b1 = renderClassB1(d.class_b1);
   if (b1) out.append(b1);
   const partners = renderPartnerProposals(d.partner_proposals);
@@ -944,6 +946,32 @@ const CONTACT_CLASS_GLYPH = {
 // The class B1 placement rule, when a receptor was named. Shown as a band
 // rather than prose: the restricted span is a fact about positions, and a
 // reader deciding where to put a lipid wants to see the range.
+// Synthesis and stability liabilities. Its own card because it answers a
+// different question from the rest of the output: not "is this a good molecule"
+// but "can this molecule be made as specified". A biophysics-only reading
+// misses the whole class.
+function renderFeasibility(flags) {
+  if (!flags || !flags.length) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, `Synthetic feasibility (${flags.length})`));
+  flags.forEach((f) => {
+    const box = el("div", `contact contact-${f.severity === "blocking" ? "essential" :
+                            f.severity === "high" ? "protective" : "scaffold"}`);
+    const head = el("div", "contact-head");
+    head.append(el("span", "n", f.code.replace(/_/g, " ")),
+                el("span", "tag", f.severity));
+    if (f.positions && f.positions.length) {
+      head.append(el("span", "tag", `pos ${f.positions.join(", ")}`));
+    }
+    box.append(head);
+    box.append(el("div", "r", f.description));
+    if (f.remedy) box.append(el("div", "footnote", `Remedy: ${f.remedy}`));
+    box.append(el("div", "eqrefs", f.basis));
+    card.append(box);
+  });
+  return card;
+}
+
 function renderClassB1(b1) {
   if (!b1 || !b1.applies) return null;
   const card = el("div", "card");

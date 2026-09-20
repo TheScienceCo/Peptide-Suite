@@ -174,6 +174,9 @@ class Transformation:
     # or bias may not be reported as an improvement, and in a ranked system
     # counting it toward rank is what reporting it would mean.
     discount_objectives: Set["Objective"] = field(default_factory=set)
+    # Synthesis liabilities this specific proposal introduces or runs into,
+    # as distinct from the ones the parent sequence already has.
+    feasibility_flags: List = field(default_factory=list)
 
     @property
     def display_position(self) -> Optional[int]:

@@ -732,6 +732,14 @@ def transform(req: TransformRequest) -> Dict:
         "structure_template": encode_structure_template(result["structure_template"]),
         "research_requests": result["research_requests"],
         "class_b1": result["class_b1"],
+        "feasibility": [
+            {
+                "code": f.code, "severity": f.severity.value, "positions": f.positions,
+                "description": f.description, "remedy": f.remedy, "basis": f.basis,
+                "summary": f.summary(),
+            }
+            for f in result["feasibility"]
+        ],
         "partner_proposals": [encode_partner_proposal(p)
                               for p in result["partner_proposals"]],
         "classified_contacts": [encode_classified_contact(c)
