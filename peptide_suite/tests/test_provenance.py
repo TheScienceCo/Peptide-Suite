@@ -152,11 +152,39 @@ class TestLicensingTable(unittest.TestCase):
 class TestStructureConfidenceGate(unittest.TestCase):
     """A feature on a failed structure is not a low-confidence number; it is not a number."""
 
+    # An explicit gate, so these test the gate's mechanics rather than whichever
+    # placeholder values the loaded policy pack happens to carry. The separate
+    # test below covers the fact that an unset gate reads from the policy.
+    GATE = StructureGate(min_plddt=70.0, max_pae=5.0, min_iptm=0.6, min_seed_count=3)
+
     def _predicted(self, **over):
         kwargs = dict(name="interface_contact", value=3.4, model="AF3",
-                      model_version="2024.1", plddt=88.0, pae=3.1, iptm=0.81, seed_count=5)
+                      model_version="2024.1", plddt=88.0, pae=3.1, iptm=0.81,
+                      seed_count=5, gate=self.GATE)
         kwargs.update(over)
         return Quantity.predicted_structure(**kwargs)
+
+    def test_an_unset_threshold_comes_from_the_policy(self):
+        """
+        These were hardcoded in the engine. The direction of each comparison is
+        engine; where the line falls is policy.
+        """
+        from peptide_suite import runtime
+        limits = StructureGate()._limits()
+        self.assertEqual(limits["min_plddt"], runtime.threshold("structure_gate.min_plddt"))
+        self.assertEqual(limits["min_iptm"], runtime.threshold("structure_gate.min_iptm"))
+        self.assertEqual(limits["min_seed_count"],
+                         runtime.int_threshold("structure_gate.min_seed_count"))
+
+    def test_a_gate_with_no_policy_loaded_raises(self):
+        from peptide_suite import runtime
+        saved = runtime._active
+        runtime.clear_active_policy()
+        try:
+            with self.assertRaises(runtime.PolicyNotLoaded):
+                StructureGate().evaluate({"plddt": 99, "pae": 1, "iptm": 0.99, "seed_count": 99})
+        finally:
+            runtime.set_active_policy(saved)
 
     def test_passing_gate_grants_capabilities(self):
         q = self._predicted()
@@ -184,7 +212,7 @@ class TestStructureConfidenceGate(unittest.TestCase):
     def test_insufficient_seeds_fail_the_gate(self):
         self.assertFalse(self._predicted(seed_count=1).gate.passed)
 
-    def test_gate_thresholds_are_configurable_but_default_conservative(self):
+    def test_gate_thresholds_are_configurable(self):
         strict = StructureGate(min_plddt=95.0, max_pae=1.0, min_iptm=0.95, min_seed_count=10)
         q = Quantity.predicted_structure(
             name="x", value=1.0, model="AF3", model_version="1", plddt=88.0,

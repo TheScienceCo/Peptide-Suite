@@ -20,6 +20,7 @@ from peptide_suite.core.preorganization import PreOrganizationAnalyzer
 from peptide_suite.core.transformations import (
     Direction, MoveType, Objective, ObjectiveDelta, Transformation,
 )
+from peptide_suite.core.structure_template import TemplateCandidate
 from peptide_suite.workflows.transform import TransformWorkflow
 
 GLP1 = "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG"
@@ -244,13 +245,35 @@ class TestNativeContext(unittest.TestCase):
 
 
 class TestTransformWorkflow(unittest.TestCase):
+    """
+    Run with a bound experimental structure supplied.
+
+    These tests are about the transformation contract, and conformational moves
+    only reach the output when a template admits them (Addendum 2 section 6c).
+    Without one they are blocked, which is covered in test_structure_template.py;
+    running them here without a template would test the refusal path by accident
+    and leave the contract itself unexercised.
+    """
+
+    TEMPLATE = TemplateCandidate(
+        identifier="6X18", is_experimental=True, is_complex=True,
+        same_peptide=True, same_receptor=True)
 
     def setUp(self):
-        self.result = TransformWorkflow().run(GLP1)
+        self.result = TransformWorkflow().run(GLP1, structure_candidates=[self.TEMPLATE])
 
     def test_emits_transformations_and_rejects_none(self):
         self.assertGreater(len(self.result["transformations"]), 0)
         self.assertEqual(self.result["rejected"], [])
+
+    def test_the_same_run_without_a_structure_blocks_the_conformational_moves(self):
+        """The contrast, in one place: the moves are fine, the template was not."""
+        with_structure = {t.move for t in self.result["transformations"]}
+        without = TransformWorkflow().run(GLP1)
+        emitted = {t.move for t in without["transformations"]}
+        self.assertIn(MoveType.BACKBONE_CONSTRAINT, with_structure)
+        self.assertNotIn(MoveType.BACKBONE_CONSTRAINT, emitted)
+        self.assertTrue(without["rejected"])
 
     def test_every_emitted_transformation_satisfies_the_contract(self):
         for t in self.result["transformations"]:

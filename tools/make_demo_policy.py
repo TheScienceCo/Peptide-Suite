@@ -94,6 +94,20 @@ def midpoint(lo: float, hi: float) -> float:
     return round((lo + hi) / 2.0, 6)
 
 
+def respect_semantic_type(value: float, semantic_type: str) -> float:
+    """
+    A placeholder still has to be a legal value of its own type.
+
+    A count of 50.5 seeds is not a conservative placeholder, it is a malformed
+    one, and the engine refuses it at read time rather than truncating. The
+    midpoint rule produces one for every count-typed threshold whose range has
+    odd width.
+    """
+    if semantic_type == "count":
+        return float(int(round(value)))
+    return value
+
+
 def group_placeholder(lo: float, hi: float, rank: int, size: int) -> float:
     """
     A placeholder for one member of an ordered group.
@@ -135,6 +149,7 @@ def build() -> dict:
                 value = midpoint(*spec.valid_range)
             else:
                 value = group_placeholder(*spec.valid_range, *rank)
+            value = respect_semantic_type(value, spec.semantic_type)
             basis = "placeholder_midpoint"
         thresholds[tid] = {
             "value": value,

@@ -182,6 +182,34 @@ def encode_electrostatics(profile) -> Dict:
     }
 
 
+def encode_structure_template(decision) -> Dict:
+    """
+    Which structure conformational claims rest on, or why none was admitted.
+
+    The rejections travel with the decision. A refusal that cannot say what it
+    looked at is indistinguishable from a system that never looked.
+    """
+    return {
+        "tier": decision.tier.value,
+        "tier_label": decision.tier.label,
+        "is_refusal": decision.is_refusal,
+        "permits_conformational_claims": decision.permits_conformational_claims,
+        "template": (
+            {
+                "identifier": decision.template.identifier,
+                "is_experimental": decision.template.is_experimental,
+                "same_peptide": decision.template.same_peptide,
+                "homolog_identity": decision.template.homolog_identity,
+                "source": decision.template.source,
+            }
+            if decision.template else None
+        ),
+        "considered_count": len(decision.considered),
+        "summary": decision.summary(),
+        "detail": decision.detail_lines(),
+    }
+
+
 def encode_recommendation(rec: SubstitutionRecommendation) -> Dict:
     return {
         "position": rec.position,
@@ -635,6 +663,7 @@ def transform(req: TransformRequest) -> Dict:
         "physics": encode_physics(result["physics"]),
         "native_context": encode_native_context(result["native_context"]),
         "electrostatics": encode_electrostatics(result["electrostatics"]),
+        "structure_template": encode_structure_template(result["structure_template"]),
         "transformations": [encode_transformation(t) for t in result["transformations"]],
         "rejected": result["rejected"],
         "weights": result["weights"],

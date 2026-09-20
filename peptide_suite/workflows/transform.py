@@ -18,6 +18,9 @@ from peptide_suite.core.epistemics import (
     Assumption, AssumptionKind, Claim, check_corpus_leakage,
 )
 from peptide_suite.core.electrostatics import compute_profile
+from peptide_suite.core.structure_template import (
+    TemplateCandidate, blocked_moves, select_template,
+)
 from peptide_suite.core.native_context import NativeContextAnalyzer
 from peptide_suite.core.physics_tiers import LiabilityClass, PhysicsStack
 from peptide_suite.core.preorganization import PreOrganizationAnalyzer
@@ -69,6 +72,7 @@ class TransformWorkflow:
         formulation_ph: float = 7.4,
         is_internal_fragment: bool = True,
         weights: Optional[Dict[Objective, float]] = None,
+        structure_candidates: Optional[List[TemplateCandidate]] = None,
     ) -> Dict:
         seq = sequence.upper()
         weights = weights or DEFAULT_WEIGHTS
@@ -90,6 +94,11 @@ class TransformWorkflow:
                 "before reading anything else into the charge profile."
             ))
 
+        # Which structure, if any, conformational claims may rest on. With no
+        # candidate the answer is tier 4: refuse.
+        template = select_template(structure_candidates)
+        blocked = blocked_moves(template)
+
         transformations: List[Transformation] = []
 
         # The excision-site check is evaluated before any other move, because
@@ -104,6 +113,21 @@ class TransformWorkflow:
 
         emitted, rejected = [], []
         for t in transformations:
+            # The refusal path is a block, not a caveat. A conformational
+            # proposal made without a conformation reads in the output exactly
+            # like one made with it, so it does not reach the output at all.
+            if t.move.value in blocked:
+                rejected.append({
+                    "description": t.description,
+                    "violations": [
+                        f"{t.move.value} is a conformation-dependent move and no admissible "
+                        f"structure template was available. {template.summary()}"
+                    ],
+                    "blocked_by": "structure_template_refusal",
+                })
+                logger.warning(f"Blocking '{t.description}': no admissible structure template")
+                continue
+
             problems = t.validate()
             if problems:
                 rejected.append({"description": t.description, "violations": problems})
@@ -119,6 +143,7 @@ class TransformWorkflow:
             "physics": physics,
             "native_context": native,
             "electrostatics": electrostatics,
+            "structure_template": template,
             "transformations": emitted,
             "rejected": rejected,
             "weights": {o.value: weights.get(o, 0.0) for o in Objective},

@@ -131,7 +131,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "dd8f61ec9c8509d3856b505cc148235ba0ea999c656831b7ce4ad57ee8c1b299"
+    "digest": "1e71d5ddd8471fa2bad7995a852846a5393355aa64a141c2717b9ae35ddf18d4"
   },
   "pack_kind": "demonstration",
   "policy_version": "1.0.0",
@@ -372,7 +372,7 @@
         1.0,
         100.0
       ],
-      "value": 50.5
+      "value": 50.0
     }
   },
   "weights": {

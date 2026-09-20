@@ -201,34 +201,61 @@ class StructureGate:
     Confidence thresholds a predicted complex must clear before any feature may
     be computed on it.
 
-    Thresholds are public (this is engine, not policy). They are deliberately
-    conservative: the cost of refusing a usable structure is a missing feature,
-    while the cost of accepting an unusable one is a confidently wrong number
-    with no downstream signal that anything went wrong.
+    The gate is deliberately conservative: the cost of refusing a usable
+    structure is a missing feature, while the cost of accepting an unusable one
+    is a confidently wrong number with no downstream signal that anything went
+    wrong. A missing metric fails, because an unreported pLDDT is not evidence
+    of a good structure.
+
+    Thresholds come from the policy. They were hardcoded here originally, on the
+    reasoning that a gate is engine rather than policy; that conflated the
+    direction of a comparison, which is engine, with where the line falls, which
+    is exactly the kind of tunable number the policy exists to hold.
     """
-    min_plddt: float = 70.0
-    max_pae: float = 5.0          # angstrom, interface-restricted
-    min_iptm: float = 0.6
-    min_seed_count: int = 3
+    min_plddt: Optional[float] = None
+    max_pae: Optional[float] = None       # angstrom, interface-restricted
+    min_iptm: Optional[float] = None
+    min_seed_count: Optional[int] = None
+
+    def _limits(self) -> Dict[str, float]:
+        """
+        Resolve unset thresholds from the policy.
+
+        The direction of each comparison is engine -- higher pLDDT is better,
+        lower PAE is better -- and stays here. Where the line falls is policy.
+        A caller may still pass explicit values to model a stricter gate.
+        """
+        from ..runtime import int_threshold, threshold
+        return {
+            "min_plddt": (self.min_plddt if self.min_plddt is not None
+                          else threshold("structure_gate.min_plddt")),
+            "max_pae": (self.max_pae if self.max_pae is not None
+                        else threshold("structure_gate.max_interface_pae")),
+            "min_iptm": (self.min_iptm if self.min_iptm is not None
+                         else threshold("structure_gate.min_iptm")),
+            "min_seed_count": (self.min_seed_count if self.min_seed_count is not None
+                               else int_threshold("structure_gate.min_seed_count")),
+        }
 
     def evaluate(self, metadata: Dict[str, Any]) -> "GateResult":
+        limits = self._limits()
         failures: List[str] = []
 
         plddt = metadata.get("plddt")
-        if plddt is None or plddt < self.min_plddt:
-            failures.append(f"pLDDT {plddt} < {self.min_plddt}")
+        if plddt is None or plddt < limits["min_plddt"]:
+            failures.append(f"pLDDT {plddt} < {limits['min_plddt']}")
 
         pae = metadata.get("pae")
-        if pae is None or pae > self.max_pae:
-            failures.append(f"interface PAE {pae} > {self.max_pae}")
+        if pae is None or pae > limits["max_pae"]:
+            failures.append(f"interface PAE {pae} > {limits['max_pae']}")
 
         iptm = metadata.get("iptm")
-        if iptm is None or iptm < self.min_iptm:
-            failures.append(f"ipTM {iptm} < {self.min_iptm}")
+        if iptm is None or iptm < limits["min_iptm"]:
+            failures.append(f"ipTM {iptm} < {limits['min_iptm']}")
 
         seeds = metadata.get("seed_count")
-        if seeds is None or seeds < self.min_seed_count:
-            failures.append(f"seed count {seeds} < {self.min_seed_count}")
+        if seeds is None or seeds < limits["min_seed_count"]:
+            failures.append(f"seed count {seeds} < {limits['min_seed_count']}")
 
         return GateResult(passed=not failures, failures=failures)
 

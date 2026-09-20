@@ -110,8 +110,11 @@ class TestPackIsVisiblyUnfitted(unittest.TestCase):
             if entry["basis"] != "placeholder_midpoint" or tid in ORDERED_MEMBERS:
                 continue
             lo, hi = THRESHOLDS[tid].valid_range
+            expected = (lo + hi) / 2.0
+            if THRESHOLDS[tid].semantic_type == "count":
+                expected = float(int(round(expected)))
             with self.subTest(threshold=tid):
-                self.assertAlmostEqual(entry["value"], (lo + hi) / 2.0, places=5)
+                self.assertAlmostEqual(entry["value"], expected, places=5)
 
     def test_ordered_threshold_bands_are_not_collapsed(self):
         """
@@ -126,6 +129,33 @@ class TestPackIsVisiblyUnfitted(unittest.TestCase):
                     zip(group, values), zip(group[1:], values[1:])):
                 with self.subTest(pair=(upper_id, lower_id)):
                     self.assertGreater(upper, lower)
+
+    def test_count_thresholds_are_whole_numbers(self):
+        """
+        A placeholder still has to be a legal value of its own type. The
+        midpoint rule produced 50.5 seeds for structure_gate.min_seed_count,
+        which the engine refuses at read time rather than truncating -- caught
+        the first time a module actually read that threshold.
+        """
+        for tid, entry in load_document()["thresholds"].items():
+            if THRESHOLDS[tid].semantic_type != "count":
+                continue
+            with self.subTest(threshold=tid):
+                self.assertEqual(entry["value"], int(entry["value"]),
+                                 f"{tid} is a count but the pack supplies {entry['value']}")
+
+    def test_every_count_threshold_is_readable_as_an_int(self):
+        """The end-to-end version: int_threshold must not raise on any of them."""
+        from peptide_suite import runtime
+        saved = runtime._active
+        runtime.set_active_policy(load_policy(PACK))
+        try:
+            for tid, spec in THRESHOLDS.items():
+                if spec.semantic_type == "count":
+                    with self.subTest(threshold=tid):
+                        runtime.int_threshold(tid)
+        finally:
+            runtime.set_active_policy(saved)
 
     def test_every_threshold_declares_a_basis(self):
         for tid, entry in load_document()["thresholds"].items():

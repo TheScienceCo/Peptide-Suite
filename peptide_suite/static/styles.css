@@ -1065,3 +1065,14 @@ table.titration td.sign {
   width: 3ch;
   color: var(--text-secondary);
 }
+
+/* ---- structure template ladder ---- */
+
+/* The reached tier is marked by the filled glyph and by weight, not by colour
+   alone: on tier 4 the whole point is that the reader notices, and a hue is the
+   first thing to go. */
+.tier-row.reached { font-weight: 600; color: var(--text-primary); }
+.tier-row.reached .glyph { color: var(--series-1); }
+.tier-row .glyph { margin-right: 8px; }
+
+.blocked-list { margin-top: 12px; }

@@ -836,6 +836,8 @@ function renderTransformResults(d) {
   out.append(renderChargeCurve(p));
   const titration = renderTitration(d.electrostatics);
   if (titration) out.append(titration);
+  const template = renderStructureTemplate(d.structure_template, d.rejected);
+  if (template) out.append(template);
 
   // --- liabilities
   if (p.liabilities.length) {
@@ -907,6 +909,55 @@ function renderTransformResults(d) {
 // "Changes state" is marked with a glyph and a word, never by colour alone --
 // the switchable and static rows have to stay distinguishable to a reader who
 // cannot separate the two hues.
+// Which structure conformational claims rest on, or why none was admitted.
+// Rendered as a card rather than a footnote because a refusal is a result: it
+// changes which proposals exist below, and a reader who does not see it will
+// read a shorter list as "nothing else applies".
+function renderStructureTemplate(st, rejected) {
+  if (!st) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, "Structure template"));
+
+  const ladder = el("div", "tier-ladder");
+  const TIERS = [
+    [1, "Experimental structure of this peptide bound to this receptor"],
+    [2, "Experimental structure of a close homolog bound to the same receptor"],
+    [3, "Predicted complex, confidence gate passed"],
+    [4, "Refuse \u2014 block all conformation-dependent proposals"],
+  ];
+  TIERS.forEach(([n, label]) => {
+    const row = el("div", `tier-row${n === st.tier ? " reached" : ""}`);
+    row.append(
+      el("span", "glyph", n === st.tier ? "\u25C6" : "\u25CB"),
+      el("span", "tier-n", `Tier ${n}`),
+      el("span", null, label)
+    );
+    ladder.append(row);
+  });
+  card.append(ladder);
+  card.append(el("div", "kv", st.summary));
+
+  (st.detail || []).forEach((d) => card.append(notice(d, "info", "i")));
+
+  const blocked = (rejected || []).filter(
+    (r) => r.blocked_by === "structure_template_refusal");
+  if (blocked.length) {
+    const box = el("div", "blocked-list");
+    box.append(el("div", "footnote",
+      `${blocked.length} conformation-dependent proposal(s) were generated and then ` +
+      `blocked. They are listed so the absence is visible rather than silent.`));
+    blocked.forEach((b) => {
+      const row = el("div", "celltype");
+      const h = el("div");
+      h.append(el("span", "n", b.description));
+      row.append(h, el("div", "r", "blocked \u2014 no admissible structure template"));
+      box.append(row);
+    });
+    card.append(box);
+  }
+  return card;
+}
+
 function renderTitration(e) {
   if (!e) return null;
   const card = el("div", "card");
