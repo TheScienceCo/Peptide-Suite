@@ -329,6 +329,9 @@ class TransformRequest(BaseModel):
     # reference set, because the native-contact rules key on the peptide's
     # identity and a caller should not have to know its name to get them.
     peptide_name: str = ""
+    # Optional. Class B1 placement rules need to know which receptor is meant;
+    # the reporting rule applies with or without it.
+    receptor: str = ""
 
 
 def _inferred_name(sequence: str) -> str:
@@ -715,6 +718,7 @@ def transform(req: TransformRequest) -> Dict:
             formulation_ph=req.formulation_ph,
             is_internal_fragment=req.is_internal_fragment,
             peptide_name=req.peptide_name or _inferred_name(sequence),
+            receptor=req.receptor,
         )
     except Exception as e:
         logger.exception("Transform failed")
@@ -727,6 +731,7 @@ def transform(req: TransformRequest) -> Dict:
         "electrostatics": encode_electrostatics(result["electrostatics"]),
         "structure_template": encode_structure_template(result["structure_template"]),
         "research_requests": result["research_requests"],
+        "class_b1": result["class_b1"],
         "partner_proposals": [encode_partner_proposal(p)
                               for p in result["partner_proposals"]],
         "classified_contacts": [encode_classified_contact(c)

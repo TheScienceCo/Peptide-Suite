@@ -840,6 +840,8 @@ function renderTransformResults(d) {
   if (template) out.append(template);
   const contacts = renderClassifiedContacts(d.classified_contacts);
   if (contacts) out.append(contacts);
+  const b1 = renderClassB1(d.class_b1);
+  if (b1) out.append(b1);
   const partners = renderPartnerProposals(d.partner_proposals);
   if (partners) out.append(partners);
   const requests = renderResearchRequests(d.research_requests, d.registry_is_empty);
@@ -939,6 +941,24 @@ const CONTACT_CLASS_GLYPH = {
 // Co-agent proposals. Their own section, never mixed into the ranked list: a
 // partner proposal beside single-peptide ones reads as a comparable
 // alternative, and it is not — it changes what the product is.
+// The class B1 placement rule, when a receptor was named. Shown as a band
+// rather than prose: the restricted span is a fact about positions, and a
+// reader deciding where to put a lipid wants to see the range.
+function renderClassB1(b1) {
+  if (!b1 || !b1.applies) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, "Class B1 placement"));
+  card.append(el("div", "kv", b1.rule));
+  const span = el("div", "kv");
+  span.textContent =
+    `Restricted: positions ${b1.restricted_positions[0]}\u2013` +
+    `${b1.restricted_positions[b1.restricted_positions.length - 1]}. ` +
+    `Conjugation permitted from position ${b1.permitted_positions[0]} onward.`;
+  card.append(span);
+  card.append(el("div", "footnote", b1.worked_example));
+  return card;
+}
+
 function renderPartnerProposals(proposals) {
   if (!proposals || !proposals.length) return null;
   const card = el("div", "card");

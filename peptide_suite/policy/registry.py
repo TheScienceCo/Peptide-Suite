@@ -75,6 +75,8 @@ THRESHOLDS: Dict[str, KeySpec] = {
     "chemistry.interstitial_ph":                  KeySpec("ph", "pH", (0.0, 14.0)),
     "chemistry.endosomal_ph":                     KeySpec("ph", "pH", (0.0, 14.0)),
     "chemistry.burial_pka_shift":                 KeySpec("ph", "pH units", (-5.0, 5.0)),
+
+    "class_b1.restricted_zone_residues":          KeySpec("count", "residues", (1.0, 30.0)),
 }
 
 

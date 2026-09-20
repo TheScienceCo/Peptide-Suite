@@ -131,7 +131,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "1e71d5ddd8471fa2bad7995a852846a5393355aa64a141c2717b9ae35ddf18d4"
+    "digest": "8b6a9f8183bf8319272ad3301e6b618a53c2a4cea7d088305a5a7bffee1be8aa"
   },
   "pack_kind": "demonstration",
   "policy_version": "1.0.0",
@@ -183,6 +183,16 @@
         14.0
       ],
       "value": 7.4
+    },
+    "class_b1.restricted_zone_residues": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "residues",
+      "valid_range": [
+        1.0,
+        30.0
+      ],
+      "value": 7.0
     },
     "confidence.high_cutoff": {
       "basis": "placeholder_midpoint",

@@ -21,6 +21,10 @@ from peptide_suite.core.electrostatics import compute_profile
 from peptide_suite.core.contact_classifier import (
     ContactClass, EssentialSubclass, rule_proposal,
 )
+from peptide_suite.core.class_b1 import (
+    Effect as B1Effect, ThreeFieldPrediction, conjugation_site_guidance,
+    evaluate as evaluate_b1,
+)
 from peptide_suite.core.partner_module import (
     PartnerCases, PartnerMode, PartnerProposal,
 )
@@ -81,6 +85,7 @@ class TransformWorkflow:
         weights: Optional[Dict[Objective, float]] = None,
         structure_candidates: Optional[List[TemplateCandidate]] = None,
         peptide_name: str = "",
+        receptor: str = "",
     ) -> Dict:
         seq = sequence.upper()
         weights = weights or DEFAULT_WEIGHTS
@@ -163,6 +168,28 @@ class TransformWorkflow:
                     f"({ruling.contact.summary() if ruling.contact else 'unresolved contact'})")
                 continue
 
+            # Class B1 placement and the three-field reporting rule. Checked
+            # before parameterization because an affinity-only claim inside the
+            # restricted zone is wrong regardless of whether the chemistry it
+            # proposes could be parameterized.
+            zone = evaluate_b1(t.description, t.display_position, receptor,
+                               self._three_field_from(t))
+            if not zone.permits_emission:
+                rejected.append({
+                    "description": t.description,
+                    "violations": zone.violations,
+                    "blocked_by": "class_b1_restricted_zone",
+                    "prediction": zone.prediction.summary(),
+                })
+                logger.warning(f"Blocking '{t.description}': class B1 reporting rule")
+                continue
+            t.notes.extend(zone.notes)
+            if zone.affinity_claim_discounted:
+                # Counting the affinity gain toward rank is what "reporting it
+                # as an improvement" means in a ranked system, so it is removed
+                # from the scalar while staying visible in the vector.
+                t.discount_objectives = {Objective.POTENCY}
+
             ncaa = gate_proposal(f"{t.description} {t.rationale}")
             structure_also_blocks = t.move.value in blocked
             if ncaa:
@@ -234,6 +261,8 @@ class TransformWorkflow:
             # comparable alternative, and it is not -- it changes what the
             # product is.
             "partner_proposals": partner_proposals,
+            "class_b1": conjugation_site_guidance(seq, receptor) if receptor else
+                        {"applies": False, "reason": "No receptor was specified."},
             "scaffold_opportunities": [
                 c for c in native.classified_contacts
                 if c.contact_class is ContactClass.SCAFFOLD
@@ -256,6 +285,35 @@ class TransformWorkflow:
                 "'better overall'. Compare the vectors, and treat coverage as part of the score."
             ),
         }
+
+    @staticmethod
+    def _three_field_from(t) -> "ThreeFieldPrediction":
+        """
+        Read the three class B1 axes off a transformation's objective vector.
+
+        Potency stands in for affinity and functional selectivity for bias,
+        which are the two axes this system already scores. Efficacy has no
+        objective of its own here, so it is UNKNOWN -- and that is the honest
+        value rather than a gap to paper over, since UNKNOWN is what the
+        section says an unexamined axis should read.
+        """
+        def axis(objective):
+            delta = t.delta(objective)
+            if delta is None or not delta.assessed:
+                return B1Effect.UNKNOWN
+            return {
+                Direction.IMPROVES: B1Effect.IMPROVES,
+                Direction.DEGRADES: B1Effect.DEGRADES,
+            }.get(delta.direction, B1Effect.NEUTRAL)
+
+        return ThreeFieldPrediction(
+            affinity=axis(Objective.POTENCY),
+            efficacy=B1Effect.UNKNOWN,
+            bias=axis(Objective.FUNCTIONAL_SELECTIVITY),
+            affinity_basis="objective vector: potency",
+            bias_basis="objective vector: functional selectivity",
+            efficacy_basis="no efficacy objective is computed by this build",
+        )
 
     # ---- move generators -------------------------------------------------
 

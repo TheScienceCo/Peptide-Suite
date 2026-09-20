@@ -13,7 +13,7 @@ never instead of it, and always with its weights stated.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from .epistemics import Assumption, Claim, ClaimType, LeakageFlag
 
@@ -168,6 +168,12 @@ class Transformation:
     leakage_flag: Optional[LeakageFlag] = None
     physics_tier_reached: int = 0
     notes: List[str] = field(default_factory=list)
+    # Objectives whose assessed value may not contribute to the scalar rank,
+    # while remaining visible in the vector. Set by the class B1 reporting rule
+    # (Addendum 2 section 9): an affinity gain with nothing reported on efficacy
+    # or bias may not be reported as an improvement, and in a ranked system
+    # counting it toward rank is what reporting it would mean.
+    discount_objectives: Set["Objective"] = field(default_factory=set)
 
     @property
     def display_position(self) -> Optional[int]:
@@ -197,8 +203,12 @@ class Transformation:
         total_weight = sum(weights.get(o, 0.0) for o in Objective)
         applied, accumulated = 0.0, 0.0
 
+        discounted = []
         for delta in self.objective_deltas:
             if not delta.assessed:
+                continue
+            if delta.objective in self.discount_objectives:
+                discounted.append(delta.objective.value)
                 continue
             w = weights.get(delta.objective, 0.0)
             applied += w
@@ -208,6 +218,7 @@ class Transformation:
         coverage = applied / total_weight if total_weight else 0.0
 
         return {
+            "discounted_objectives": discounted,
             "score": round(score, 4),
             "coverage": round(coverage, 4),
             "weights": {o.value: weights.get(o, 0.0) for o in Objective},

@@ -74,6 +74,8 @@ DERIVED = {
     # Specified directly by the addenda.
     "parameter_budget.measured_ratio_divisor": (
         10.0, "Addendum 2: free parameters may not exceed N_measured / 10"),
+    "class_b1.restricted_zone_residues": (
+        7.0, "Addendum 2 section 9: the N-terminal ~7 residues are the restricted zone"),
 }
 
 
