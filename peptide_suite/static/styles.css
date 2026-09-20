@@ -1102,3 +1102,33 @@ table.titration td.sign {
   color: var(--text-secondary);
 }
 .request-res .r { color: var(--text-secondary); margin: 4px 0; }
+
+/* ---- native contacts ---- */
+
+.contact {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--surface-1);
+  font-size: 13px;
+}
+
+/* The class is carried by the glyph and the tag text first; the border colour
+   is a third signal, so the distinction survives without it. */
+.contact-essential  { border-left-color: var(--status-critical); }
+.contact-protective { border-left-color: var(--status-warning); }
+.contact-scaffold   { border-left-color: var(--series-1); }
+.contact-unresolved { border-left-color: var(--text-muted); }
+
+.contact-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.contact-head .glyph { color: var(--text-secondary); }
+.contact-head .n { font-weight: 600; color: var(--text-primary); }
+.contact-head .tag {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.contact .r { color: var(--text-secondary); margin: 6px 0; }

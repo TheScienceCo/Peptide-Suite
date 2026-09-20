@@ -182,6 +182,33 @@ def encode_electrostatics(profile) -> Dict:
     }
 
 
+def encode_classified_contact(c) -> Dict:
+    """
+    One classified native contact, with the evidence behind it.
+
+    Citation and confidence travel with the classification rather than being
+    available on request: a frozen residue footprint that cannot say what froze
+    it is an assertion.
+    """
+    return {
+        "contact": c.contact,
+        "class": c.contact_class.value,
+        "class_description": c.contact_class.description,
+        "subclass": c.subclass.value if c.subclass else None,
+        "also_classified": c.also_classified.value if c.also_classified else None,
+        "residues": c.residues,
+        "claim": c.claim,
+        "citation": c.citation,
+        "citation_precision": c.citation_precision,
+        "independently_verified": c.independently_verified,
+        "confidence": c.confidence,
+        "verification_path": c.verification_path,
+        "magnitude_source": c.magnitude_source,
+        "notes": c.notes,
+        "summary": c.summary(),
+    }
+
+
 def encode_structure_template(decision) -> Dict:
     """
     Which structure conformational claims rest on, or why none was admitted.
@@ -274,6 +301,16 @@ class TransformRequest(BaseModel):
     sequence: str
     formulation_ph: float = Field(7.4, ge=0.0, le=14.0)
     is_internal_fragment: bool = True
+    # Optional. When absent the sequence is identified against the local
+    # reference set, because the native-contact rules key on the peptide's
+    # identity and a caller should not have to know its name to get them.
+    peptide_name: str = ""
+
+
+def _inferred_name(sequence: str) -> str:
+    """The peptide's name from identification, or empty if it was not recognised."""
+    inference = _inferencer.infer(sequence)
+    return inference.matched_name if inference.is_identification else ""
 
 
 # ---- endpoints -------------------------------------------------------------
@@ -653,6 +690,7 @@ def transform(req: TransformRequest) -> Dict:
             sequence,
             formulation_ph=req.formulation_ph,
             is_internal_fragment=req.is_internal_fragment,
+            peptide_name=req.peptide_name or _inferred_name(sequence),
         )
     except Exception as e:
         logger.exception("Transform failed")
@@ -665,6 +703,10 @@ def transform(req: TransformRequest) -> Dict:
         "electrostatics": encode_electrostatics(result["electrostatics"]),
         "structure_template": encode_structure_template(result["structure_template"]),
         "research_requests": result["research_requests"],
+        "classified_contacts": [encode_classified_contact(c)
+                                for c in result["classified_contacts"]],
+        "scaffold_opportunities": [encode_classified_contact(c)
+                                   for c in result["scaffold_opportunities"]],
         "registry_is_empty": result["registry_is_empty"],
         "transformations": [encode_transformation(t) for t in result["transformations"]],
         "rejected": result["rejected"],

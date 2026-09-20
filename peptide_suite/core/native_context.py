@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
+from .contact_classifier import GoldenCases
 from .epistemics import Assumption, AssumptionKind, Claim
 
 
@@ -118,6 +119,10 @@ class NativeContextResult:
     ptms: List[NativeContact] = field(default_factory=list)
     partners: List[PartnerRecommendation] = field(default_factory=list)
     excision: Optional[ExcisionSiteFinding] = None
+    # Contacts classified under the section 7 taxonomy, with citations. Kept
+    # separate from `contacts` because those are structural enumerations and
+    # these are literature-asserted classifications with design consequences.
+    classified_contacts: List = field(default_factory=list)
     assumptions: List[Assumption] = field(default_factory=list)
     data_notes: List[str] = field(default_factory=list)
 
@@ -291,7 +296,8 @@ class NativeContextAnalyzer:
             ),
         )
 
-    def analyze(self, sequence: str, is_internal_fragment: bool = True) -> NativeContextResult:
+    def analyze(self, sequence: str, is_internal_fragment: bool = True,
+                peptide_name: str = "") -> NativeContextResult:
         """
         Run the native-context analysis.
 
@@ -300,8 +306,16 @@ class NativeContextAnalyzer:
         be looked up, rather than an empty contact list that would read as
         "no contacts found".
         """
+        # Golden-case contacts for this peptide, if it is one the seed set covers.
+        # These come from the literature rather than from a structure lookup, so
+        # they arrive even though PDB access is unavailable -- which is the
+        # point: the contacts this module exists to catch are the ones that are
+        # invisible in a sequence and would otherwise be omitted entirely.
+        classified = GoldenCases.for_peptide(peptide_name) if peptide_name else []
+
         result = NativeContextResult(
             peptide=sequence,
+            classified_contacts=classified,
             retrieval_status=(
                 "Parent protein NOT retrieved: UniProt search is not wired up in this build. "
                 "Whether this peptide is a fragment of a larger protein, and of which, has "

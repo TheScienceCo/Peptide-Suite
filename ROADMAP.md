@@ -26,7 +26,7 @@ Build order from the addendum's section 13:
 - [x] **6b** Electrostatics — per-residue pKa, multi-pH protonation
 - [x] **6c** Structure template hierarchy + confidence gates + refusal path
 - [x] **6d** Parameterized-residue registry (empty, QM pipeline stubbed)
-- [ ] **6e** Parent-molecule context + contact classifier + golden cases
+- [x] **6e** Parent-molecule context + contact classifier + golden cases
       (insulin, ghrelin, CCK, drosocin)
 - [ ] **6f** Partner-peptide module + RAMP schema requirement
 - [ ] **6g** Class B1 restricted-zone rule + affinity/efficacy/bias three-field output

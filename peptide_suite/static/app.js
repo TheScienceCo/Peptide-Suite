@@ -838,6 +838,8 @@ function renderTransformResults(d) {
   if (titration) out.append(titration);
   const template = renderStructureTemplate(d.structure_template, d.rejected);
   if (template) out.append(template);
+  const contacts = renderClassifiedContacts(d.classified_contacts);
+  if (contacts) out.append(contacts);
   const requests = renderResearchRequests(d.research_requests, d.registry_is_empty);
   if (requests) out.append(requests);
 
@@ -920,6 +922,60 @@ function renderTransformResults(d) {
 // low-ranked entries in the main list: a research request with a rank beside it
 // reads as a recommendation with a caveat, which is the failure this gate
 // exists to prevent.
+// Contacts the peptide makes in its native context, and what each one permits.
+// Rendered above the proposals because the class determines which proposals are
+// allowed to exist: an ESSENTIAL footprint is frozen, and a reader who meets
+// that rule only as a rejection further down has already wondered why an
+// obvious move is missing.
+const CONTACT_CLASS_GLYPH = {
+  SCAFFOLD: "\u25C7",     // removable by design
+  PROTECTIVE: "\u25D1",   // replace, do not remove
+  ESSENTIAL: "\u25C6",    // frozen
+  UNRESOLVED: "\u25CB",   // unverified
+};
+
+function renderClassifiedContacts(contacts) {
+  if (!contacts || !contacts.length) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, `Native contacts (${contacts.length})`));
+  card.append(el("div", "kv",
+    "Contacts this peptide makes in its native setting. The class decides what a " +
+    "proposal may do: SCAFFOLD is a disruption target, PROTECTIVE must be replaced " +
+    "rather than removed, ESSENTIAL is frozen."));
+
+  contacts.forEach((c) => {
+    const box = el("div", `contact contact-${c.class.toLowerCase()}`);
+    const head = el("div", "contact-head");
+    head.append(
+      el("span", "glyph", CONTACT_CLASS_GLYPH[c.class] || "\u25CB"),
+      el("span", "n", c.contact),
+      el("span", "tag", c.subclass ? `${c.class} / ${c.subclass}` : c.class)
+    );
+    if (c.also_classified) head.append(el("span", "tag", `also ${c.also_classified}`));
+    box.append(head);
+
+    if (c.claim) box.append(el("div", "r", c.claim));
+    box.append(el("div", "footnote", c.class_description));
+    if (c.verification_path) {
+      box.append(el("div", "footnote", `Verification: ${c.verification_path}`));
+    }
+
+    // Evidence sits with the classification, not behind a click. A frozen
+    // footprint that cannot say what froze it is an assertion.
+    const evidence = el("div", "eqrefs");
+    evidence.textContent =
+      `${c.citation} (${c.citation_precision}) \u00b7 confidence ${c.confidence} \u00b7 ` +
+      (c.independently_verified ? "verified here" : "not independently verified here");
+    box.append(evidence);
+    if (c.magnitude_source) {
+      box.append(el("div", "footnote", `Magnitude from: ${c.magnitude_source}`));
+    }
+    (c.notes || []).forEach((n) => box.append(el("div", "footnote", n)));
+    card.append(box);
+  });
+  return card;
+}
+
 function renderResearchRequests(requests, registryEmpty) {
   if (!requests || !requests.length) return null;
   const card = el("div", "card");

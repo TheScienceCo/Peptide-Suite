@@ -18,6 +18,7 @@ from peptide_suite.core.epistemics import (
     Assumption, AssumptionKind, Claim, check_corpus_leakage,
 )
 from peptide_suite.core.electrostatics import compute_profile
+from peptide_suite.core.contact_classifier import ContactClass, rule_proposal
 from peptide_suite.core.ncaa_registry import NCAARegistry, gate_proposal
 from peptide_suite.core.structure_template import (
     TemplateCandidate, blocked_moves, select_template,
@@ -74,12 +75,14 @@ class TransformWorkflow:
         is_internal_fragment: bool = True,
         weights: Optional[Dict[Objective, float]] = None,
         structure_candidates: Optional[List[TemplateCandidate]] = None,
+        peptide_name: str = "",
     ) -> Dict:
         seq = sequence.upper()
         weights = weights or DEFAULT_WEIGHTS
 
         physics = self.physics.run(seq, ph=formulation_ph)
-        native = self.native.analyze(seq, is_internal_fragment=is_internal_fragment)
+        native = self.native.analyze(seq, is_internal_fragment=is_internal_fragment,
+                                     peptide_name=peptide_name)
         # Titrated across the compartments the policy names, rather than
         # collapsed to a pI: which residue carries the charge, and whether that
         # changes between compartments, is the part a design decision turns on.
@@ -118,6 +121,25 @@ class TransformWorkflow:
             # A proposal can have a perfect bound structure and still be
             # unrankable because its chemistry has no force-field parameters, and
             # the two refusals have different remedies.
+            # The native-contact rules. Checked before the parameterization gate
+            # because an ESSENTIAL footprint is frozen regardless of whether the
+            # chemistry proposed for it could be parameterized: parameterizing a
+            # residue that must not change is work spent to reach a refusal.
+            ruling = rule_proposal(t, native.classified_contacts)
+            if ruling is not None and not ruling.permits_emission:
+                rejected.append({
+                    "description": t.description,
+                    "violations": [ruling.reason]
+                    + ([ruling.required_substitute] if ruling.required_substitute else []),
+                    "blocked_by": f"native_contact_{ruling.verdict.value}",
+                    "contact": ruling.contact.summary() if ruling.contact else "",
+                    "citation": ruling.contact.citation if ruling.contact else "",
+                })
+                logger.warning(
+                    f"Blocking '{t.description}': {ruling.verdict.value} "
+                    f"({ruling.contact.summary() if ruling.contact else 'unresolved contact'})")
+                continue
+
             ncaa = gate_proposal(f"{t.description} {t.rationale}")
             structure_also_blocks = t.move.value in blocked
             if ncaa:
@@ -183,6 +205,11 @@ class TransformWorkflow:
             "electrostatics": electrostatics,
             "structure_template": template,
             "research_requests": research_requests,
+            "classified_contacts": native.classified_contacts,
+            "scaffold_opportunities": [
+                c for c in native.classified_contacts
+                if c.contact_class is ContactClass.SCAFFOLD
+            ],
             "registry_is_empty": NCAARegistry.is_empty(),
             "transformations": emitted,
             "rejected": rejected,
