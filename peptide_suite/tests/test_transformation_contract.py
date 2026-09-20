@@ -266,14 +266,20 @@ class TestTransformWorkflow(unittest.TestCase):
         self.assertGreater(len(self.result["transformations"]), 0)
         self.assertEqual(self.result["rejected"], [])
 
-    def test_the_same_run_without_a_structure_blocks_the_conformational_moves(self):
-        """The contrast, in one place: the moves are fine, the template was not."""
-        with_structure = {t.move for t in self.result["transformations"]}
+    def test_a_supplied_structure_changes_only_the_structure_refusal(self):
+        """
+        The contrast, in one place. Supplying a structure clears the structure
+        gate; it does not make unparameterized chemistry rankable, because the
+        two gates answer different questions.
+        """
         without = TransformWorkflow().run(GLP1)
-        emitted = {t.move for t in without["transformations"]}
-        self.assertIn(MoveType.BACKBONE_CONSTRAINT, with_structure)
-        self.assertNotIn(MoveType.BACKBONE_CONSTRAINT, emitted)
-        self.assertTrue(without["rejected"])
+        flagged = lambda r: {x["proposal"] for x in r["research_requests"]
+                             if x["structure_template_also_blocks"]}
+        self.assertTrue(flagged(without))
+        self.assertFalse(flagged(self.result))
+        # The chemistry is unchanged, so the same proposals stay requests.
+        self.assertEqual({r["proposal"] for r in without["research_requests"]},
+                         {r["proposal"] for r in self.result["research_requests"]})
 
     def test_every_emitted_transformation_satisfies_the_contract(self):
         for t in self.result["transformations"]:
@@ -283,16 +289,33 @@ class TestTransformWorkflow(unittest.TestCase):
         for t in self.result["transformations"]:
             self.assertIsInstance(t.move, MoveType)
 
+    # Lipidation and the Aib move are generated and then routed to research
+    # requests: their chemistry has no force-field parameters and the registry
+    # is empty (Addendum 2 step 6d). The contract they have to satisfy is
+    # checked on the generator's output rather than on the ranked list, because
+    # the ranked list is now the wrong place to look for them.
+
+    def _generated(self):
+        """Every transformation the generators produced, before either gate."""
+        workflow = TransformWorkflow()
+        physics = workflow.physics.run(GLP1, ph=7.4)
+        return (workflow._conformational_moves(GLP1, physics)
+                + workflow._exposure_moves(GLP1))
+
     def test_lipidation_is_labelled_as_a_trade(self):
-        lipid = [t for t in self.result["transformations"] if t.move is MoveType.LIPIDATION]
+        lipid = [t for t in self._generated() if t.move is MoveType.LIPIDATION]
         self.assertTrue(lipid)
         self.assertIn("TRADE", lipid[0].tradeoff_label)
 
-    def test_aib_move_carries_preorganization_and_leakage_flag(self):
-        aib = [t for t in self.result["transformations"] if "Aib" in t.description]
+    def test_aib_move_carries_preorganization(self):
+        aib = [t for t in self._generated() if "Aib" in t.description]
         self.assertTrue(aib)
         self.assertIsNotNone(aib[0].preorganization)
-        self.assertIsNotNone(aib[0].leakage_flag)
+
+    def test_aib_and_lipidation_are_research_requests_not_recommendations(self):
+        proposals = " ".join(r["proposal"] for r in self.result["research_requests"])
+        self.assertIn("Aib", proposals)
+        self.assertIn("diacid", proposals)
 
     def test_weights_are_reported_with_the_output(self):
         self.assertEqual(len(self.result["weights"]), len(Objective))

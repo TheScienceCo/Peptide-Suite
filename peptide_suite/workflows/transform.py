@@ -18,6 +18,7 @@ from peptide_suite.core.epistemics import (
     Assumption, AssumptionKind, Claim, check_corpus_leakage,
 )
 from peptide_suite.core.electrostatics import compute_profile
+from peptide_suite.core.ncaa_registry import NCAARegistry, gate_proposal
 from peptide_suite.core.structure_template import (
     TemplateCandidate, blocked_moves, select_template,
 )
@@ -111,12 +112,49 @@ class TransformWorkflow:
         transformations.extend(self._conformational_moves(seq, physics))
         transformations.extend(self._exposure_moves(seq))
 
-        emitted, rejected = [], []
+        emitted, rejected, research_requests = [], [], []
         for t in transformations:
+            # The parameterization gate, independent of the structure gate above.
+            # A proposal can have a perfect bound structure and still be
+            # unrankable because its chemistry has no force-field parameters, and
+            # the two refusals have different remedies.
+            ncaa = gate_proposal(f"{t.description} {t.rationale}")
+            structure_also_blocks = t.move.value in blocked
+            if ncaa:
+                # Both gates are evaluated and both are reported. Whichever
+                # fired first, suppressing the other would understate what the
+                # proposal needs: parameterization and a structure are separate
+                # pieces of work, and a reader told only about one would think
+                # the proposal was one step from rankable.
+                research_requests.append({
+                    "proposal": t.description,
+                    "move": t.move.value,
+                    "position": t.display_position,
+                    "structure_template_also_blocks": structure_also_blocks,
+                    "structure_note": (
+                        template.summary() if structure_also_blocks else ""
+                    ),
+                    "residues": [
+                        {
+                            "residue": r.residue,
+                            "status": r.status.value,
+                            "rationale": r.rationale,
+                            "cost_summary": r.cost.summary(),
+                            "stages_outstanding": [st.value for st in r.cost.stages_outstanding],
+                            "notes": r.cost.notes,
+                        }
+                        for r in ncaa
+                    ],
+                })
+                logger.info(
+                    f"'{t.description}' routed to a research request: "
+                    f"{', '.join(r.residue for r in ncaa)} unparameterized")
+                continue
+
             # The refusal path is a block, not a caveat. A conformational
             # proposal made without a conformation reads in the output exactly
             # like one made with it, so it does not reach the output at all.
-            if t.move.value in blocked:
+            if structure_also_blocks:
                 rejected.append({
                     "description": t.description,
                     "violations": [
@@ -144,6 +182,8 @@ class TransformWorkflow:
             "native_context": native,
             "electrostatics": electrostatics,
             "structure_template": template,
+            "research_requests": research_requests,
+            "registry_is_empty": NCAARegistry.is_empty(),
             "transformations": emitted,
             "rejected": rejected,
             "weights": {o.value: weights.get(o, 0.0) for o in Objective},

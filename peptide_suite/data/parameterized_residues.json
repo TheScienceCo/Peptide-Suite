@@ -1,0 +1,36 @@
+{
+  "_about": [
+    "The parameterized-residue registry.  [Addendum 2 section 6, step 6d]",
+    "",
+    "THIS REGISTRY IS EMPTY, AND THAT IS ITS CURRENT CORRECT STATE.",
+    "",
+    "A residue appears here only after the full pipeline has been run for it and",
+    "the resulting parameters have been validated. No parameterization has been",
+    "performed by this project, so nothing is listed. The consequence is that every",
+    "proposal involving non-canonical chemistry is emitted as a research request",
+    "rather than as a recommendation -- which is the specified behaviour, not a gap",
+    "to be worked around.",
+    "",
+    "Adding an entry is a claim that the work was done. Do not add one to make a",
+    "proposal rank."
+  ],
+
+  "schema_version": "1.0.0",
+
+  "_entry_schema": {
+    "residue_code": "as it appears in the catalogue",
+    "force_field": "GAFF2 | OpenFF | ff19SB-compatible",
+    "stages_completed": "ordered subset of the pipeline stages, all required",
+    "geometry_method": "level of theory for the optimisation",
+    "esp_method": "level of theory and grid for the electrostatic potential",
+    "charge_model": "RESP variant and restraint weights",
+    "torsion_scans": "which dihedrals were scanned, at what spacing",
+    "experimental_validation": "conformational data compared against, with citation",
+    "validated_against": "what the parameters reproduce, and what they do not",
+    "parameterized_by": "who did the work",
+    "date": "ISO date",
+    "files": "where the parameter files live"
+  },
+
+  "residues": {}
+}

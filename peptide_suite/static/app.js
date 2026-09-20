@@ -838,6 +838,8 @@ function renderTransformResults(d) {
   if (titration) out.append(titration);
   const template = renderStructureTemplate(d.structure_template, d.rejected);
   if (template) out.append(template);
+  const requests = renderResearchRequests(d.research_requests, d.registry_is_empty);
+  if (requests) out.append(requests);
 
   // --- liabilities
   if (p.liabilities.length) {
@@ -913,6 +915,51 @@ function renderTransformResults(d) {
 // Rendered as a card rather than a footnote because a refusal is a result: it
 // changes which proposals exist below, and a reader who does not see it will
 // read a shorter list as "nothing else applies".
+// Proposals that cannot be recommendations, because their chemistry has no
+// force-field parameters. Rendered as their own section rather than as
+// low-ranked entries in the main list: a research request with a rank beside it
+// reads as a recommendation with a caveat, which is the failure this gate
+// exists to prevent.
+function renderResearchRequests(requests, registryEmpty) {
+  if (!requests || !requests.length) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, `Research requests (${requests.length})`));
+  card.append(el("div", "kv",
+    "These modifications may well be the right ones. The system has no basis to say " +
+    "so: none of the chemistry below exists in a standard force field, so it cannot " +
+    "be scored, simulated or ranked."));
+  if (registryEmpty) {
+    card.append(notice(
+      "The parameterized-residue registry is empty. That is its correct current state, " +
+      "not a gap \u2014 nothing has been parameterized by this project, so every " +
+      "non-canonical proposal lands here.", "info", "i"));
+  }
+
+  requests.forEach((r) => {
+    const box = el("div", "request");
+    const head = el("div", "request-head");
+    head.append(el("span", "n", r.proposal));
+    if (r.position) head.append(el("span", "pos", `position ${r.position}`));
+    box.append(head);
+
+    r.residues.forEach((res) => {
+      const row = el("div", "request-res");
+      const title = el("div");
+      title.append(el("b", null, res.residue), el("span", "tag", res.status));
+      row.append(title);
+      row.append(el("div", "r", res.rationale));
+      row.append(el("div", "footnote", res.cost_summary));
+      if (res.stages_outstanding && res.stages_outstanding.length) {
+        row.append(el("div", "eqrefs", res.stages_outstanding.join(" \u2192 ")));
+      }
+      (res.notes || []).forEach((n) => row.append(el("div", "footnote", n)));
+      box.append(row);
+    });
+    card.append(box);
+  });
+  return card;
+}
+
 function renderStructureTemplate(st, rejected) {
   if (!st) return null;
   const card = el("div", "card");

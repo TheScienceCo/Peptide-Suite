@@ -664,12 +664,48 @@ def transform(req: TransformRequest) -> Dict:
         "native_context": encode_native_context(result["native_context"]),
         "electrostatics": encode_electrostatics(result["electrostatics"]),
         "structure_template": encode_structure_template(result["structure_template"]),
+        "research_requests": result["research_requests"],
+        "registry_is_empty": result["registry_is_empty"],
         "transformations": [encode_transformation(t) for t in result["transformations"]],
         "rejected": result["rejected"],
         "weights": result["weights"],
         "scalarization_note": result["scalarization_note"],
         "comparability_warning": result["comparability_warning"],
     })
+
+
+@app.get("/api/parameterization")
+def parameterization() -> Dict:
+    """
+    The parameterized-residue registry and the pipeline that would fill it.
+
+    Exposed because the registry being empty is the reason most non-canonical
+    proposals are research requests rather than recommendations, and that is
+    better answered by a readable endpoint than inferred from an absence.
+    """
+    from peptide_suite.core.ncaa_registry import NCAARegistry, pipeline_specification
+    return {
+        "registry_is_empty": NCAARegistry.is_empty(),
+        "parameterized_residues": sorted(NCAARegistry.registry()),
+        "pipeline": pipeline_specification(),
+        "catalogue": [
+            {
+                "code": entry.code,
+                "full_name": entry.full_name,
+                "class": entry.residue_class,
+                "status": NCAARegistry.status(entry.code).value,
+                "absent_from": entry.absent_from,
+                "torsion_scan_driver": entry.torsion_scan_driver,
+                "note": entry.note,
+            }
+            for entry in sorted(NCAARegistry.catalogue().values(), key=lambda e: e.code)
+        ],
+        "note": (
+            "An empty registry is the correct current state. Nothing here has been "
+            "parameterized by this project, so every proposal using non-canonical "
+            "chemistry is emitted as a research request rather than a recommendation."
+        ),
+    }
 
 
 @app.get("/api/calibration")

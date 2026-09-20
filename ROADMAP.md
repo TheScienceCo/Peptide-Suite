@@ -25,7 +25,7 @@ Build order from the addendum's section 13:
 - [x] **6a** Provenance tier schema + licensing enforcement + parameter budget
 - [x] **6b** Electrostatics — per-residue pKa, multi-pH protonation
 - [x] **6c** Structure template hierarchy + confidence gates + refusal path
-- [ ] **6d** Parameterized-residue registry (empty, QM pipeline stubbed)
+- [x] **6d** Parameterized-residue registry (empty, QM pipeline stubbed)
 - [ ] **6e** Parent-molecule context + contact classifier + golden cases
       (insulin, ghrelin, CCK, drosocin)
 - [ ] **6f** Partner-peptide module + RAMP schema requirement

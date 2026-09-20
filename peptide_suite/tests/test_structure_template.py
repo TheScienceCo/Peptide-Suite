@@ -197,21 +197,42 @@ class TestWorkflowHonoursTheRefusal(unittest.TestCase):
         """
         A refusal the user cannot see is indistinguishable from the system never
         having considered the move.
+
+        Every conformation-dependent move this engine currently generates also
+        uses non-canonical chemistry (Aib, a hydrocarbon staple), so each is
+        routed to a research request that records the structure refusal
+        alongside the parameterization one. Either way it is reported; what
+        must never happen is that it disappears.
         """
         result = self._run()
-        blocked = [r for r in result["rejected"]
-                   if r.get("blocked_by") == "structure_template_refusal"]
-        self.assertTrue(blocked, "conformational moves vanished without explanation")
-        for entry in blocked:
-            self.assertTrue(entry["violations"][0])
+        reported = [r for r in result["rejected"]
+                    if r.get("blocked_by") == "structure_template_refusal"]
+        reported += [r for r in result["research_requests"]
+                     if r.get("structure_template_also_blocks")]
+        self.assertTrue(reported, "conformational moves vanished without explanation")
 
-    def test_with_a_bound_structure_the_same_moves_are_emitted(self):
-        """The block is about the missing template, not about the move itself."""
+    def test_the_structure_refusal_is_recorded_even_when_another_gate_fires(self):
+        """
+        Suppressing one refusal because another fired first would understate
+        what the proposal needs: parameterization and a structure are separate
+        pieces of work.
+        """
+        without = self._run()
+        with_structure = self._run([BOUND_EXPERIMENTAL])
+
+        blocked_without = {r["proposal"] for r in without["research_requests"]
+                           if r["structure_template_also_blocks"]}
+        blocked_with = {r["proposal"] for r in with_structure["research_requests"]
+                        if r["structure_template_also_blocks"]}
+        self.assertTrue(blocked_without)
+        self.assertFalse(blocked_with,
+                         "a supplied structure did not clear the structure refusal")
+
+    def test_a_supplied_structure_clears_the_structure_gate(self):
+        """The template decision itself changes, whatever other gates then apply."""
         result = self._run([BOUND_EXPERIMENTAL])
         self.assertIs(result["structure_template"].tier,
                       TemplateTier.EXPERIMENTAL_THIS_COMPLEX)
-        emitted = {t.move.value for t in result["transformations"]}
-        self.assertTrue(emitted & CONFORMATION_DEPENDENT_MOVES)
         self.assertFalse([r for r in result["rejected"]
                           if r.get("blocked_by") == "structure_template_refusal"])
 

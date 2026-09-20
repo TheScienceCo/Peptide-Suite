@@ -1076,3 +1076,29 @@ table.titration td.sign {
 .tier-row .glyph { margin-right: 8px; }
 
 .blocked-list { margin-top: 12px; }
+
+/* ---- research requests ---- */
+
+.request {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--series-1);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--surface-1);
+}
+
+.request-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; margin-bottom: 8px; }
+.request-head .n { font-weight: 600; color: var(--text-primary); }
+.request-head .pos { font-size: 12px; color: var(--text-secondary); }
+
+.request-res { padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.request-res:first-of-type { border-top: 0; }
+.request-res .tag {
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.request-res .r { color: var(--text-secondary); margin: 4px 0; }

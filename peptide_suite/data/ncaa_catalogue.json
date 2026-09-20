@@ -1,0 +1,100 @@
+{
+  "_about": [
+    "Non-canonical chemistry this engine can recognise by name.",
+    "",
+    "This is NOT the parameterization registry. Appearing here means the system can",
+    "identify the residue and say what would be required to parameterize it. It",
+    "carries no force-field parameters and confers no permission to score, simulate",
+    "or rank a proposal that uses it. That permission comes only from",
+    "parameterized_residues.json, which is empty.",
+    "",
+    "torsion_scan_driver records what the torsion-scan stage scales with. Where the",
+    "count is a plain structural fact it is stated; where it depends on linker",
+    "length or macrocycle size it is null and the note says so. An invented number",
+    "here would become an invented parameterization cost downstream."
+  ],
+
+  "residues": {
+    "Aib": {
+      "full_name": "alpha-aminoisobutyric acid",
+      "class": "alpha,alpha-disubstituted",
+      "absent_from": ["ff19SB", "CHARMM36m", "AMBER standard library"],
+      "side_chain_rotatable_dihedrals": 0,
+      "torsion_scan_driver": "backbone phi/psi",
+      "note": "Two methyls on C-alpha. No side-chain torsion to scan, but the backbone phi/psi surface is the whole point of the residue and is not transferable from Ala, so the backbone scan is mandatory rather than optional."
+    },
+    "Nle": {
+      "full_name": "norleucine",
+      "class": "unbranched_aliphatic",
+      "absent_from": ["ff19SB standard set"],
+      "side_chain_rotatable_dihedrals": 3,
+      "torsion_scan_driver": "chi1, chi2, chi3",
+      "note": "Straight-chain butyl side chain. Closest canonical analogue is Met with S replaced by CH2, so charges are not transferable."
+    },
+    "Cha": {
+      "full_name": "cyclohexylalanine",
+      "class": "bulky_aliphatic",
+      "absent_from": ["ff19SB", "CHARMM36m"],
+      "side_chain_rotatable_dihedrals": 2,
+      "torsion_scan_driver": "chi1, chi2; ring pucker handled separately",
+      "note": "Saturated ring, so it is not a Phe substitute electronically despite the similar volume."
+    },
+    "N-methyl": {
+      "full_name": "backbone N-methylation",
+      "class": "backbone_modification",
+      "absent_from": ["ff19SB", "CHARMM36m"],
+      "side_chain_rotatable_dihedrals": 0,
+      "torsion_scan_driver": "backbone phi/psi and omega",
+      "note": "Adds no side-chain torsion but removes a backbone hydrogen-bond donor and shifts the cis/trans amide equilibrium, so omega must be rescanned per residue context."
+    },
+    "D-residue": {
+      "full_name": "D-enantiomer of a canonical amino acid",
+      "class": "stereochemistry",
+      "absent_from": [],
+      "side_chain_rotatable_dihedrals": 0,
+      "torsion_scan_driver": null,
+      "parameters_transfer_from_l_enantiomer": true,
+      "note": "The one case in this catalogue that does not need new parameters. Standard force-field functional forms are achiral: bonded and non-bonded terms are identical to the L form, and the inversion is carried by the sign of the C-alpha improper dihedral. What must be verified is that the improper is actually set for the D configuration; a silently-L improper gives a molecule that is the wrong enantiomer and reports no error."
+    },
+    "staple": {
+      "full_name": "hydrocarbon staple (alkenyl amino acids plus ring-closing metathesis)",
+      "class": "macrocycle",
+      "absent_from": ["ff19SB", "CHARMM36m", "AMBER standard library"],
+      "side_chain_rotatable_dihedrals": null,
+      "torsion_scan_driver": "scales with staple span and olefin position; not a fixed count",
+      "note": "Two non-canonical alpha-methyl alkenyl residues plus the macrocycle formed between them. The macrocycle is the hard part: its torsions are coupled, so scanning them one at a time is not sufficient."
+    },
+    "gamma-Glu": {
+      "full_name": "gamma-linked glutamate spacer",
+      "class": "linker",
+      "absent_from": ["ff19SB standard set"],
+      "side_chain_rotatable_dihedrals": null,
+      "torsion_scan_driver": "gamma-linkage backbone torsions",
+      "note": "Glu connected through its side-chain carboxyl rather than its alpha-carboxyl. Atom types exist; the connectivity does not, so the linkage torsions are new."
+    },
+    "OEG": {
+      "full_name": "oligoethylene glycol spacer (AEEA)",
+      "class": "linker",
+      "absent_from": ["protein force fields generally"],
+      "side_chain_rotatable_dihedrals": null,
+      "torsion_scan_driver": "three rotatable bonds per ethylene glycol unit; total depends on how many units",
+      "note": "Small-molecule chemistry, so GAFF2/OpenFF territory rather than a protein force field. The gauche effect about the C-C bond is the term most often got wrong by naive fitting."
+    },
+    "fatty-acid": {
+      "full_name": "fatty-acid or diacid acylation chain",
+      "class": "linker",
+      "absent_from": ["protein force fields generally"],
+      "side_chain_rotatable_dihedrals": null,
+      "torsion_scan_driver": "chain length; a C18 diacid has many nearly degenerate torsions",
+      "note": "Individually easy torsions, but the conformational ensemble is large and the interesting quantity is albumin binding, which the torsions alone do not give."
+    },
+    "beta-amino-acid": {
+      "full_name": "beta-amino acid (extra backbone carbon)",
+      "class": "backbone_modification",
+      "absent_from": ["ff19SB", "CHARMM36m"],
+      "side_chain_rotatable_dihedrals": null,
+      "torsion_scan_driver": "an extra backbone torsion beyond phi/psi/omega",
+      "note": "Changes the backbone repeat unit itself, so no canonical residue's backbone parameters transfer."
+    }
+  }
+}
