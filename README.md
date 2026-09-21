@@ -81,6 +81,10 @@ rule rather than by the winning number.
 
 ![Does fusion help](docs/screenshots/fusion-benefit.png)
 
+A completion summary — datasets and licences, models, evaluation results,
+known limitations, reproduction commands — is in
+[`docs/DELIVERABLES.md`](docs/DELIVERABLES.md).
+
 ## Running
 
 The engine holds no coefficients. Every weight, threshold and cutoff comes from
