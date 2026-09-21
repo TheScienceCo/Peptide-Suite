@@ -1,5 +1,28 @@
 # Peptide-Suite
-Peptide optimizer based on quantum biochemical principles and robust relevant research retrieval
+
+Peptide engineering analysis with the provenance of every number carried
+alongside it.
+
+The organising rule: **a score appears only if it was computed from real input
+data.** Where a factor could not be computed — no structure, no assay, no
+parameters — the output says so instead of estimating. Most of what follows is
+machinery for keeping that true under pressure.
+
+Three workflows:
+
+- **Optimize** — systematic single-position substitution scan against a
+  confirmed goal, with each candidate's primary effect, off-target effects and
+  confidence reported separately.
+- **Transform** — discrete, reviewable modifications scored against an
+  eight-objective vector, never collapsed into one number.
+- **Find peptides** — functional keywords to capable cell types, checking known
+  answers before ranking anything.
+
+And four gates that refuse rather than guess: a structure-template hierarchy
+whose last tier is refusal, a parameterized-residue registry that is empty (so
+non-canonical chemistry becomes a research request, not a recommendation), a
+native-contact classifier that freezes essential footprints, and a class B1
+placement rule that will not let an affinity gain stand alone as an improvement.
 
 ## Running
 
@@ -119,6 +142,26 @@ plus the decoy false-positive rate:
 is. `RankedOutcome` has no boolean hit field anywhere on it, because a system
 whose output can be reduced to yes-or-no will be — and 2nd of 47 would get
 written up alongside 2nd of 3.
+
+## API
+
+Typed request and response schemas; interactive docs at `/docs` when running.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/infer-function` | Identify a sequence or name, and propose a goal for confirmation |
+| `POST /api/optimize` | Run the substitution scan against a confirmed goal |
+| `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
+| `POST /api/find-peptides` | Functional keyword search |
+| `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |
+| `GET /api/parameterization` | The residue registry and the pipeline that would fill it |
+| `GET /api/holdout` | Holdout protocols, and the named-entity leakage table |
+| `GET /api/goals` | Goals with a real scoring path |
+| `GET /api/calibration` | Prediction-vs-outcome log summary |
+| `GET /api/health` | Liveness |
+
+Every scored response carries its policy provenance, so a number cannot be read
+without knowing what weighted it.
 
 ## Tests
 

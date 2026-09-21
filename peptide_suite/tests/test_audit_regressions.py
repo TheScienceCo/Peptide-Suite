@@ -288,3 +288,25 @@ class TestNoLookupAnswersADegenerateQuery(unittest.TestCase):
                     self.assertFalse(
                         self._is_confident(result),
                         f"{name}({query!r}) answered with {result!r:.70}")
+
+
+class TestNoOrphanedDataFiles(unittest.TestCase):
+    """
+    Every bundled data file must be read by something.
+
+    ncaa_reference.json survived the 6d registry that replaced it. It described
+    itself as "used for v1.1+ NCAA weighting", nothing read it, and it carried
+    confidence values with no citations behind them -- the exact kind of
+    unsourced assertion the provenance work exists to remove. A dead file that
+    looks authoritative is a trap: the next person to find it wires it in.
+    """
+
+    def test_every_data_file_is_referenced_by_code(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[2]
+        sources = list((root / "peptide_suite").rglob("*.py")) + list((root / "tools").rglob("*.py"))
+        blob = "\n".join(p.read_text(errors="ignore") for p in sources)
+        for data_file in sorted((root / "peptide_suite" / "data").glob("*.json")):
+            with self.subTest(data_file=data_file.name):
+                self.assertIn(data_file.name, blob,
+                              f"{data_file.name} is not read by any module")
