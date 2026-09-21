@@ -64,6 +64,15 @@ class Effect:
         magnitude: 0-1 size of the effect if real (benefit for primary, cost for off-target)
         reasoning: Detailed justification including sources
         equation_refs: Which equations (if any) informed this
+        term_key: Stable identifier for which term this effect reports, so a
+            consumer can find one term among several without matching on prose.
+            Descriptions are written for a reader and change freely; a key does
+            not.
+        computed: False when the term exists but had no input data to compute
+            from. Such an effect still appears, carrying magnitude 0 and an
+            explanation, but a consumer must render it as absent rather than as
+            zero: "no conservation data" and "conservation cost is nil" are
+            different statements and must not share a cell.
     """
     category: str  # "primary" or "off_target"
     description: str
@@ -74,6 +83,8 @@ class Effect:
     magnitude: float = 0.5  # 0-1 effect size
     equation_refs: List[int] = None  # e.g., [43, 11, 1] for Shannon, HH, Coulomb
     sources: List[str] = None  # Literature citations, database lookups
+    term_key: Optional[str] = None
+    computed: bool = True
 
 
 @dataclass

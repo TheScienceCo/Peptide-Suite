@@ -26,6 +26,9 @@
     <button class="tab" role="tab" id="tab-transform" aria-selected="false" aria-controls="panel-transform">
       Transformations
     </button>
+    <button class="tab" role="tab" id="tab-landscape" aria-selected="false" aria-controls="panel-landscape">
+      Substitution landscape
+    </button>
     <button class="tab" role="tab" id="tab-ml" aria-selected="false" aria-controls="panel-ml">
       Model evaluation
     </button>
@@ -105,6 +108,57 @@
 
     <div id="transform-results"></div>
 
+  </section>
+
+  <!-- ================= SUBSTITUTION LANDSCAPE ================= -->
+  <section class="panel" id="panel-landscape" role="tabpanel" aria-labelledby="tab-landscape" hidden>
+    <div class="card">
+      <div class="label">EVERY POSITION AGAINST EVERY RESIDUE</div>
+      <p class="kv">
+        The optimize tab ranks the same scan and reports the best five. This is the
+        whole grid, unranked: where nothing helps is a result too, and a top-five list
+        cannot show it. Cells the pipeline could not compute are hatched rather than
+        coloured — the middle of a diverging scale means "no change", and that is a
+        different statement from "no data".
+      </p>
+
+      <label for="lseq">Peptide sequence or name</label>
+      <textarea id="lseq" spellcheck="false"
+                placeholder="Paste a sequence, or type a name such as GLP-1 or oxytocin"></textarea>
+      <div class="chips" id="lseq-examples"></div>
+
+      <details class="opt-extra">
+        <summary>Homologous sequences (optional)</summary>
+        <p class="hint">
+          The conservation metric needs three or more distinct homologous sequences.
+          Without them every cell of that metric comes back marked not computed, which
+          is the honest answer and also a good look at what the hatch means.
+        </p>
+        <textarea id="lhomologs" spellcheck="false"
+                  placeholder="One homologous sequence per line"></textarea>
+      </details>
+
+      <div class="row">
+        <div>
+          <label for="lgoal">Target function</label>
+          <select id="lgoal"></select>
+        </div>
+        <div>
+          <label for="lmetric">Colour by</label>
+          <select id="lmetric"></select>
+        </div>
+        <div>
+          <label for="lph">pH</label>
+          <input type="text" id="lph" value="7.4" inputmode="decimal">
+        </div>
+        <div class="shrink">
+          <button class="primary" id="btn-landscape">Build the grid</button>
+        </div>
+      </div>
+      <p class="footnote" id="lmetric-desc"></p>
+    </div>
+
+    <div id="landscape-results"></div>
   </section>
 
   <!-- ================= WORKFLOW 2 ================= -->

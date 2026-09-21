@@ -19,9 +19,39 @@
 
   --series-1: #2a78d6;
   --seq-100: #cde2fb;
+  --seq-200: #9ec5f4;
   --seq-250: #86b6ef;
+  --seq-350: #5598e7;
   --seq-450: #2a78d6;
   --seq-600: #184f95;
+
+  /* Diverging pair: blue (positive) <-> red (negative), neutral gray midpoint.
+     Blue arm is the documented sequential ramp's 100/200/350/450 steps. The red
+     arm was derived rather than picked: each step holds the matching blue step's
+     OKLCH lightness, at the hue and chroma of the documented reds (status
+     critical #d03b3b in light, categorical red in dark), then pulled into gamut.
+     So the two arms are lightness-symmetric about the midpoint, which is what a
+     diverging ramp has to be for the sign to read as sign rather than as size.
+     Poles validated in both modes: CVD dE 23.8 light / 21.2 dark, normal-vision
+     31.6 / 28.6, both >= 3:1 on their surface.
+
+     The dark arms are selected, not flipped. They hold the dark sequential
+     ramp's lightness ladder but take the LIGHT arms' chroma profile (0.25,
+     0.49, 0.84, 1.00 of the pole), because that profile is what makes a
+     low-magnitude cell recede instead of shouting a hue: near white, chroma
+     collapses on its own; near a dark surface it does not, and a literal reuse
+     of the dark sequential steps turned a mostly-small-magnitude grid into a
+     wall of red. Hence a diverging blue arm distinct from the sequential blue
+     ramp in dark — different job, different requirement at the near-zero end. */
+  --div-neg-4: #d03b3b;
+  --div-neg-3: #e66962;
+  --div-neg-2: #f7aba4;
+  --div-neg-1: #fed4d0;
+  --div-mid:   #f0efec;
+  --div-pos-1: #cde2fb;
+  --div-pos-2: #9ec5f4;
+  --div-pos-3: #5598e7;
+  --div-pos-4: #2a78d6;
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
@@ -47,9 +77,21 @@
     --border: #2c2c2a;
     --series-1: #3987e5;
     --seq-100: #104281;
+    --seq-200: #184f95;
     --seq-250: #184f95;
+    --seq-350: #256abf;
     --seq-450: #3987e5;
     --seq-600: #86b6ef;
+
+    --div-neg-4: #d55859;
+    --div-neg-3: #ab4546;
+    --div-neg-2: #753e3d;
+    --div-neg-1: #583b3a;
+    --div-mid:   #383835;
+    --div-pos-1: #354559;
+    --div-pos-2: #32527b;
+    --div-pos-3: #2d6bb7;
+    --div-pos-4: #3987e5;
   }
 }
 
@@ -66,9 +108,21 @@
   --border: #2c2c2a;
   --series-1: #3987e5;
   --seq-100: #104281;
+  --seq-200: #184f95;
   --seq-250: #184f95;
+  --seq-350: #256abf;
   --seq-450: #3987e5;
   --seq-600: #86b6ef;
+
+  --div-neg-4: #d55859;
+  --div-neg-3: #ab4546;
+  --div-neg-2: #753e3d;
+  --div-neg-1: #583b3a;
+  --div-mid:   #383835;
+  --div-pos-1: #354559;
+  --div-pos-2: #32527b;
+  --div-pos-3: #2d6bb7;
+  --div-pos-4: #3987e5;
 }
 
 * { box-sizing: border-box; }
@@ -1149,4 +1203,148 @@ table.titration td.sign {
   color: var(--text-primary);
   min-width: 11rem;
   padding-right: 14px;
+}
+
+/* ---------- substitution landscape heatmap ---------- */
+/* The grid is a CSS grid of cells rather than an SVG: hover targets, sticky row
+   labels and horizontal scrolling all come for free, and the cell colours stay
+   as design tokens instead of being baked into generated markup. */
+
+.heat-wrap { position: relative; }
+
+.heat-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.heat {
+  --cell: 22px;
+  --rowlab: 26px;
+  display: grid;
+  grid-template-columns: var(--rowlab) repeat(var(--cols), var(--cell));
+  /* 2px of surface between fills, per the mark spec: adjacent cells must not
+     bleed into one another or two steps read as one block. */
+  gap: 2px;
+  width: max-content;
+  padding: 6px 8px 8px 6px;
+}
+
+.heat .tick,
+.heat .rowlab,
+.heat .wt {
+  font: 10px/1 var(--mono);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+}
+
+.heat .rowlab {
+  height: var(--cell);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: var(--surface-1);
+  z-index: 2;
+}
+
+.heat .corner { position: sticky; left: 0; background: var(--surface-1); z-index: 2; }
+
+.heat .wt {
+  height: 16px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.heat .hc {
+  height: var(--cell);
+  border-radius: 2px;
+  cursor: default;
+}
+
+/* A cell with no computed value must not sit anywhere on the value scale — the
+   midpoint of a diverging ramp reads as "no change", which is a claim. Hatch
+   plus the legend entry plus the table view: three channels, none of them
+   colour alone. */
+.heat .hc.nc {
+  background:
+    repeating-linear-gradient(45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--text-muted) 55%, transparent) 3px 4px);
+  outline: 1px solid var(--grid);
+  outline-offset: -1px;
+}
+
+/* The wild-type residue is not a substitution with no effect. */
+.heat .hc.wt-cell {
+  background: var(--surface-1);
+  outline: 1.5px solid var(--axis);
+  outline-offset: -2px;
+}
+
+.heat .hc:hover {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+
+.heat-tip {
+  position: absolute;
+  z-index: 40;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.heat-tip b { display: block; color: var(--text-primary); font-size: 12px; margin-bottom: 2px; }
+.heat-tip .val { font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
+.heat-tip[hidden] { display: none; }
+
+.heat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.heat-legend .ramp { display: flex; align-items: center; gap: 6px; }
+.heat-legend .ramp .steps { display: flex; gap: 1px; }
+.heat-legend .ramp i { width: 16px; height: 12px; border-radius: 2px; display: block; }
+.heat-legend .key { display: flex; align-items: center; gap: 5px; }
+.heat-legend .key i { width: 14px; height: 12px; border-radius: 2px; display: block; }
+.heat-legend .key i.nc {
+  background:
+    repeating-linear-gradient(45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--text-muted) 55%, transparent) 3px 4px);
+  outline: 1px solid var(--grid);
+  outline-offset: -1px;
+}
+.heat-legend .key i.wt-cell {
+  background: var(--surface-1);
+  outline: 1.5px solid var(--axis);
+  outline-offset: -2px;
+}
+
+.heat-table-wrap { max-height: 320px; overflow: auto; margin-top: 8px; }
+table.heat-table { min-width: 100%; }
+table.heat-table td.det { color: var(--text-secondary); font-size: 11px; }
+table.heat-table td.st { font-size: 11px; text-transform: lowercase; }
+
+@media (max-width: 640px) {
+  .heat { --cell: 18px; --rowlab: 22px; }
+  .heat-tip { max-width: 220px; }
 }

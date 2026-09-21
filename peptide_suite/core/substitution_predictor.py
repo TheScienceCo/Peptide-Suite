@@ -17,6 +17,16 @@ from .confidence_scoring import ConfidenceScorer
 
 logger = logging.getLogger(__name__)
 
+# Stable identifiers for the terms this module produces. A consumer that needs
+# one particular term -- the substitution landscape asks for the conservation
+# term by itself -- keys on these rather than on the description, which is
+# written for a reader and rewritten whenever the wording improves.
+TERM_PRIMARY = "primary"
+TERM_RESIDUE_PROPERTY = "residue_property_loss"
+TERM_CONSERVATION = "conservation"
+TERM_BACKBONE = "backbone"
+TERM_CHARGE_REDISTRIBUTION = "charge_redistribution"
+
 
 @dataclass
 class HydrophobicityScale:
@@ -216,6 +226,7 @@ class SubstitutionPredictor:
                 modifier=best["confidence"],
                 magnitude=0.75,
                 equation_refs=[22, 23],
+                term_key=TERM_PRIMARY,
             )
         elif net_added:
             score = self.confidence_scorer.score_effect(
@@ -232,6 +243,7 @@ class SubstitutionPredictor:
                 modifier=0.85,
                 magnitude=0.0,  # No benefit; the cost is carried as a negative below
                 equation_refs=[22, 23],
+                term_key=TERM_PRIMARY,
             )
         else:
             score = self.confidence_scorer.score_effect(
@@ -246,6 +258,7 @@ class SubstitutionPredictor:
                 modifier=0.7,
                 magnitude=0.05,
                 equation_refs=[],
+                term_key=TERM_PRIMARY,
             )
 
         score.category = "primary"
@@ -289,6 +302,7 @@ class SubstitutionPredictor:
             modifier=0.5,  # Moderate confidence without structure
             magnitude=magnitude,
             equation_refs=[1, 11],  # Coulomb, Henderson-Hasselbalch
+            term_key=TERM_PRIMARY,
         )
 
         score.category = "primary"
@@ -311,6 +325,7 @@ class SubstitutionPredictor:
             modifier=1.0,
             magnitude=0.0,
             equation_refs=[],
+            term_key=TERM_PRIMARY,
         )
 
         score.category = "primary"
@@ -397,6 +412,7 @@ class SubstitutionPredictor:
             reasoning=reason,
             modifier=modifier,
             magnitude=magnitude,
+            term_key=TERM_RESIDUE_PROPERTY,
         )
         effect.category = "off_target"
         return effect
@@ -427,6 +443,8 @@ class SubstitutionPredictor:
                 modifier=1.0,
                 magnitude=0.0,  # Contributes nothing to the net score
                 equation_refs=[],
+                term_key=TERM_CONSERVATION,
+                computed=False,
             )
             effect.category = "off_target"
             return effect
@@ -460,6 +478,7 @@ class SubstitutionPredictor:
             modifier=modifier,
             magnitude=magnitude,
             equation_refs=[43],  # Shannon entropy
+            term_key=TERM_CONSERVATION,
         )
         effect.category = "off_target"
         return effect
@@ -495,6 +514,7 @@ class SubstitutionPredictor:
             reasoning=reason,
             modifier=modifier,
             magnitude=magnitude,
+            term_key=TERM_BACKBONE,
         )
         effect.category = "off_target"
         return effect
@@ -552,6 +572,7 @@ class SubstitutionPredictor:
             modifier=0.8,
             magnitude=magnitude,
             equation_refs=[1, 11],  # Coulomb heuristic, Henderson-Hasselbalch
+            term_key=TERM_CHARGE_REDISTRIBUTION,
         )
         effect.category = "off_target"
         return effect

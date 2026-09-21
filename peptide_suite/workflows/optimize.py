@@ -49,7 +49,12 @@ class OptimizeWorkflow:
         homologs: Optional[List[str]] = None,
     ) -> Tuple[PeptideContext, List[SubstitutionRecommendation]]:
         """
-        Run the full optimization workflow.
+        Run the full optimization workflow and return the top-ranked few.
+
+        `scan()` is the same pipeline without the final ranking cut, for callers
+        that need every cell rather than the winners -- the substitution
+        landscape is the whole grid, and a grid assembled from the top five
+        would be five cells and a lie about the rest.
 
         Args:
             input_sequence_or_name: Raw AA sequence or gene name (e.g., "IGF1", or "MGFPGLQPRR...")
@@ -65,6 +70,67 @@ class OptimizeWorkflow:
             These can then be formatted for display.
         """
 
+        peptide_context, conservation_profile = self._prepare(
+            input_sequence_or_name, confirmed_goal, auto_confirm, homologs
+        )
+        if not peptide_context.sequence or not peptide_context.confirmed_goal:
+            return peptide_context, []
+
+        # Step 3: Run substitution scan
+        logger.info("Step 3: Running substitution scan...")
+        all_recommendations = self._run_substitution_scan(
+            peptide_context, conservation_profile, ph
+        )
+
+        # Step 4: Rank and filter
+        logger.info("Step 4: Ranking recommendations...")
+        ranked = self._rank_recommendations(all_recommendations)
+
+        # Return top 3-5
+        top_recommendations = ranked[:5]
+        logger.info(f"Top {len(top_recommendations)} recommendations selected")
+
+        return peptide_context, top_recommendations
+
+    def scan(
+        self,
+        input_sequence_or_name: str,
+        confirmed_goal: Optional[str] = None,
+        auto_confirm: bool = True,
+        ph: float = 7.4,
+        homologs: Optional[List[str]] = None,
+    ) -> Tuple[PeptideContext, List[SubstitutionRecommendation]]:
+        """
+        Run the pipeline and return every candidate substitution, unranked.
+
+        Same computation as `run()` up to the point where `run()` throws most of
+        it away. Length x 19 recommendations, in position-then-residue order.
+        """
+        peptide_context, conservation_profile = self._prepare(
+            input_sequence_or_name, confirmed_goal, auto_confirm, homologs
+        )
+        if not peptide_context.sequence or not peptide_context.confirmed_goal:
+            return peptide_context, []
+
+        return peptide_context, self._run_substitution_scan(
+            peptide_context, conservation_profile, ph
+        )
+
+    def _prepare(
+        self,
+        input_sequence_or_name: str,
+        confirmed_goal: Optional[str],
+        auto_confirm: bool,
+        homologs: Optional[List[str]],
+    ) -> Tuple[PeptideContext, Dict[int, float]]:
+        """
+        Parse the input, settle the goal, and compute the conservation profile.
+
+        Returns an empty profile when conservation could not be computed, which
+        the predictor is told about separately via
+        `PeptideContext.conservation_available`: an empty dict and a dict of
+        zeros are not the same thing and only one of them is honest.
+        """
         logger.info(f"=== Workflow 1: Optimize Peptide ===")
         logger.info(f"Input: {input_sequence_or_name[:50]}...")
 
@@ -74,7 +140,7 @@ class OptimizeWorkflow:
         # Validate that we have a sequence
         if not peptide_context.sequence:
             logger.error(f"Could not parse '{input_sequence_or_name}' as a valid sequence or recognized peptide name")
-            return peptide_context, []
+            return peptide_context, {}
 
         logger.info(f"Parsed: {peptide_context.sequence[:50]}... (length {len(peptide_context.sequence)})")
 
@@ -94,7 +160,7 @@ class OptimizeWorkflow:
                     ">>> Awaiting user confirmation of inferred function before proceeding. "
                     "(In programmatic mode, pass confirmed_goal or auto_confirm=True)"
                 )
-                return peptide_context, []
+                return peptide_context, {}
             else:
                 peptide_context.confirmed_goal = inferred_fn
 
@@ -163,21 +229,7 @@ class OptimizeWorkflow:
 
         peptide_context.conservation_entropy = conservation_profile
 
-        # Step 3: Run substitution scan
-        logger.info("Step 3: Running substitution scan...")
-        all_recommendations = self._run_substitution_scan(
-            peptide_context, conservation_profile, ph
-        )
-
-        # Step 4: Rank and filter
-        logger.info("Step 4: Ranking recommendations...")
-        ranked = self._rank_recommendations(all_recommendations)
-
-        # Return top 3-5
-        top_recommendations = ranked[:5]
-        logger.info(f"Top {len(top_recommendations)} recommendations selected")
-
-        return peptide_context, top_recommendations
+        return peptide_context, conservation_profile
 
     def _parse_input(self, input_str: str) -> PeptideContext:
         """

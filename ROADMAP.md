@@ -90,6 +90,14 @@ Built so far:
 - [x] **Encoders** — deterministic encoder present, ESM-2 fails loudly rather
       than substituting.
 - [x] **The split-gap experiment**, visible in the UI and run live.
+- [x] **Substitution landscape** — the whole position x residue grid, in its own
+      tab, over five selectable quantities. A cell with no computed value is
+      hatched and carries no value on the wire; the wild-type diagonal is its
+      own state; a one-signed quantity gets a sequential encoding rather than a
+      diverging one. Colour scale derived from the grid shown and declared as
+      such. Diverging poles validated for colour-vision deficiency in both
+      modes, with dark steps selected against the dark surface rather than
+      flipped.
 
 Remaining, and mostly blocked on data and weights rather than design:
 
@@ -98,7 +106,8 @@ Remaining, and mostly blocked on data and weights rather than design:
 - [ ] ESM-2 weights, then the four-arm comparison per task
       (physicochemical baseline / classical ML / pretrained embeddings /
       fine-tuned) that answers whether language models add predictive value.
-- [ ] Embedding explorer (PCA/UMAP) and the substitution landscape heatmap.
+- [ ] Embedding explorer (PCA/UMAP). The substitution landscape is built; the
+      explorer waits on ESM-2 weights, which are unreachable from here.
 - [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
       compared against single modality and naive concatenation.
 - [ ] Explainability: nearest training examples, residue sensitivity,

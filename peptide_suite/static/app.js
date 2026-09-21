@@ -780,7 +780,7 @@ function renderCandidate(c) {
 
 /* ---------- wiring ---------- */
 
-const TABS = ["optimize", "transform", "ml", "find"];
+const TABS = ["optimize", "transform", "landscape", "ml", "find"];
 
 function switchTab(which) {
   TABS.forEach((name) => {
@@ -823,6 +823,9 @@ async function init() {
   } catch {
     $("#version").textContent = "offline";
   }
+
+  // After GOALS is populated: the landscape's goal select is built from it.
+  await initLandscape();
 }
 
 init();
@@ -1569,4 +1572,318 @@ function renderObjectiveRow(od) {
   row.append(el("span", "objclaim", od.claim ? od.claim.type : ""));
   if (od.claim) row.title = od.claim.rendered;
   return row;
+}
+
+/* ---------- Substitution landscape ---------- */
+
+let LANDSCAPE_METRICS = [];
+
+// The steps of each ramp, in order outward from the neutral middle. Kept as
+// token names rather than hex so light and dark swap in the stylesheet, where
+// the two modes are each selected against their own surface rather than one
+// being an inversion of the other.
+const DIV_NEG = ["--div-neg-1", "--div-neg-2", "--div-neg-3", "--div-neg-4"];
+const DIV_POS = ["--div-pos-1", "--div-pos-2", "--div-pos-3", "--div-pos-4"];
+const SEQ_STEPS = ["--seq-100", "--seq-200", "--seq-350", "--seq-450", "--seq-600"];
+
+function cellColor(value, encoding, bound) {
+  // No range to spread a scale across: every computed cell sits at the bottom
+  // of the ramp rather than being scattered by rounding noise.
+  if (!bound || bound <= 0) {
+    return encoding === "diverging" ? "var(--div-mid)" : `var(${SEQ_STEPS[0]})`;
+  }
+  if (encoding === "diverging") {
+    const n = Math.max(-1, Math.min(1, value / bound));
+    const step = Math.ceil(Math.abs(n) * DIV_POS.length);
+    if (step === 0) return "var(--div-mid)";
+    const ramp = n < 0 ? DIV_NEG : DIV_POS;
+    return `var(${ramp[Math.min(ramp.length, step) - 1]})`;
+  }
+  const n = Math.max(0, Math.min(1, value / bound));
+  const idx = Math.min(SEQ_STEPS.length, Math.max(1, Math.ceil(n * SEQ_STEPS.length)));
+  return `var(${SEQ_STEPS[idx - 1]})`;
+}
+
+function fmtValue(v, metric) {
+  if (v === undefined || v === null) return "—";
+  return metric.key === "hydrophobicity_delta" ? v.toFixed(1)
+       : metric.encoding === "diverging" ? (v >= 0 ? "+" : "") + v.toFixed(2)
+       : v.toFixed(2);
+}
+
+function landscapeLegend(ls) {
+  const m = ls.metric;
+  const wrap = el("div", "heat-legend");
+
+  // No computed cell means no scale to legend. A ramp drawn over an empty grid
+  // invites the reader to place the hatched cells somewhere on it.
+  const ramp = el("div", "ramp");
+  const bound = ls.scale_bound;
+  if (ls.n_computed === 0) {
+    ramp.append(el("span", null, "no value scale — nothing in this grid was computed"));
+  } else if (m.encoding === "diverging") {
+    ramp.append(el("span", null, bound ? `−${fmtValue(bound, m).replace("+", "")}` : "low"));
+    const steps = el("div", "steps");
+    [...DIV_NEG].reverse().forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    const mid = el("i"); mid.style.background = "var(--div-mid)"; steps.append(mid);
+    DIV_POS.forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    ramp.append(steps, el("span", null, bound ? `+${fmtValue(bound, m).replace("+", "")}` : "high"));
+  } else {
+    ramp.append(el("span", null, "0"));
+    const steps = el("div", "steps");
+    SEQ_STEPS.forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    ramp.append(steps, el("span", null, bound ? fmtValue(bound, m) : "high"));
+  }
+  wrap.append(ramp);
+
+  if (ls.n_computed > 0 && m.encoding === "diverging" && m.midpoint_meaning) {
+    wrap.append(el("span", null, `middle: ${m.midpoint_meaning}`));
+  }
+
+  const wt = el("div", "key");
+  const wtSwatch = el("i", "wt-cell");
+  wt.append(wtSwatch, el("span", null, "wild-type residue — not a substitution"));
+  wrap.append(wt);
+
+  if (ls.n_not_computed > 0) {
+    const nc = el("div", "key");
+    nc.append(el("i", "nc"), el("span", null, `not computed (${ls.n_not_computed})`));
+    wrap.append(nc);
+  }
+  return wrap;
+}
+
+function landscapeGrid(ls) {
+  const m = ls.metric;
+  const wrap = el("div", "heat-wrap");
+  const scroll = el("div", "heat-scroll");
+  const grid = el("div", "heat");
+  grid.style.setProperty("--cols", String(ls.length));
+
+  // Row 1: position ticks. Every fifth, plus the two ends, so the axis reads
+  // without the numbers colliding at 18px cells.
+  grid.append(el("div", "corner"));
+  for (let i = 0; i < ls.length; i++) {
+    const n = i + 1;
+    const show = n === 1 || n === ls.length || n % 5 === 0;
+    grid.append(el("div", "tick", show ? String(n) : ""));
+  }
+
+  // Row 2: the wild-type sequence itself, so a reader can see which residue
+  // each column is a substitution away from.
+  grid.append(el("div", "corner"));
+  for (let i = 0; i < ls.length; i++) grid.append(el("div", "wt", ls.sequence[i]));
+
+  const byKey = new Map();
+  ls.cells.forEach((c) => byKey.set(`${c.position}:${c.aa}`, c));
+
+  ls.rows.forEach((aa) => {
+    grid.append(el("div", "rowlab", aa));
+    for (let pos = 0; pos < ls.length; pos++) {
+      const c = byKey.get(`${pos}:${aa}`);
+      const cell = el("div", "hc");
+      if (!c) {
+        cell.classList.add("nc");
+      } else if (c.state === "WILD_TYPE") {
+        cell.classList.add("wt-cell");
+      } else if (c.state === "NOT_COMPUTED") {
+        cell.classList.add("nc");
+      } else {
+        cell.style.background = cellColor(c.value, m.encoding, ls.scale_bound);
+      }
+      if (c) cell.dataset.key = `${pos}:${aa}`;
+      grid.append(cell);
+    }
+  });
+
+  scroll.append(grid);
+
+  // Per-mark hover: a cell chart with no tooltip forces the reader to guess the
+  // value from the colour, which is the one thing colour cannot do precisely.
+  const tip = el("div", "heat-tip");
+  tip.hidden = true;
+  wrap.append(scroll, tip);
+
+  const show = (ev) => {
+    const cell = ev.target.closest(".hc");
+    if (!cell || !cell.dataset.key) { tip.hidden = true; return; }
+    const c = byKey.get(cell.dataset.key);
+    if (!c) { tip.hidden = true; return; }
+    tip.innerHTML = "";
+    const wt = ls.sequence[c.position];
+    tip.append(el("b", null,
+      c.state === "WILD_TYPE"
+        ? `Position ${c.position + 1}: ${wt} (wild type)`
+        : `Position ${c.position + 1}: ${wt} → ${c.aa}`));
+    if (c.state === "COMPUTED") {
+      const line = el("div");
+      line.append(document.createTextNode(`${m.label}: `));
+      line.append(el("span", "val", `${fmtValue(c.value, m)}`));
+      line.append(document.createTextNode(` ${m.units.split(",")[0]}`));
+      tip.append(line);
+    } else if (c.state === "NOT_COMPUTED") {
+      tip.append(el("div", "val", "not computed"));
+    }
+    tip.append(el("div", null, c.detail));
+    if (c.confidence && c.state === "COMPUTED") {
+      tip.append(el("div", null, `Overall confidence for this substitution: ${c.confidence}`));
+    }
+    tip.hidden = false;
+
+    const box = wrap.getBoundingClientRect();
+    const cb = cell.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(4, cb.left - box.left + cb.width / 2 - tip.offsetWidth / 2),
+      Math.max(4, box.width - tip.offsetWidth - 4)
+    );
+    const above = cb.top - box.top - tip.offsetHeight - 8;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${above > 0 ? above : cb.bottom - box.top + 8}px`;
+  };
+
+  scroll.addEventListener("mousemove", show);
+  scroll.addEventListener("mouseleave", () => { tip.hidden = true; });
+  return wrap;
+}
+
+function landscapeTable(ls) {
+  const m = ls.metric;
+  const det = el("details");
+  det.append(el("summary", null, `Table view — all ${ls.cells.length} cells`));
+  const wrap = el("div", "heat-table-wrap");
+  const table = el("table", "titration heat-table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Pos", "WT", "Sub", "State", m.label, "Detail"].forEach((h) => hr.append(el("th", null, h)));
+  thead.append(hr);
+  const tbody = el("tbody");
+  ls.cells.forEach((c) => {
+    const tr = el("tr");
+    tr.append(el("td", "num", String(c.position + 1)));
+    tr.append(el("td", "res", ls.sequence[c.position]));
+    tr.append(el("td", "res", c.aa));
+    tr.append(el("td", "st", c.state === "COMPUTED" ? "computed"
+                          : c.state === "WILD_TYPE" ? "wild type" : "not computed"));
+    tr.append(el("td", "num", c.state === "COMPUTED" ? fmtValue(c.value, m) : "—"));
+    tr.append(el("td", "det", c.detail));
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+  wrap.append(table);
+  det.append(wrap);
+  return det;
+}
+
+function renderLandscape(d) {
+  const out = $("#landscape-results");
+  out.innerHTML = "";
+  const ls = d.landscape;
+  const m = ls.metric;
+
+  const pn = policyNotice(d.policy);
+  if (pn) out.append(pn);
+
+  const card = el("div", "card");
+  card.append(el("h2", null,
+    `${ls.name && ls.name !== "unnamed_peptide" ? ls.name : "Peptide"} — ${m.label.toLowerCase()}`));
+  card.append(el("div", "kv",
+    `${ls.length} residues × ${ls.rows.length} residue substitutions · goal: ${ls.goal || "unspecified"} · pH ${ls.ph}`));
+  card.append(el("p", "footnote", m.description));
+
+  if (ls.n_computed === 0) {
+    card.append(notice(
+      `No cell of this grid has a computed value. ${ls.not_computed_reason || ""}`.trim(),
+      "warn", "!"
+    ));
+  } else if (ls.n_not_computed > 0) {
+    card.append(notice(
+      `${ls.n_not_computed} of ${ls.n_not_computed + ls.n_computed + ls.length} cells are hatched ` +
+      `because the pipeline did not compute them. ${ls.not_computed_reason || ""}`.trim(),
+      "warn", "!"
+    ));
+  }
+
+  card.append(landscapeGrid(ls));
+  card.append(landscapeLegend(ls));
+  if (ls.scale_basis) card.append(el("p", "footnote", ls.scale_basis));
+  card.append(el("p", "footnote", `Computed by: ${m.source}.`));
+  card.append(landscapeTable(ls));
+
+  (ls.notes || []).forEach((n) => card.append(notice(n, "info", "i")));
+  out.append(card);
+}
+
+async function onLandscape() {
+  const btn = $("#btn-landscape");
+  const out = $("#landscape-results");
+  const seq = $("#lseq").value.trim();
+  if (!seq) { out.innerHTML = ""; out.append(notice("Enter a sequence first.", "error", "!")); return; }
+
+  out.innerHTML = "";
+  busy(btn, true);
+  const ph = parseFloat($("#lph").value);
+  try {
+    const homologs = $("#lhomologs").value
+      .split(/[\n,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    const d = await api("/api/substitution-landscape", {
+      input: seq,
+      goal: $("#lgoal").value || null,
+      metric: $("#lmetric").value,
+      ph: Number.isFinite(ph) ? ph : 7.4,
+      homologs: homologs.length ? homologs : null,
+    });
+    renderLandscape(d);
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Build the grid");
+  }
+}
+
+async function initLandscape() {
+  $("#btn-landscape").addEventListener("click", onLandscape);
+
+  EXAMPLES.sequences.forEach((ex) => {
+    const b = el("button", "chip", ex.label);
+    b.addEventListener("click", () => { $("#lseq").value = ex.seq; });
+    $("#lseq-examples").append(b);
+  });
+
+  const goalSel = $("#lgoal");
+  GOALS.forEach((g) => {
+    const o = el("option", null, g.label);
+    o.value = g.id;
+    goalSel.append(o);
+  });
+
+  const metricSel = $("#lmetric");
+  const desc = $("#lmetric-desc");
+  try {
+    const d = await api("/api/landscape-metrics");
+    LANDSCAPE_METRICS = d.metrics;
+    LANDSCAPE_METRICS.forEach((m) => {
+      const o = el("option", null, m.label);
+      o.value = m.key;
+      metricSel.append(o);
+    });
+    metricSel.value = d.default;
+  } catch {
+    desc.textContent = "Could not load the metric list.";
+    return;
+  }
+  const syncDesc = () => {
+    const m = LANDSCAPE_METRICS.find((x) => x.key === metricSel.value);
+    if (!m) return;
+    desc.textContent =
+      `${m.description} Encoded as a ${m.encoding} scale` +
+      (m.encoding === "diverging" ? `, where the middle means: ${m.midpoint_meaning}.` : ".");
+  };
+  metricSel.addEventListener("change", syncDesc);
+  syncDesc();
 }

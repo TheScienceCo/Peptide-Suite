@@ -99,6 +99,42 @@ needs a structure, the other needs weeks of QM. Both are reported, because
 suppressing one because the other fired would understate what the proposal
 actually needs.
 
+## Why the grid hatches instead of filling
+
+The substitution landscape shows the whole scan — every position against every
+residue — rather than the five recommendations the optimize tab reports.
+Position runs along the x-axis, the twenty residues down the y-axis grouped by
+side-chain chemistry, and each cell carries one computed quantity: net score,
+off-target cost, the conservation penalty on its own, charge change, or
+hydrophobicity change.
+
+The interesting part is what happens to a cell with no number behind it.
+
+A heatmap wants a value everywhere, and the tempting default for "nothing to
+report" is the middle of the scale. On a diverging ramp the middle means *no
+change*, which is a claim about the chemistry. "No conservation data" is a
+different claim, and the two must not share a cell. So a cell the pipeline did
+not compute is hatched, carries no `value` key on the wire at all, and states
+its reason on hover and in the table view.
+
+This is not hypothetical. Automated homolog retrieval is not wired up in this
+build, so without pasted homologs the conservation term has nothing to compute
+from — and the conservation metric comes back with all 589 substitution cells
+hatched and none coloured. Entropy over one sequence is zero at every position
+by construction; filled in, it would have painted the peptide as perfectly
+conserved end to end. Supply three distinct homologs and the same grid fills.
+
+Two smaller rules follow from the same idea. The wild-type diagonal is its own
+state — not a substitution with no effect, not a substitution. And a one-signed
+quantity does not get a diverging scale: off-target cost runs 0..1 with no
+meaningful midpoint, so it declares a sequential encoding and gets one hue,
+while only genuinely signed quantities get two poles and a neutral middle.
+
+The colour scale is derived from the grid in front of you, not fixed, and says
+so underneath: a scan whose scores all fall within ±0.3 drawn against a
+theoretical ±1.0 is a uniformly pale chart that hides its own result. Two grids
+therefore do not share a scale, which is stated rather than left to be assumed.
+
 ## Why sequence-aware evaluation matters
 
 Peptide datasets are full of near-duplicates: alanine scans, single-point
@@ -192,6 +228,8 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 |---|---|
 | `POST /api/infer-function` | Identify a sequence or name, and propose a goal for confirmation |
 | `POST /api/optimize` | Run the substitution scan against a confirmed goal |
+| `POST /api/substitution-landscape` | The same scan as the full position x residue grid, unranked |
+| `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
 | `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
 | `POST /api/find-peptides` | Functional keyword search |
 | `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |

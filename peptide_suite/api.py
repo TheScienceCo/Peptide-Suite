@@ -23,6 +23,14 @@ from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
 from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.peptide_manager import PeptideManager
+from peptide_suite.core.substitution_landscape import (
+    DEFAULT_METRIC,
+    METRICS,
+    CellState,
+    LandscapeError,
+    SubstitutionLandscape,
+    build_landscape,
+)
 from peptide_suite.workflows.find_peptides import FindPeptidesWorkflow
 from peptide_suite.workflows.optimize import OptimizeWorkflow
 from peptide_suite.workflows.transform import TransformWorkflow
@@ -302,6 +310,21 @@ class InferRequest(BaseModel):
     input: str = Field(..., description="Peptide sequence or recognised name")
 
 
+class LandscapeRequest(BaseModel):
+    input: str = Field(..., description="Peptide sequence or recognised name")
+    goal: Optional[str] = Field(None, description="Confirmed functional goal")
+    metric: str = Field(DEFAULT_METRIC, description="Which computed quantity to colour by")
+    ph: float = Field(7.4, ge=0.0, le=14.0)
+    homologs: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Optional homologous sequences. The conservation metric is computable only "
+            "when 3 or more distinct sequences are supplied; without them every cell of "
+            "that metric is returned as not computed rather than as zero."
+        ),
+    )
+
+
 class OptimizeRequest(BaseModel):
     input: str = Field(..., description="Peptide sequence or recognised name")
     goal: Optional[str] = Field(None, description="Confirmed functional goal")
@@ -526,6 +549,111 @@ def optimize(req: OptimizeRequest) -> Dict:
         "ph": req.ph,
         "recommendations": [encode_recommendation(r) for r in recs],
         "scan_size": len(ctx.sequence) * 19,
+    })
+
+
+def encode_landscape(ls: SubstitutionLandscape) -> Dict:
+    """
+    Serialise the grid.
+
+    Cells go out as parallel arrays keyed by state rather than as one number
+    per cell with a sentinel, because a sentinel is exactly the thing that gets
+    read as a value by the next consumer along. A cell with no value carries no
+    `value` key at all.
+    """
+    return {
+        "sequence": ls.sequence,
+        "name": ls.name,
+        "goal": ls.goal,
+        "ph": ls.ph,
+        "rows": list(ls.rows),
+        "length": ls.length,
+        "metric": {
+            "key": ls.metric.key,
+            "label": ls.metric.label,
+            "units": ls.metric.units,
+            "encoding": ls.metric.encoding,
+            "midpoint_meaning": ls.metric.midpoint_meaning,
+            "description": ls.metric.description,
+            "source": ls.metric.source,
+        },
+        "scale_bound": ls.scale_bound,
+        "scale_basis": ls.scale_basis,
+        "n_computed": ls.n_computed,
+        "n_not_computed": ls.n_not_computed,
+        "not_computed_reason": ls.not_computed_reason,
+        "notes": ls.notes,
+        "cells": [
+            {
+                "position": c.position,
+                "aa": c.mutant_aa,
+                "state": c.state.value,
+                "detail": c.detail,
+                "confidence": c.confidence,
+                **({"value": c.value} if c.state is CellState.COMPUTED else {}),
+            }
+            for c in ls.cells
+        ],
+    }
+
+
+@app.get("/api/landscape-metrics")
+def landscape_metrics() -> Dict:
+    """The selectable quantities, with the encoding each one is entitled to."""
+    return {
+        "default": DEFAULT_METRIC,
+        "metrics": [
+            {
+                "key": m.key,
+                "label": m.label,
+                "units": m.units,
+                "encoding": m.encoding,
+                "midpoint_meaning": m.midpoint_meaning,
+                "description": m.description,
+                "source": m.source,
+            }
+            for m in METRICS
+        ],
+    }
+
+
+@app.post("/api/substitution-landscape")
+def substitution_landscape(req: LandscapeRequest) -> Dict:
+    """
+    The full position x residue grid, rather than the top few of it.
+
+    Runs the same scan as /api/optimize and skips the ranking cut. Nothing is
+    recomputed per metric: one scan, re-projected.
+    """
+    try:
+        ctx, recs = _optimize.scan(
+            input_sequence_or_name=req.input,
+            confirmed_goal=req.goal,
+            auto_confirm=True,
+            ph=req.ph,
+            homologs=req.homologs,
+        )
+    except Exception as e:
+        logger.exception("Landscape scan failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not ctx.sequence:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not parse '{req.input}' as a valid peptide sequence, and gene-name "
+                f"resolution is not wired up in this build. Paste a raw amino acid sequence."
+            ),
+        )
+
+    try:
+        landscape = build_landscape(ctx, recs, metric_key=req.metric, ph=req.ph)
+    except LandscapeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return stamp_policy({
+        "landscape": encode_landscape(landscape),
+        "context": encode_context(ctx),
     })
 
 
