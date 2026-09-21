@@ -425,6 +425,11 @@ without knowing what weighted it.
 python -m unittest discover -t . -s peptide_suite/tests
 ```
 
+No third-party package is required to run it — not FastAPI, not PyTorch. CI
+runs this suite with nothing installed, which is what keeps that true, and the
+suite disables live network lookups for itself so no assertion can depend on
+whether a host happens to be reachable.
+
 `-t .` matters. It lets the test package load the demonstration pack before any
 test imports — without it the suite fails at the first coefficient read, which
 is the boundary working as intended rather than a broken suite.

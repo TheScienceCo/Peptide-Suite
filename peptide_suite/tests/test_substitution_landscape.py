@@ -16,6 +16,7 @@ from pathlib import Path
 from peptide_suite.core import PeptideContext
 from peptide_suite.core.substitution_landscape import (
     AA_ROWS,
+    encode_landscape,
     DEFAULT_METRIC,
     MAX_LANDSCAPE_LENGTH,
     METRICS,
@@ -208,7 +209,6 @@ class TestTheColumnMarginal(unittest.TestCase):
             self.assertEqual(cell.value, column.best)
 
     def test_an_empty_column_carries_no_aggregate_on_the_wire(self):
-        from peptide_suite.api import encode_landscape
         ctx, recs = scan()
         payload = encode_landscape(build_landscape(ctx, recs, "conservation_cost"))
         for column in payload["profile"]:
@@ -266,10 +266,14 @@ class TestTheWireFormat(unittest.TestCase):
     A missing value must not survive serialisation as a key the client can
     coerce. `cell.value ?? 0` is one keystroke away in any consumer, so the key
     is absent rather than null.
+
+    The serialiser is imported from the core module, not from `api`. It lived
+    in `api` first, and these tests pulled FastAPI into a suite that otherwise
+    needs none -- which passed in a sandbox with the web dependencies installed
+    and failed in CI, which installs nothing.
     """
 
     def test_an_uncomputed_cell_has_no_value_key_on_the_wire(self):
-        from peptide_suite.api import encode_landscape
         ctx, recs = scan()
         payload = encode_landscape(build_landscape(ctx, recs, "conservation_cost"))
         blob = json.dumps(payload)
@@ -279,7 +283,6 @@ class TestTheWireFormat(unittest.TestCase):
             self.assertIn(cell["state"], ("NOT_COMPUTED", "WILD_TYPE"))
 
     def test_a_computed_cell_does_carry_its_value(self):
-        from peptide_suite.api import encode_landscape
         ctx, recs = scan()
         payload = encode_landscape(build_landscape(ctx, recs, "net_score"))
         computed = [c for c in payload["cells"] if c["state"] == "COMPUTED"]

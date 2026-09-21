@@ -471,3 +471,68 @@ def _scale(metric: LandscapeMetric, values: List[float]) -> Tuple[Optional[float
         f"Scale runs 0 to {bound:.2f}, the largest value computed in this grid. "
         f"It is not a fixed range — two grids do not share it."
     )
+
+
+def encode_landscape(ls: SubstitutionLandscape) -> Dict:
+    """
+    Serialise the grid.
+
+    A cell with no value carries no `value` key at all rather than a null or a
+    sentinel, because a sentinel is exactly the thing the next consumer along
+    reads as a number: `cell.value ?? 0` is one keystroke away in any client.
+
+    This lives beside the grid rather than in `api.py` because the wire
+    contract is a property of the landscape, not of the web framework it
+    happens to travel over -- and because a test of that contract should not
+    need FastAPI installed to run. It did, and CI (which installs no
+    requirements) failed on the import while the sandbox passed.
+    """
+    return {
+        "sequence": ls.sequence,
+        "name": ls.name,
+        "goal": ls.goal,
+        "ph": ls.ph,
+        "rows": list(ls.rows),
+        "length": ls.length,
+        "metric": {
+            "key": ls.metric.key,
+            "label": ls.metric.label,
+            "units": ls.metric.units,
+            "encoding": ls.metric.encoding,
+            "midpoint_meaning": ls.metric.midpoint_meaning,
+            "description": ls.metric.description,
+            "source": ls.metric.source,
+        },
+        "scale_bound": ls.scale_bound,
+        "scale_basis": ls.scale_basis,
+        "n_computed": ls.n_computed,
+        "n_not_computed": ls.n_not_computed,
+        "not_computed_reason": ls.not_computed_reason,
+        "notes": ls.notes,
+        "cells": [
+            {
+                "position": c.position,
+                "aa": c.mutant_aa,
+                "state": c.state.value,
+                "detail": c.detail,
+                "confidence": c.confidence,
+                **({"value": c.value} if c.state is CellState.COMPUTED else {}),
+            }
+            for c in ls.cells
+        ],
+        # The column marginal, on the same terms: a column with nothing
+        # computed carries no aggregate key rather than a zero.
+        "profile": [
+            {
+                "position": p.position,
+                "wt": p.wild_type_aa,
+                "n_computed": p.n_computed,
+                "n_not_computed": p.n_not_computed,
+                "detail": p.detail,
+                "best_substitution": p.best_substitution,
+                **({"best": p.best, "worst": p.worst, "mean": p.mean}
+                   if p.n_computed else {}),
+            }
+            for p in ls.profile
+        ],
+    }

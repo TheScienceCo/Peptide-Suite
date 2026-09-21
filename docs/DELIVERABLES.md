@@ -27,7 +27,7 @@ rather than guess, and an ML layer kept in its own provenance lane.
 | `peptide_suite/workflows/` | Optimize, transform, find-peptides. |
 | `peptide_suite/api.py` | FastAPI transport. Computes nothing itself. |
 | `peptide_suite/static/` | The browser interface. Renders; never scores. |
-| `peptide_suite/tests/` | 618 tests. |
+| `peptide_suite/tests/` | 621 tests, and none of them reaches a network or a third-party package. |
 | `ml/` | PyTorch layer: encoders, splitting, metrics, training, model cards, tracking, the representation explorer, the multimodal comparison. |
 | `ml/tests/` | 111 tests. |
 | `tools/` | Policy pack generation, the engine/policy boundary check. |
@@ -123,6 +123,11 @@ whole thesis in two images.
 - **Engine/policy boundary debt: 59 coefficients** still live in engine code,
   tracked in `policy/BOUNDARY_DEBT.txt` and ratcheted — the check fails if any
   count rises.
+- **The suite is hermetic by construction, not by accident.** It disables live
+  UniProt lookups for itself. Before that, three tests took the reference-set
+  path in a sandbox with no route to uniprot.org and the live path on a CI
+  runner that has one, so the same commit passed in one place and failed in the
+  other with nothing to indicate why.
 
 ## Remaining roadmap
 
@@ -140,15 +145,19 @@ Blocked on data, weights or tooling rather than on design:
 ## Reproduction
 
 ```bash
-pip install -r requirements.txt
 export PEPTIDE_SUITE_POLICY=policy/demo.v1.json
 
-# the analysis suite — no PyTorch required, the engine does not import it
-python -m unittest discover -t . -s peptide_suite/tests     # 618 tests
+# The analysis suite needs no third-party package at all — not FastAPI, not
+# PyTorch, not requests. CI runs it with nothing installed, which is what keeps
+# that true.
+python -m unittest discover -t . -s peptide_suite/tests     # 621 tests
 
-# the ML layer is optional and PyTorch is its only extra dependency
-pip install torch
+# The ML layer is optional; PyTorch and numpy are its only dependencies.
+pip install --index-url https://download.pytorch.org/whl/cpu torch numpy
 python -m unittest discover -t . -s ml/tests                # 111 tests
+
+# The web interface needs the runtime dependencies.
+pip install -r requirements.txt
 
 # the engine/policy boundary, which only ratchets down
 python tools/check_policy_boundary.py --scope all

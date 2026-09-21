@@ -26,10 +26,9 @@ from peptide_suite.core.peptide_manager import PeptideManager
 from peptide_suite.core.substitution_landscape import (
     DEFAULT_METRIC,
     METRICS,
-    CellState,
     LandscapeError,
-    SubstitutionLandscape,
     build_landscape,
+    encode_landscape,
 )
 from peptide_suite.workflows.find_peptides import FindPeptidesWorkflow
 from peptide_suite.workflows.optimize import OptimizeWorkflow
@@ -550,66 +549,6 @@ def optimize(req: OptimizeRequest) -> Dict:
         "recommendations": [encode_recommendation(r) for r in recs],
         "scan_size": len(ctx.sequence) * 19,
     })
-
-
-def encode_landscape(ls: SubstitutionLandscape) -> Dict:
-    """
-    Serialise the grid.
-
-    Cells go out as parallel arrays keyed by state rather than as one number
-    per cell with a sentinel, because a sentinel is exactly the thing that gets
-    read as a value by the next consumer along. A cell with no value carries no
-    `value` key at all.
-    """
-    return {
-        "sequence": ls.sequence,
-        "name": ls.name,
-        "goal": ls.goal,
-        "ph": ls.ph,
-        "rows": list(ls.rows),
-        "length": ls.length,
-        "metric": {
-            "key": ls.metric.key,
-            "label": ls.metric.label,
-            "units": ls.metric.units,
-            "encoding": ls.metric.encoding,
-            "midpoint_meaning": ls.metric.midpoint_meaning,
-            "description": ls.metric.description,
-            "source": ls.metric.source,
-        },
-        "scale_bound": ls.scale_bound,
-        "scale_basis": ls.scale_basis,
-        "n_computed": ls.n_computed,
-        "n_not_computed": ls.n_not_computed,
-        "not_computed_reason": ls.not_computed_reason,
-        "notes": ls.notes,
-        "cells": [
-            {
-                "position": c.position,
-                "aa": c.mutant_aa,
-                "state": c.state.value,
-                "detail": c.detail,
-                "confidence": c.confidence,
-                **({"value": c.value} if c.state is CellState.COMPUTED else {}),
-            }
-            for c in ls.cells
-        ],
-        # The column marginal, on the same terms: a column with nothing
-        # computed carries no aggregate key rather than a zero.
-        "profile": [
-            {
-                "position": p.position,
-                "wt": p.wild_type_aa,
-                "n_computed": p.n_computed,
-                "n_not_computed": p.n_not_computed,
-                "detail": p.detail,
-                "best_substitution": p.best_substitution,
-                **({"best": p.best, "worst": p.worst, "mean": p.mean}
-                   if p.n_computed else {}),
-            }
-            for p in ls.profile
-        ],
-    }
 
 
 @app.get("/api/landscape-metrics")
