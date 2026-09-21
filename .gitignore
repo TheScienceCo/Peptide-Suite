@@ -56,3 +56,4 @@ policy/legend*
 .term_salt
 *.salt
 ml/runs/
+.embedding_cache/

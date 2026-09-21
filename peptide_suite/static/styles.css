@@ -124,6 +124,10 @@ h1 {
 
 .tabs {
   display: flex;
+  /* Wraps rather than overflowing. A fourth tab pushed the bar past 400px and
+     took the whole page with it; the tab bar is navigation and has to stay
+     reachable at phone width. */
+  flex-wrap: wrap;
   gap: 2px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 22px;
@@ -1132,3 +1136,17 @@ table.titration td.sign {
   color: var(--text-secondary);
 }
 .contact .r { color: var(--text-secondary); margin: 6px 0; }
+
+/* The split-comparison table has four columns, not the seven the titration
+   table was sized for, so it does not need that min-width and inheriting it
+   forced a scroll on a table that fits. */
+#ml-results table.titration { min-width: 340px; }
+
+/* Arm names are prose, not residue labels. The monospace residue cell is sized
+   for things like "K28" and clipped "composition baseline" mid-word. */
+#ml-results td.armname {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 11rem;
+  padding-right: 14px;
+}

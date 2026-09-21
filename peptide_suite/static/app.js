@@ -590,6 +590,99 @@ function renderEffect(eff, kindLabel) {
   return box;
 }
 
+/* ---------- Model evaluation ---------- */
+
+async function onRunML() {
+  const btn = $("#btn-ml");
+  const out = $("#ml-results");
+  out.innerHTML = "";
+  busy(btn, true);
+  try {
+    const families = parseInt($("#ml-families").value, 10) || 40;
+    const per = parseInt($("#ml-per").value, 10) || 8;
+    const d = await api(`/api/ml/split-comparison?n_families=${families}&per_family=${per}`);
+    renderMLResults(d);
+  } catch (e) {
+    out.append(notice(e.message, "error", "×"));
+  } finally {
+    busy(btn, false, "Run the comparison");
+  }
+}
+
+function renderMLResults(d) {
+  const out = $("#ml-results");
+
+  // The synthetic disclaimer goes first. A table of AUCs reads as a result
+  // about peptides unless something says otherwise before it is read.
+  out.append(notice(d.claim_guidance, "warn", "!"));
+
+  const leak = el("div", "card");
+  leak.append(el("h2", null, "Leakage"));
+  const stats = el("div", "stats");
+  const addStat = (k, v, sm) => {
+    const s = el("div", "stat");
+    s.append(el("div", "k", k), el("div", `v${sm ? " sm" : ""}`, v));
+    stats.append(s);
+  };
+  addStat("Sequences", `${d.n_sequences}`);
+  addStat("Clusters", `${d.n_clusters}`);
+  addStat("Identity threshold", `${Math.round(d.identity_threshold * 100)}%`);
+  addStat("Leaked, random", `${d.leakage.random}`);
+  addStat("Leaked, clustered", `${d.leakage.clustered}`);
+  leak.append(stats);
+  leak.append(el("div", "footnote",
+    "Test sequences with a neighbour above the identity threshold in training."));
+  out.append(leak);
+
+  const card = el("div", "card");
+  card.append(el("h2", null, "ROC-AUC by split"));
+  const wrap = el("div", "tablewrap");
+  const table = el("table", "titration");
+  const head = el("tr");
+  head.append(el("th", null, "Arm"), el("th", null, "Random split"),
+              el("th", null, "Clustered split"), el("th", null, "Gap"));
+  table.append(head);
+
+  const arms = [...new Set(d.arms.map((a) => a.arm))];
+  arms.forEach((arm) => {
+    const rnd = d.arms.find((a) => a.arm === arm && a.split === "random");
+    const clu = d.arms.find((a) => a.arm === arm && a.split === "sequence_clustered");
+    const gap = d.gaps[arm];
+    const row = el("tr", gap > 0.3 ? "switchable" : null);
+    const cell = (m) => {
+      const td = el("td", "num");
+      if (!m || m.roc_auc === null) { td.textContent = "—"; return td; }
+      td.append(el("span", null, m.roc_auc.toFixed(3)));
+      if (m.ci_low !== null) {
+        td.append(el("div", "footnote",
+          `${m.ci_low.toFixed(2)}\u2013${m.ci_high.toFixed(2)}`));
+      }
+      return td;
+    };
+    row.append(el("td", "armname", arm));
+    row.append(cell(rnd), cell(clu));
+    const g = el("td", "verdict");
+    g.append(el("span", "glyph", gap > 0.3 ? "\u25C6" : "\u25CB"),
+             el("span", null, gap === null ? "—" : `${gap >= 0 ? "+" : ""}${gap.toFixed(3)}`));
+    row.append(g);
+    table.append(row);
+  });
+  wrap.append(table);
+  card.append(wrap);
+  card.append(el("div", "footnote",
+    "Intervals are 95% bootstrap. On a test set this size the interval is usually " +
+    "wider than the differences people report."));
+  (d.skipped || []).forEach((sk) => card.append(notice(sk, "info", "i")));
+  out.append(card);
+
+  const note = el("div", "card");
+  note.append(el("h2", null, "Reading the table"));
+  d.report.split("\n").forEach((line) => {
+    if (line.trim()) note.append(el("p", "reasoning", line));
+  });
+  out.append(note);
+}
+
 /* ---------- Workflow 2 ---------- */
 
 async function onFind() {
@@ -687,7 +780,7 @@ function renderCandidate(c) {
 
 /* ---------- wiring ---------- */
 
-const TABS = ["optimize", "transform", "find"];
+const TABS = ["optimize", "transform", "ml", "find"];
 
 function switchTab(which) {
   TABS.forEach((name) => {
@@ -702,6 +795,7 @@ async function init() {
   $("#btn-transform").addEventListener("click", onTransform);
   $("#btn-infer").addEventListener("click", onAnalyze);
   $("#btn-find").addEventListener("click", onFind);
+  $("#btn-ml").addEventListener("click", onRunML);
   $("#query").addEventListener("keydown", (e) => { if (e.key === "Enter") onFind(); });
 
   EXAMPLES.sequences.forEach((ex) => {

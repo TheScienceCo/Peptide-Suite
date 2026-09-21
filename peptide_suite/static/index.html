@@ -26,6 +26,9 @@
     <button class="tab" role="tab" id="tab-transform" aria-selected="false" aria-controls="panel-transform">
       Transformations
     </button>
+    <button class="tab" role="tab" id="tab-ml" aria-selected="false" aria-controls="panel-ml">
+      Model evaluation
+    </button>
     <button class="tab" role="tab" id="tab-find" aria-selected="false" aria-controls="panel-find">
       Find peptides
     </button>
@@ -105,6 +108,37 @@
   </section>
 
   <!-- ================= WORKFLOW 2 ================= -->
+  <section class="panel" id="panel-ml" role="tabpanel" aria-labelledby="tab-ml" hidden>
+    <div class="card">
+      <div class="label">WHY SEQUENCE-AWARE EVALUATION MATTERS</div>
+      <p class="kv">
+        Peptide datasets are full of near-duplicates — alanine scans, point variants,
+        truncation series. A random split puts a peptide in train and its mutant in test,
+        and the model gets credit for recalling a sequence it has already seen. Held-out
+        families remove that. The gap between the two numbers is the part of the random
+        score that was recall.
+      </p>
+      <div class="row">
+        <div>
+          <label for="ml-families">Families</label>
+          <input type="text" id="ml-families" value="40" inputmode="numeric">
+        </div>
+        <div>
+          <label for="ml-per">Members per family</label>
+          <input type="text" id="ml-per" value="8" inputmode="numeric">
+        </div>
+        <div>
+          <button class="primary" id="btn-ml">Run the comparison</button>
+        </div>
+      </div>
+      <p class="footnote">
+        Runs live rather than serving a stored table, so the numbers cannot drift from
+        the code. Synthetic by design: the claim is about evaluation protocol, not biology.
+      </p>
+    </div>
+    <div id="ml-results"></div>
+  </section>
+
   <section class="panel" id="panel-find" role="tabpanel" aria-labelledby="tab-find" hidden>
 
     <div class="card">

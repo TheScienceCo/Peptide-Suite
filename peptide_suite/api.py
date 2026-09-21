@@ -836,6 +836,79 @@ def holdout() -> Dict:
     }
 
 
+@app.get("/api/ml/status")
+def ml_status() -> Dict:
+    """
+    What the ML layer can and cannot do here.
+
+    Separate from the analysis endpoints and clearly labelled, because ML
+    predictions are a different provenance category from everything else this
+    server returns and must not be read as the same kind of number.
+    """
+    try:
+        from ml.datasets.registry import TASKS, trainable_tasks
+        from ml.embeddings.encoder import available_encoders
+    except ImportError as e:
+        return {"available": False,
+                "reason": f"The ML layer requires torch, which is not installed ({e}). "
+                          f"The peptide analysis pipeline does not depend on it."}
+    return {
+        "available": True,
+        "encoders": available_encoders(),
+        "trainable_tasks": trainable_tasks(),
+        "tasks": {
+            name: {"status": spec.status.value, "kind": spec.kind.value,
+                   "source": spec.source, "licence": spec.licence,
+                   "guidance": spec.claim_guidance()}
+            for name, spec in sorted(TASKS.items())
+        },
+        "note": ("No model is trained here: the labelled datasets are unreachable from "
+                 "this environment. Nothing is backed by invented labels."),
+    }
+
+
+@app.get("/api/ml/split-comparison")
+def ml_split_comparison(n_families: int = 40, per_family: int = 8,
+                        seed: int = 0) -> Dict:
+    """
+    Random versus sequence-clustered evaluation, run live.
+
+    The experiment is synthetic by design: the claim is about the evaluation
+    protocol, not about biology, so it is settled on constructed sequences where
+    the label is a known function of the input. Running it live rather than
+    serving a stored number means the table cannot drift from the code.
+    """
+    try:
+        from ml.experiments.split_gap import run
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"ML layer unavailable: {e}")
+
+    n_families = max(4, min(n_families, 80))
+    per_family = max(2, min(per_family, 16))
+    result = run(n_families=n_families, per_family=per_family, seed=seed)
+    return {
+        "n_sequences": result.n_sequences,
+        "n_clusters": result.n_clusters,
+        "identity_threshold": result.threshold,
+        "leakage": result.leakage,
+        "arms": [
+            {"arm": arm.name, "split": arm.split,
+             "roc_auc": arm.metrics["roc_auc"].value,
+             "ci_low": arm.metrics["roc_auc"].ci_low,
+             "ci_high": arm.metrics["roc_auc"].ci_high,
+             "n": arm.metrics["roc_auc"].n}
+            for arm in result.arms
+        ],
+        "gaps": {name: result.gap_for(name)
+                 for name in sorted({a.name for a in result.arms})},
+        "skipped": result.skipped,
+        "is_synthetic": True,
+        "claim_guidance": ("This demonstrates a fact about evaluation protocol and "
+                           "supports no biological claim, whatever the numbers say."),
+        "report": result.report(),
+    }
+
+
 @app.get("/api/calibration")
 def calibration() -> Dict:
     """Prediction-vs-outcome log summary, for the Brier-score check."""
