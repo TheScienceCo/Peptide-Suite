@@ -18,7 +18,7 @@ the engine; an absent policy artifact fails at startup rather than falling back.
 Outstanding: boundary debt, tracked and ratcheted in `policy/BOUNDARY_DEBT.txt`.
 It only moves down.
 
-## Addendum 2 — Physical biochemistry layer — IN PROGRESS
+## Addendum 2 — Physical biochemistry layer — BUILD ORDER COMPLETE
 
 Build order from the addendum's section 13:
 
@@ -31,12 +31,26 @@ Build order from the addendum's section 13:
 - [x] **6f** Partner-peptide module + RAMP schema requirement
 - [x] **6g** Class B1 restricted-zone rule + affinity/efficacy/bias three-field output
 - [x] **6h** Synthetic feasibility gate
-- [ ] **6i** Holdout protocol rewrite (motif ablation, temporal, decoys) +
+- [x] **6i** Holdout protocol rewrite (motif ablation, temporal, decoys) +
       rank-based reporting
 
-Then: conformer ensembles, SAPT, NBO (addendum sections 4 and 5). Those are
-explanatory depth on a system that must first be honest, which is why they come
-last rather than first.
+All nine build-order steps are done. What remains from Addendum 2 is the
+explanatory depth that the addendum itself places after 6i:
+
+- [ ] Conformer ensembles (CREST / GFN2-xTB) for cyclic, stapled,
+      disulfide-constrained and short peptides; report unavailable rather than
+      undersampled above that length
+- [ ] n->pi* backbone analysis (NBO second-order perturbation), required for any
+      proposal involving Aib, other alpha,alpha-disubstituted residues,
+      N-methylation, or proline-rich segments
+- [ ] SAPT0 / DFT-SAPT contact decomposition into electrostatics,
+      exchange-repulsion, induction and dispersion. Forbidden: summing the
+      components into a predicted binding free energy — interaction energy omits
+      desolvation and entropy entirely
+
+These come last rather than first because they are explanatory depth on a system
+that had to be honest before it was deep. All three depend on the QM pipeline
+stubbed in 6d, so the parameterized-residue registry is the prerequisite.
 
 ## Addendum 3 — ML and representation learning — QUEUED
 

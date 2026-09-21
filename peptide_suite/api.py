@@ -789,6 +789,36 @@ def parameterization() -> Dict:
     }
 
 
+@app.get("/api/holdout")
+def holdout() -> Dict:
+    """
+    The holdout protocols and why named-entity exclusion is not one of them.
+
+    Exposed as an endpoint because the leakage argument is checkable from the
+    data: for any drug in the golden set it lists which other drugs still carry
+    each of its motifs after a name-based exclusion.
+    """
+    from peptide_suite.core.holdout import GoldenSet, Protocol
+    return {
+        "protocols": [
+            {"name": p.value, "is_clean_holdout": p.is_clean_holdout,
+             "description": p.description}
+            for p in Protocol
+        ],
+        "golden_set": sorted(GoldenSet.drugs()),
+        "named_entity_leakage": {
+            drug: GoldenSet.named_entity_leakage(drug)
+            for drug in sorted(GoldenSet.drugs())
+        },
+        "decoys": GoldenSet.decoys(),
+        "reporting_contract": (
+            "Never report a hit as binary. Report the rank of the true modification "
+            "within the full proposal list and the count of proposals ranked above it, "
+            "with the decoy false-positive rate alongside."
+        ),
+    }
+
+
 @app.get("/api/calibration")
 def calibration() -> Dict:
     """Prediction-vs-outcome log summary, for the Brier-score check."""

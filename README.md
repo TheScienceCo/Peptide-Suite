@@ -76,6 +76,50 @@ needs a structure, the other needs weeks of QM. Both are reported, because
 suppressing one because the other fired would understate what the proposal
 actually needs.
 
+## Why named-entity holdouts overstate the result
+
+The obvious way to test whether the system can rediscover a known drug is to
+remove every document mentioning it and see whether the modifications come back.
+For semaglutide that protocol does not hold, and the reason is checkable from
+the data rather than rhetorical.
+
+Semaglutide carries four engineering motifs: Aib8, Arg34, a C18 diacid, and a
+gamma-Glu linker. After excluding every document naming semaglutide:
+
+| Motif | Still present in |
+|---|---|
+| Aib | taspoglutide, tirzepatide |
+| lipidation | liraglutide, tirzepatide, insulin degludec |
+| gamma-Glu linker | liraglutide, tirzepatide, insulin degludec |
+| regioselectivity substitution | liraglutide |
+
+Every motif survives. Liraglutide carries Arg34 and gamma-Glu-linked acylation
+at Lys26; taspoglutide is [Aib8, Aib35]-GLP-1. The union of two other published
+drugs is the complete answer, so what such an experiment demonstrates is correct
+retrieval and recombination of established engineering motifs.
+
+That is a real and useful capability and the system claims exactly that. It is
+not evidence of de novo discovery, and `GET /api/holdout` will produce the table
+above for any drug in the golden set.
+
+Three protocols replace it: motif-level ablation (exclude by chemistry, not by
+name), temporal holdout (freeze the corpus at a cutoff year), and decoy controls
+(run on peptides where the motif is known not to help — a system that proposes
+it anyway has a prior, not a prediction).
+
+**Results are never reported as a binary hit.** The contract is the rank of the
+true modification within the full proposal list, plus the count ranked above it,
+plus the decoy false-positive rate:
+
+> 'Aib8' ranked 2nd of 47 proposals, with 1 ranked above it under motif_ablation
+> (ablated: aib). 'aib' was proposed in 2 of 18 decoy trials (false-positive rate
+> 0.11).
+
+"Predicted two of three modifications" is not supportable. The sentence above
+is. `RankedOutcome` has no boolean hit field anywhere on it, because a system
+whose output can be reduced to yes-or-no will be — and 2nd of 47 would get
+written up alongside 2nd of 3.
+
 ## Tests
 
 ```bash
