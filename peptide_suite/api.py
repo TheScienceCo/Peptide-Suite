@@ -1037,6 +1037,115 @@ def ml_split_comparison(n_families: int = 40, per_family: int = 8,
     }
 
 
+class RepresentationRequest(BaseModel):
+    sequence: str = Field(..., description="Reference peptide sequence")
+    encoder: str = Field(
+        "deterministic-onehot-composition",
+        description=(
+            "Which encoder produces the vectors. Mixing encoders is refused. The "
+            "composition encoder concentrates more variance into two components and "
+            "superimposes variants that differ only in where a substitution was made; "
+            "the positional one separates those and spreads the variance thin. Both "
+            "limitations ride with the response."
+        ),
+    )
+    candidates: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Extra sequences to place in the same space — multi-substitution designs, "
+            "related peptides. Anything not the same length as the reference is "
+            "reported as unrelated rather than given a substitution count it does "
+            "not have."
+        ),
+    )
+    max_points: int = Field(1200, ge=8, le=3000)
+
+
+@app.post("/api/ml/representation")
+def ml_representation(req: RepresentationRequest) -> Dict:
+    """
+    The reference and its single substitutions projected into two dimensions.
+
+    Kept under /api/ml because a representation is a different provenance
+    category from a computed physical quantity, and the response says which
+    encoder made it and how much of the variation the picture actually carries.
+    """
+    try:
+        from ml.embeddings.encoder import (
+            DeterministicEncoder, EncoderUnavailable, ESM2Encoder, PositionalOneHotEncoder,
+        )
+        from ml.embeddings.explorer import (
+            ProjectionError, project, single_substitution_variants,
+        )
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"The ML layer is not installed ({e}).")
+
+    sequence = "".join(req.sequence.split()).upper()
+    if not sequence or any(c not in "ACDEFGHIKLMNPQRSTVWY" for c in sequence):
+        raise HTTPException(
+            status_code=400,
+            detail="Give a reference sequence in one-letter codes; this projection has "
+                   "no encoder for non-canonical residues.",
+        )
+
+    encoders = {
+        DeterministicEncoder.model: lambda: DeterministicEncoder(max_length=max(len(sequence), 1)),
+        PositionalOneHotEncoder.model: lambda: PositionalOneHotEncoder(max_length=max(len(sequence), 1)),
+        ESM2Encoder().model: ESM2Encoder,
+    }
+    if req.encoder not in encoders:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown encoder '{req.encoder}'. Available: {', '.join(sorted(encoders))}",
+        )
+    encoder = encoders[req.encoder]()
+
+    pairs = [("wild type", sequence)] + single_substitution_variants(sequence)
+    for candidate in (req.candidates or []):
+        clean = "".join(candidate.split()).upper()
+        if clean:
+            pairs.append((f"candidate: {clean[:12]}…" if len(clean) > 12 else f"candidate: {clean}",
+                          clean))
+    truncated = len(pairs) > req.max_points
+    if truncated:
+        # Keep the reference and any supplied candidates; the single-substitution
+        # cloud is what gets cut, and the response says so.
+        keep = [pairs[0]] + [p for p in pairs if p[0].startswith("candidate:")]
+        room = req.max_points - len(keep)
+        pairs = keep + [p for p in pairs[1:] if not p[0].startswith("candidate:")][:max(room, 0)]
+
+    try:
+        embeddings = [encoder.encode(seq) for _, seq in pairs]
+    except EncoderUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
+        projection = project(embeddings, [label for label, _ in pairs], sequence)
+    except ProjectionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "reference": sequence,
+        "encoder": {
+            "model": projection.encoder_model,
+            "version": projection.encoder_version,
+            "kind": projection.encoder_kind,
+            "has_learned_content": projection.encoder_has_learned_content,
+            "input_dim": projection.input_dim,
+        },
+        "explained_variance_ratio": projection.explained_variance_ratio,
+        "cumulative_explained": projection.cumulative_explained,
+        "interpretation": projection.interpretation,
+        "warnings": projection.warnings,
+        "truncated": truncated,
+        "points": [
+            {"label": p.label, "sequence": p.sequence, "x": p.x, "y": p.y,
+             "class": p.variant_class.value, "n_substitutions": p.n_substitutions}
+            for p in projection.points
+        ],
+    }
+
+
 @app.get("/api/calibration")
 def calibration() -> Dict:
     """Prediction-vs-outcome log summary, for the Brier-score check."""

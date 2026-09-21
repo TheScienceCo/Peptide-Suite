@@ -103,11 +103,17 @@ Remaining, and mostly blocked on data and weights rather than design:
 
 - [ ] Real labelled datasets. Every prediction task is UNAVAILABLE here; the
       registry names the source and licence for each.
-- [ ] ESM-2 weights, then the four-arm comparison per task
+- [ ] ESM-2 weights, then the four-arm comparison per task, and the same
+      projection over a learned space — where the explorer's 19% would be the
+      number to beat
       (physicochemical baseline / classical ML / pretrained embeddings /
       fine-tuned) that answers whether language models add predictive value.
-- [ ] Embedding explorer (PCA/UMAP). The substitution landscape is built; the
-      explorer waits on ESM-2 weights, which are unreachable from here.
+- [x] **Representation explorer** — reference plus every single substitution
+      projected onto two principal components, leading with the explained
+      variance rather than the scatter. Refuses to mix encoder spaces, refuses
+      a set with no variation, and fixes the SVD's arbitrary sign so the plot
+      does not mirror itself between runs. Two deterministic encoders with
+      opposite limitations, both stated; the pretrained arm still raises.
 - [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
       compared against single modality and naive concatenation.
 - [ ] Explainability: nearest training examples, residue sensitivity,

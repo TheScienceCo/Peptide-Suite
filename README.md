@@ -176,6 +176,42 @@ before it was fixed.
 This experiment is marked `SYNTHETIC_METHOD_ONLY` in the dataset registry. It
 demonstrates a fact about evaluation protocol and supports no biological claim.
 
+## The representation explorer, and why it leads with a number
+
+A reference peptide and every single substitution of it, projected onto their
+first two principal components. The scatter is not the headline. The headline
+is the share of variation the two drawn dimensions actually carry, shown at
+size above the plot, because a picture carrying 19% of the variation is a
+picture in which proximity means very little and a reader is entitled to know
+that before reading anything off it.
+
+Three things ride with every projection:
+
+- **Explained variance, per component and cumulative.** Without it the axes are
+  unlabelled.
+- **Which encoder made the vectors.** Distance in a deterministic descriptor
+  space is a statement about amino-acid composition. In a pretrained
+  language-model space it would be a statement about what the model learned.
+  Those are different claims, and the projection says which one it is making.
+- **A refusal to mix spaces.** Two vectors of equal dimension from different
+  models occupy unrelated spaces, and a PCA over the mixture produces axes that
+  mean nothing. That is checked, not assumed.
+
+PCA rather than UMAP, deliberately: UMAP's layout depends on hyperparameters
+that change cluster structure, has no explained-variance analogue, and its
+distances are not metric, so all three statements above would become
+unstatable.
+
+The two deterministic encoders are kept separate rather than merged, because
+their limitations are opposite and both are worth seeing. Composition
+concentrates variance into few components and is order-blind — the same swap
+made at two different positions lands in exactly the same place. Positional
+one-hot separates those and spreads the variance so thin that two components
+carry about 5% of it. Neither has any learned content, and neither is reported
+as though it does. ESM-2 is the intended encoder; its weights are unreachable
+from this environment and it raises rather than falling back, so nothing here
+can report amino-acid counts as a language-model embedding.
+
 ## Why named-entity holdouts overstate the result
 
 The obvious way to test whether the system can rediscover a known drug is to
@@ -232,6 +268,7 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 | `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
 | `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
 | `POST /api/find-peptides` | Functional keyword search |
+| `POST /api/ml/representation` | Reference and single substitutions in two principal components |
 | `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |
 | `GET /api/parameterization` | The residue registry and the pipeline that would fill it |
 | `GET /api/holdout` | Holdout protocols, and the named-entity leakage table |

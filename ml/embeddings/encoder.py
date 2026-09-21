@@ -120,6 +120,45 @@ class DeterministicEncoder:
             pooling="amino-acid composition")
 
 
+class PositionalOneHotEncoder(DeterministicEncoder):
+    """
+    Flattened one-hot: the same alphabet, but position-aware.
+
+    Composition cannot see order, so under it every single substitution of the
+    same two residues lands in one place regardless of where it happened --
+    which makes it the wrong space for a picture whose whole subject is where
+    a substitution was made. This flattens the residue-level block instead, so
+    a substitution at position 3 and the same substitution at position 20 are
+    different points.
+
+    It carries its own model name so it can never be pooled with the
+    composition encoder's vectors. They have the same alphabet and unrelated
+    geometry, and the comparability check is on the name.
+
+    The cost is honest and worth stating: the vector is padded to a fixed
+    length, so two sequences of different length are compared over a window
+    rather than aligned, and still nothing here is learned.
+    """
+
+    model = "deterministic-positional-onehot"
+    model_version = "1.0"
+    kind = EncoderKind.DETERMINISTIC
+
+    def encode(self, sequence: str) -> Embedding:
+        base = super().encode(sequence)
+        flat: List[float] = []
+        for index in range(self.max_length):
+            if index < len(base.residue_level):
+                flat.extend(base.residue_level[index])
+            else:
+                flat.extend([0.0] * len(AMINO_ACIDS))
+        return Embedding(
+            sequence=base.sequence, pooled=flat, residue_level=base.residue_level,
+            model=self.model, model_version=self.model_version, kind=self.kind,
+            preprocessing=base.preprocessing,
+            pooling=f"flattened one-hot, padded to {self.max_length} positions")
+
+
 class ESM2Encoder:
     """
     ESM-2, when its weights are present. Raises when they are not.
@@ -211,6 +250,11 @@ def available_encoders() -> Dict[str, Dict[str, object]]:
             "has_learned_content": False,
             "note": ("A real encoding with no learned content. Not a language-model "
                      "embedding, and not reported as one.")},
+        PositionalOneHotEncoder.model: {
+            "kind": EncoderKind.DETERMINISTIC.value, "available": True,
+            "has_learned_content": False,
+            "note": ("Position-aware one-hot, padded to a fixed length. Still nothing "
+                     "learned; distance is a count of positions that differ.")},
         esm.model: {
             "kind": EncoderKind.PRETRAINED_LANGUAGE_MODEL.value,
             "available": esm.is_available, "has_learned_content": True,

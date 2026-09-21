@@ -227,7 +227,9 @@ class TestTheFrontendReferencesTokensThatExist(unittest.TestCase):
     The renderer names colour tokens as strings. A typo in one would silently
     paint a cell with nothing -- which, on this chart, is indistinguishable
     from a cell that was never computed. That is exactly the confusion the
-    whole module exists to prevent, so the token names are checked.
+    whole module exists to prevent, so the token names are checked. The same
+    check covers the categorical slots the scatter uses, where a missing token
+    would drop a series into the page background.
     """
 
     STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -236,9 +238,10 @@ class TestTheFrontendReferencesTokensThatExist(unittest.TestCase):
         app = (self.STATIC / "app.js").read_text()
         css = (self.STATIC / "styles.css").read_text()
 
-        used = set(re.findall(r'(--(?:div|seq)-[a-z0-9-]+)', app))
-        self.assertTrue(used, "expected the renderer to name ramp tokens")
+        used = set(re.findall(r'(--(?:div|seq|series)-[a-z0-9-]+)', app))
+        self.assertTrue(used, "expected the renderer to name palette tokens")
         self.assertIn("--div-mid", used)
+        self.assertIn("--series-1", used)
 
         # Light scope is :root; dark is declared twice, under the media query
         # and under the explicit theme stamp, and must match.

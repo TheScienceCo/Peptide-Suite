@@ -826,6 +826,7 @@ async function init() {
 
   // After GOALS is populated: the landscape's goal select is built from it.
   await initLandscape();
+  await initRepresentation();
 }
 
 init();
@@ -1885,5 +1886,301 @@ async function initLandscape() {
       (m.encoding === "diverging" ? `, where the middle means: ${m.midpoint_meaning}.` : ".");
   };
   metricSel.addEventListener("change", syncDesc);
+  syncDesc();
+}
+
+/* ---------- Representation explorer ---------- */
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs = {}) => {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+  return n;
+};
+
+// Categorical slots in the palette's fixed order, assigned in sequence. The
+// fourth class deliberately takes no hue: the first three slots are what clear
+// the all-pairs separation gate that a scatter has to meet, so "unrelated" is
+// carried by shape instead.
+const VARIANT_SERIES = [
+  { key: "WILD_TYPE", label: "wild type", token: "--series-1" },
+  { key: "SINGLE", label: "single substitution", token: "--series-2" },
+  { key: "MULTI", label: "multi-substitution", token: "--series-3" },
+];
+const VARIANT_BY_KEY = new Map(VARIANT_SERIES.map((v) => [v.key, v]));
+
+function scatterPlot(d) {
+  const W = 660, H = 420;
+  const M = { top: 14, right: 14, bottom: 44, left: 56 };
+  const wrap = el("div", "scatter-wrap");
+  const svg = svgEl("svg", {
+    class: "scatter", viewBox: `0 0 ${W} ${H}`,
+    role: "img", "aria-label": "Principal component projection of substitution variants",
+  });
+
+  const pts = d.points;
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const pad = (lo, hi) => { const s = (hi - lo) || 1; return [lo - s * 0.06, hi + s * 0.06]; };
+  const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
+  const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
+  const sx = (v) => M.left + ((v - x0) / (x1 - x0)) * (W - M.left - M.right);
+  const sy = (v) => H - M.bottom - ((v - y0) / (y1 - y0)) * (H - M.top - M.bottom);
+
+  // Recessive grid first, so nothing draws over a data mark.
+  for (let i = 0; i <= 4; i++) {
+    const gx = M.left + (i / 4) * (W - M.left - M.right);
+    const gy = M.top + (i / 4) * (H - M.top - M.bottom);
+    svg.append(svgEl("line", { class: "grid", x1: gx, x2: gx, y1: M.top, y2: H - M.bottom }));
+    svg.append(svgEl("line", { class: "grid", x1: M.left, x2: W - M.right, y1: gy, y2: gy }));
+  }
+  svg.append(svgEl("line", { class: "axis", x1: M.left, x2: W - M.right, y1: H - M.bottom, y2: H - M.bottom }));
+  svg.append(svgEl("line", { class: "axis", x1: M.left, x2: M.left, y1: M.top, y2: H - M.bottom }));
+
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+  const xLabel = svgEl("text", { class: "axlabel", x: (M.left + W - M.right) / 2, y: H - 10, "text-anchor": "middle" });
+  xLabel.textContent = `PC1 — ${pct(d.explained_variance_ratio[0])} of the variation`;
+  const yLabel = svgEl("text", {
+    class: "axlabel", x: 14, y: (M.top + H - M.bottom) / 2, "text-anchor": "middle",
+    transform: `rotate(-90 14 ${(M.top + H - M.bottom) / 2})`,
+  });
+  yLabel.textContent = `PC2 — ${pct(d.explained_variance_ratio[1])}`;
+  svg.append(xLabel, yLabel);
+
+  const marks = svgEl("g");
+  const nodes = [];
+  // Reference last so it sits on top of the cloud it is the centre of.
+  const ordered = [...pts].sort((a, b) => (a.class === "WILD_TYPE") - (b.class === "WILD_TYPE"));
+  ordered.forEach((p) => {
+    const series = VARIANT_BY_KEY.get(p.class);
+    let node;
+    if (!series) {
+      node = svgEl("rect", { class: "other", x: sx(p.x) - 4, y: sy(p.y) - 4, width: 8, height: 8 });
+    } else {
+      const isRef = p.class === "WILD_TYPE";
+      node = svgEl("circle", {
+        class: "pt", cx: sx(p.x), cy: sy(p.y), r: isRef ? 5.5 : 3,
+        fill: `var(${series.token})`,
+      });
+    }
+    node.__point = p;
+    nodes.push(node);
+    marks.append(node);
+  });
+  svg.append(marks);
+
+  // One direct label, on the reference. Labelling 590 points would be noise,
+  // and labelling none leaves the plot's anchor unnamed.
+  const ref = pts.find((p) => p.class === "WILD_TYPE");
+  if (ref) {
+    const t = svgEl("text", { class: "direct", x: sx(ref.x) + 9, y: sy(ref.y) - 7 });
+    t.textContent = "wild type";
+    svg.append(t);
+  }
+
+  wrap.append(svg);
+
+  const tip = el("div", "heat-tip");
+  tip.hidden = true;
+  wrap.append(tip);
+
+  let focused = null;
+  svg.addEventListener("mousemove", (ev) => {
+    const box = svg.getBoundingClientRect();
+    const px = ((ev.clientX - box.left) / box.width) * W;
+    const py = ((ev.clientY - box.top) / box.height) * H;
+    let best = null, bestDist = Infinity;
+    nodes.forEach((n) => {
+      const p = n.__point;
+      const dist = (sx(p.x) - px) ** 2 + (sy(p.y) - py) ** 2;
+      // Ties go to the reference. Variants can land exactly on top of it --
+      // under the composition encoder that is common -- and reporting one of
+      // them while the reference's own mark is the thing under the cursor
+      // reads as the reference having moved.
+      if (dist < bestDist - 1e-9
+          || (dist <= bestDist + 1e-9 && p.class === "WILD_TYPE")) {
+        bestDist = dist;
+        best = n;
+      }
+    });
+    // A generous hit radius: the marks are small because the cloud is dense,
+    // and a hit target the size of the mark would be unusable.
+    if (!best || bestDist > 18 ** 2) {
+      tip.hidden = true;
+      if (focused) { focused.classList.remove("focus"); focused = null; }
+      return;
+    }
+    if (focused !== best) {
+      if (focused) focused.classList.remove("focus");
+      best.classList.add("focus");
+      focused = best;
+    }
+    const p = best.__point;
+    tip.innerHTML = "";
+    tip.append(el("b", null, p.label));
+    tip.append(el("div", null,
+      p.n_substitutions === null
+        ? "Different length from the reference — no substitution count."
+        : `${p.n_substitutions} substitution${p.n_substitutions === 1 ? "" : "s"} from the reference`));
+    tip.append(el("div", "val", `PC1 ${p.x.toFixed(3)} · PC2 ${p.y.toFixed(3)}`));
+    tip.hidden = false;
+    const wbox = wrap.getBoundingClientRect();
+    const left = Math.min(Math.max(4, ev.clientX - wbox.left + 12),
+                          Math.max(4, wbox.width - tip.offsetWidth - 4));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${Math.max(4, ev.clientY - wbox.top - tip.offsetHeight - 10)}px`;
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.hidden = true;
+    if (focused) { focused.classList.remove("focus"); focused = null; }
+  });
+
+  return wrap;
+}
+
+function scatterLegend(d) {
+  const present = new Set(d.points.map((p) => p.class));
+  const wrap = el("div", "scatter-legend");
+  VARIANT_SERIES.forEach((s) => {
+    if (!present.has(s.key)) return;
+    const key = el("div", "key");
+    const swatch = el("i");
+    swatch.style.background = `var(${s.token})`;
+    const n = d.points.filter((p) => p.class === s.key).length;
+    key.append(swatch, el("span", null, `${s.label} (${n})`));
+    wrap.append(key);
+  });
+  const others = d.points.filter((p) => !VARIANT_BY_KEY.has(p.class));
+  if (others.length) {
+    const key = el("div", "key");
+    key.append(el("i", "other"),
+               el("span", null, `different length — unrelated (${others.length})`));
+    wrap.append(key);
+  }
+  return wrap;
+}
+
+function representationTable(d) {
+  const ref = d.points.find((p) => p.class === "WILD_TYPE");
+  const dist = (p) => (ref ? Math.hypot(p.x - ref.x, p.y - ref.y) : Math.hypot(p.x, p.y));
+  const rows = [...d.points].sort((a, b) => dist(b) - dist(a));
+  const det = el("details");
+  det.append(el("summary", null, `Table view — all ${rows.length} points, furthest from the reference first`));
+  const wrap = el("div", "heat-table-wrap");
+  const table = el("table", "titration heat-table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Variant", "Class", "Subs", "PC1", "PC2", "Distance from reference"].forEach((h) => hr.append(el("th", null, h)));
+  thead.append(hr);
+  const tbody = el("tbody");
+  rows.forEach((p) => {
+    const tr = el("tr");
+    tr.append(el("td", "res", p.label));
+    tr.append(el("td", "st", (VARIANT_BY_KEY.get(p.class) || { label: "unrelated" }).label));
+    tr.append(el("td", "num", p.n_substitutions === null ? "—" : String(p.n_substitutions)));
+    tr.append(el("td", "num", p.x.toFixed(3)));
+    tr.append(el("td", "num", p.y.toFixed(3)));
+    tr.append(el("td", "num", dist(p).toFixed(3)));
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+  wrap.append(table);
+  det.append(wrap);
+  return det;
+}
+
+function renderRepresentation(d) {
+  const out = $("#representation-results");
+  out.innerHTML = "";
+  const card = el("div", "card");
+  card.append(el("h2", null, "Principal components of the substitution set"));
+  card.append(el("div", "kv",
+    `${d.points.length} sequences · ${d.encoder.model} v${d.encoder.version} · ` +
+    `${d.encoder.input_dim}-dimensional input`));
+
+  // The headline is the number, not the picture. A scatter that carries a small
+  // share of the variation invites a reading it cannot support, so the share
+  // goes first and at size.
+  const hero = el("div", "hero-stat");
+  hero.append(el("div", "figure", `${(d.cumulative_explained * 100).toFixed(1)}%`));
+  hero.append(el("div", "caption",
+    "of the variation between these sequences is in the two dimensions plotted below. " +
+    "The rest is in directions not drawn."));
+  card.append(hero);
+
+  // The projection already emits a warning when the encoder has no learned
+  // content; repeating it here as a second notice said the same thing twice.
+  (d.warnings || []).forEach((w) => card.append(notice(w, "warn", "!")));
+  if (d.truncated) {
+    card.append(notice(
+      "The single-substitution cloud was capped for this projection; supplied candidates " +
+      "and the reference were kept. The components shown are those of the points plotted.",
+      "warn", "!"));
+  }
+
+  card.append(scatterPlot(d));
+  card.append(scatterLegend(d));
+  card.append(el("p", "footnote", d.interpretation));
+  card.append(representationTable(d));
+  out.append(card);
+}
+
+async function onRepresentation() {
+  const btn = $("#btn-representation");
+  const out = $("#representation-results");
+  const seq = $("#rseq").value.trim();
+  if (!seq) { out.innerHTML = ""; out.append(notice("Enter a reference sequence first.", "error", "!")); return; }
+  out.innerHTML = "";
+  busy(btn, true);
+  try {
+    const candidates = $("#rcandidates").value
+      .split(/[\n,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    const d = await api("/api/ml/representation", {
+      sequence: seq,
+      encoder: $("#rencoder").value,
+      candidates: candidates.length ? candidates : null,
+    });
+    renderRepresentation(d);
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Project");
+  }
+}
+
+async function initRepresentation() {
+  $("#btn-representation").addEventListener("click", onRepresentation);
+
+  EXAMPLES.sequences.filter((ex) => !ex.seq.includes(":") && /^[A-Z]+$/.test(ex.seq))
+    .forEach((ex) => {
+      const b = el("button", "chip", ex.label);
+      b.addEventListener("click", () => { $("#rseq").value = ex.seq; });
+      $("#rseq-examples").append(b);
+    });
+
+  const sel = $("#rencoder");
+  const desc = $("#rencoder-desc");
+  let encoders = {};
+  try {
+    const status = await api("/api/ml/status");
+    encoders = status.encoders || {};
+  } catch {
+    desc.textContent = "Could not load the encoder list.";
+    return;
+  }
+  Object.entries(encoders).forEach(([name, info]) => {
+    const o = el("option", null, info.available ? name : `${name} — unavailable`);
+    o.value = name;
+    // An unavailable encoder stays visible and stays unselectable: hiding it
+    // would make the deterministic fallback look like the intended one.
+    o.disabled = !info.available;
+    sel.append(o);
+  });
+  const firstAvailable = Object.entries(encoders).find(([, i]) => i.available);
+  if (firstAvailable) sel.value = firstAvailable[0];
+  const syncDesc = () => {
+    const info = encoders[sel.value];
+    desc.textContent = info ? info.note : "";
+  };
+  sel.addEventListener("change", syncDesc);
   syncDesc();
 }

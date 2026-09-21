@@ -191,6 +191,44 @@
       </p>
     </div>
     <div id="ml-results"></div>
+
+    <div class="card">
+      <div class="label">REPRESENTATION SPACE</div>
+      <p class="kv">
+        A reference peptide and every single substitution of it, projected onto their
+        first two principal components. The headline is the explained variance, not the
+        scatter: a picture carrying a small share of the variation is a picture in which
+        proximity means very little, and that has to be read before the plot is.
+      </p>
+      <label for="rseq">Reference sequence</label>
+      <textarea id="rseq" spellcheck="false"
+                placeholder="HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG"></textarea>
+      <div class="chips" id="rseq-examples"></div>
+
+      <details class="opt-extra">
+        <summary>Extra candidates (optional)</summary>
+        <p class="hint">
+          Multi-substitution designs or related peptides to place in the same space.
+          One per line. Anything of a different length is marked unrelated rather than
+          given a substitution count it does not have.
+        </p>
+        <textarea id="rcandidates" spellcheck="false"
+                  placeholder="One sequence per line"></textarea>
+      </details>
+
+      <div class="row">
+        <div>
+          <label for="rencoder">Encoder</label>
+          <select id="rencoder"></select>
+        </div>
+        <div class="shrink">
+          <button class="primary" id="btn-representation">Project</button>
+        </div>
+      </div>
+      <p class="footnote" id="rencoder-desc"></p>
+    </div>
+
+    <div id="representation-results"></div>
   </section>
 
   <section class="panel" id="panel-find" role="tabpanel" aria-labelledby="tab-find" hidden>
