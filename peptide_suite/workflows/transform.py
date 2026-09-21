@@ -21,6 +21,8 @@ from peptide_suite.core.electrostatics import compute_profile
 from peptide_suite.core.contact_classifier import (
     ContactClass, EssentialSubclass, rule_proposal,
 )
+from peptide_suite.core.backbone_nbo import requirement_for as nbo_requirement_for
+from peptide_suite.core.conformer_ensemble import assess as assess_ensemble
 from peptide_suite.core.synthetic_feasibility import (
     regioselectivity_conflict, screen as screen_feasibility,
 )
@@ -132,6 +134,11 @@ class TransformWorkflow:
         # gating: none of these checks needs a structure.
         feasibility = screen_feasibility(seq)
 
+        # Whether a conformer ensemble is admissible for this peptide. Not
+        # generated -- no search engine here -- but the eligibility is real and
+        # the two reasons it can fail have different remedies.
+        ensemble = assess_ensemble(seq)
+
         electrostatics = compute_profile(seq, include_termini=True)
         if is_internal_fragment:
             electrostatics.notes.insert(0, (
@@ -216,6 +223,12 @@ class TransformWorkflow:
                 logger.warning(f"Blocking '{t.description}': class B1 reporting rule")
                 continue
             t.notes.extend(zone.notes)
+
+            # The n->pi* obligation. Required, not recommended: for Aib,
+            # N-methylation and proline-rich segments it is the mechanistic
+            # account, and a force field cannot supply it. Recorded on the
+            # proposal so the steric hand-wave cannot stand as the explanation.
+            t.nbo_requirement = nbo_requirement_for(t.description, seq)
             if zone.affinity_claim_discounted:
                 # Counting the affinity gain toward rank is what "reporting it
                 # as an improvement" means in a ranked system, so it is removed
@@ -305,6 +318,7 @@ class TransformWorkflow:
             # product is.
             "partner_proposals": partner_proposals,
             "feasibility": feasibility,
+            "conformer_ensemble": ensemble,
             "length_notes": length_notes,
             "class_b1": conjugation_site_guidance(seq, receptor) if receptor else
                         {"applies": False, "reason": "No receptor was specified."},

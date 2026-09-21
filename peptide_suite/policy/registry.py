@@ -77,6 +77,9 @@ THRESHOLDS: Dict[str, KeySpec] = {
     "chemistry.burial_pka_shift":                 KeySpec("ph", "pH units", (-5.0, 5.0)),
 
     "class_b1.restricted_zone_residues":          KeySpec("count", "residues", (1.0, 30.0)),
+
+    "conformer.max_ensemble_length":              KeySpec("count", "residues", (5.0, 100.0)),
+    "nbo.proline_rich_fraction":                  KeySpec("fraction", "fraction", (0.0, 1.0)),
 }
 
 

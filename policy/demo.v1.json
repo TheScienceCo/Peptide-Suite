@@ -131,7 +131,7 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "digest": "8b6a9f8183bf8319272ad3301e6b618a53c2a4cea7d088305a5a7bffee1be8aa"
+    "digest": "f0c52538eea1783c1a9b409cc39ba350a18cd923617c2bae877920707870c57a"
   },
   "pack_kind": "demonstration",
   "policy_version": "1.0.0",
@@ -223,6 +223,16 @@
         1.0
       ],
       "value": 0.25
+    },
+    "conformer.max_ensemble_length": {
+      "basis": "derived",
+      "semantic_type": "count",
+      "units": "residues",
+      "valid_range": [
+        5.0,
+        100.0
+      ],
+      "value": 20.0
     },
     "conservation.conserved_entropy_cutoff": {
       "basis": "placeholder_midpoint",
@@ -323,6 +333,16 @@
         1.0
       ],
       "value": 0.5
+    },
+    "nbo.proline_rich_fraction": {
+      "basis": "derived",
+      "semantic_type": "fraction",
+      "units": "fraction",
+      "valid_range": [
+        0.0,
+        1.0
+      ],
+      "value": 0.2
     },
     "parameter_budget.measured_ratio_divisor": {
       "basis": "derived",

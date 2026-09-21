@@ -76,6 +76,12 @@ DERIVED = {
         10.0, "Addendum 2: free parameters may not exceed N_measured / 10"),
     "class_b1.restricted_zone_residues": (
         7.0, "Addendum 2 section 9: the N-terminal ~7 residues are the restricted zone"),
+    "nbo.proline_rich_fraction": (
+        0.20, "a segment is proline-rich when at least a fifth of its residues are "
+              "proline; below that the backbone is not dominated by n->pi* donation"),
+    "conformer.max_ensemble_length": (
+        20.0, "Addendum 2 section 4: ensembles for peptides of 20 residues or fewer; "
+              "above that, report unavailable rather than undersampled"),
 }
 
 

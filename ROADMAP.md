@@ -18,7 +18,7 @@ the engine; an absent policy artifact fails at startup rather than falling back.
 Outstanding: boundary debt, tracked and ratcheted in `policy/BOUNDARY_DEBT.txt`.
 It only moves down.
 
-## Addendum 2 — Physical biochemistry layer — BUILD ORDER COMPLETE
+## Addendum 2 — Physical biochemistry layer — COMPLETE (pending tooling)
 
 Build order from the addendum's section 13:
 
@@ -37,16 +37,30 @@ Build order from the addendum's section 13:
 All nine build-order steps are done. What remains from Addendum 2 is the
 explanatory depth that the addendum itself places after 6i:
 
-- [ ] Conformer ensembles (CREST / GFN2-xTB) for cyclic, stapled,
-      disulfide-constrained and short peptides; report unavailable rather than
-      undersampled above that length
-- [ ] n->pi* backbone analysis (NBO second-order perturbation), required for any
-      proposal involving Aib, other alpha,alpha-disubstituted residues,
-      N-methylation, or proline-rich segments
-- [ ] SAPT0 / DFT-SAPT contact decomposition into electrostatics,
-      exchange-repulsion, induction and dispersion. Forbidden: summing the
-      components into a predicted binding free energy — interaction energy omits
-      desolvation and entropy entirely
+- [x] Conformer ensembles — eligibility and the length refusal are built; the
+      search itself is stubbed and raises. No engine in this deployment.
+- [x] n->pi* backbone analysis — the requirement is enforced and proposals carry
+      their outstanding obligation; the analysis is stubbed and raises.
+- [x] SAPT contact decomposition — the component model, what each responds to,
+      and the enforced prohibition on summing into a binding free energy. The
+      decomposition itself is stubbed and raises.
+
+All three are gates and contracts rather than computations, because no QM
+engine, conformational search or NBO implementation is available here. What is
+built is the part that has to be right when the engines arrive: which peptides
+are eligible, which proposals owe a mechanistic account, and which operation is
+forbidden. Wiring an engine in changes one value per module rather than the
+shape of every consumer.
+
+Remaining, and blocked on tooling rather than on design:
+
+- [ ] Install a conformational search (CREST + GFN2-xTB) and make
+      `conformer_ensemble.generate` return ensembles
+- [ ] Install NBO and make `backbone_nbo.analyse` return stabilisation energies
+- [ ] Install a QM package with SAPT0/DFT-SAPT and make
+      `contact_decomposition.decompose` return real components
+- [ ] Run the 6d parameterization pipeline for at least one residue, so the
+      registry stops being empty
 
 These come last rather than first because they are explanatory depth on a system
 that had to be honest before it was deep. All three depend on the QM pipeline

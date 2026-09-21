@@ -177,6 +177,10 @@ class Transformation:
     # Synthesis liabilities this specific proposal introduces or runs into,
     # as distinct from the ones the parent sequence already has.
     feasibility_flags: List = field(default_factory=list)
+    # The n->pi* backbone analysis this proposal owes, if any. Outstanding in
+    # this build: no NBO engine is available, and staying silent would let a
+    # steric account stand in for the mechanism.
+    nbo_requirement: object = None
 
     @property
     def display_position(self) -> Optional[int]:

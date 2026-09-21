@@ -844,6 +844,8 @@ function renderTransformResults(d) {
   if (template) out.append(template);
   const contacts = renderClassifiedContacts(d.classified_contacts);
   if (contacts) out.append(contacts);
+  const ens = renderEnsemble(d.conformer_ensemble);
+  if (ens) out.append(ens);
   const feas = renderFeasibility(d.feasibility);
   if (feas) out.append(feas);
   const b1 = renderClassB1(d.class_b1);
@@ -954,6 +956,40 @@ const CONTACT_CLASS_GLYPH = {
 // different question from the rest of the output: not "is this a good molecule"
 // but "can this molecule be made as specified". A biophysics-only reading
 // misses the whole class.
+// Whether a conformer ensemble is admissible, and why not. Two failure modes
+// with different remedies — too long for a search to be complete, versus no
+// engine installed — so they are reported separately rather than as one
+// "unavailable".
+function renderEnsemble(e) {
+  if (!e) return null;
+  const card = el("div", "card");
+  card.append(el("h2", null, "Conformer ensemble"));
+  const head = el("div", "contact-head");
+  head.append(
+    el("span", "glyph", e.status === "eligible" ? "\u25C6" : "\u25CB"),
+    el("span", "n", e.status.replace(/_/g, " ")),
+    el("span", "tag", e.constraint.replace(/_/g, " ")),
+    el("span", "tag", `${e.sequence_length} residues, ceiling ${e.ceiling}`)
+  );
+  card.append(head);
+  card.append(el("div", "r", e.reason));
+  if ((e.required_tooling || []).length) {
+    card.append(el("div", "footnote", `Needs: ${e.required_tooling.join("; ")}`));
+  }
+  (e.notes || []).forEach((n) => card.append(notice(n, "info", "i")));
+  return card;
+}
+
+// A proposal's outstanding n→π* obligation. Rendered on the proposal rather
+// than in a footnote: for Aib, N-methylation and proline-rich segments it IS
+// the mechanism, and without it the steric account below stands in for one.
+function nboNotice(nbo) {
+  if (!nbo || !nbo.required) return null;
+  const n = notice(nbo.statement, nbo.outstanding ? "warn" : "info",
+                   nbo.outstanding ? "!" : "i");
+  return n;
+}
+
 function renderFeasibility(flags) {
   if (!flags || !flags.length) return null;
   const card = el("div", "card");
@@ -1354,6 +1390,11 @@ function renderTransformation(t, rank) {
 
   if (t.tradeoff_label) body.append(notice(t.tradeoff_label, "warn", "⇄"));
   if (t.leakage_flag) body.append(notice(t.leakage_flag.note, "info", "i"));
+  // Before the rationale, not after: the rationale is the steric account, and
+  // a reader who meets the caveat afterwards has already taken it as the
+  // mechanism.
+  const nbo = nboNotice(t.nbo);
+  if (nbo) body.append(nbo);
 
   body.append(el("p", "reasoning", t.rationale));
 

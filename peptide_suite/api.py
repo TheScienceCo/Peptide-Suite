@@ -561,6 +561,13 @@ def encode_transformation(t) -> Dict:
         "rationale": t.rationale,
         "evidence_tier": t.evidence_tier,
         "physics_tier_reached": t.physics_tier_reached,
+        "nbo": ({
+            "required": t.nbo_requirement.is_required,
+            "outstanding": t.nbo_requirement.is_outstanding,
+            "triggers": [x.value for x in t.nbo_requirement.triggers],
+            "statement": t.nbo_requirement.statement(),
+            "required_tooling": t.nbo_requirement.required_tooling,
+        } if t.nbo_requirement else None),
         "tradeoff_label": t.tradeoff_label,
         "notes": t.notes,
         "scalarized": scal,
@@ -733,6 +740,15 @@ def transform(req: TransformRequest) -> Dict:
         "research_requests": result["research_requests"],
         "class_b1": result["class_b1"],
         "length_notes": result["length_notes"],
+        "conformer_ensemble": {
+            "status": result["conformer_ensemble"].status.value,
+            "constraint": result["conformer_ensemble"].constraint.value,
+            "sequence_length": result["conformer_ensemble"].sequence_length,
+            "ceiling": result["conformer_ensemble"].ceiling,
+            "reason": result["conformer_ensemble"].reason,
+            "required_tooling": result["conformer_ensemble"].required_tooling,
+            "notes": result["conformer_ensemble"].notes,
+        },
         "feasibility": [
             {
                 "code": f.code, "severity": f.severity.value, "positions": f.positions,
