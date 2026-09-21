@@ -66,9 +66,46 @@ These come last rather than first because they are explanatory depth on a system
 that had to be honest before it was deep. All three depend on the QM pipeline
 stubbed in 6d, so the parameterized-residue registry is the prerequisite.
 
-## Addendum 3 — ML and representation learning — QUEUED
+## Addendum 3 — ML and representation learning — IN PROGRESS
 
-Not started. Begins only after Addendum 2 is complete.
+Built so far:
+
+- [x] **Provenance** — the three ML categories, kept distinct from the existing
+      tiers and from each other. None may be a regression target.
+- [x] **Reproducibility** — seeds, device selection including MPS, run records
+      that report a dirty tree as not reproducible rather than as its nearest
+      commit.
+- [x] **Splitting** — random versus sequence-clustered, union-find
+      single-linkage with the no-cross-cluster guarantee tested exhaustively.
+- [x] **Metrics** — ROC-AUC (tie-aware), PR-AUC, F1, precision, recall, MCC,
+      MAE/RMSE/R², calibration curves, bootstrap intervals on everything.
+- [x] **Dataset registry** — eight tasks with real sources and licences; seven
+      UNAVAILABLE with reasons, one SYNTHETIC_METHOD_ONLY. No invented labels.
+- [x] **Training** — checkpoints carrying their run record, early stopping that
+      restores the best weights.
+- [x] **Model cards** — generated, refusing to omit limitations or the
+      similarity control.
+- [x] **Experiment tracking** — JSONL, with a reproduce command that refuses to
+      print for an unreproducible run.
+- [x] **Encoders** — deterministic encoder present, ESM-2 fails loudly rather
+      than substituting.
+- [x] **The split-gap experiment**, visible in the UI and run live.
+
+Remaining, and mostly blocked on data and weights rather than design:
+
+- [ ] Real labelled datasets. Every prediction task is UNAVAILABLE here; the
+      registry names the source and licence for each.
+- [ ] ESM-2 weights, then the four-arm comparison per task
+      (physicochemical baseline / classical ML / pretrained embeddings /
+      fine-tuned) that answers whether language models add predictive value.
+- [ ] Embedding explorer (PCA/UMAP) and the substitution landscape heatmap.
+- [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
+      compared against single modality and naive concatenation.
+- [ ] Explainability: nearest training examples, residue sensitivity,
+      attribution, OOD warnings by embedding distance.
+- [ ] The receptor-prediction validation idea — take the learned properties
+      together with the physics pipeline's and predict the binding site,
+      ignoring the literature, then check against known biology.
 
 The goal is a credible computational peptide engineering platform, not
 cosmetically added ML libraries. Existing analyses stay usable and
