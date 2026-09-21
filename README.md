@@ -99,6 +99,47 @@ needs a structure, the other needs weeks of QM. Both are reported, because
 suppressing one because the other fired would understate what the proposal
 actually needs.
 
+## Why sequence-aware evaluation matters
+
+Peptide datasets are full of near-duplicates: alanine scans, single-point
+variants, truncation series, the same peptide from two papers. A random split
+puts a peptide in train and its point mutant in test, and the model gets credit
+for recalling a sequence it has already seen. The score is real; what it
+measures is memorisation.
+
+`ml/experiments/split_gap.py` settles this rather than asserting it. Forty
+families of related sequences, a label that is a genuine function of the
+sequence (a motif present or absent), and two splits over the same data:
+
+| Arm | Random split | Sequence-clustered split | Gap |
+|---|---|---|---|
+| Composition baseline | 0.929 AUC | 0.814 AUC | +0.114 |
+| One-hot MLP | **1.000 AUC** | **0.205 AUC** | **+0.795** |
+
+47 of 48 test sequences have a ≥80%-identity neighbour in training under the
+random split. Zero do under the clustered one.
+
+Two things to read off that table.
+
+The MLP's 1.000 is entirely recall. Held-out families drop it to 0.205 — *below
+chance*, meaning it learned family-specific patterns that actively mislead on
+sequences it has not seen. The composition baseline cannot represent a specific
+sequence at all, so it has less to memorise and loses far less.
+
+And the deep model looks better than the baseline on the random split (1.000 vs
+0.929) and is much worse on the honest one (0.205 vs 0.814). Reported the usual
+way, this experiment would have concluded that the neural model wins.
+
+The clustering is union-find single-linkage, and the guarantee is exhaustively
+tested: no two sequences in different clusters are within the identity
+threshold. Greedy first-match assignment does not provide that — a sequence
+similar to members of two clusters joins only the first, and the pair it leaves
+behind straddles the split. That leaked three sequences past a clustered split
+before it was fixed.
+
+This experiment is marked `SYNTHETIC_METHOD_ONLY` in the dataset registry. It
+demonstrates a fact about evaluation protocol and supports no biological claim.
+
 ## Why named-entity holdouts overstate the result
 
 The obvious way to test whether the system can rediscover a known drug is to

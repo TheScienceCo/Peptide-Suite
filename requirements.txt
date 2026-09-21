@@ -15,3 +15,7 @@ uvicorn[standard]>=0.27
 # Human Protein Atlas). Not imported yet, so not installed yet:
 #   biopython>=1.83
 #   requests>=2.31
+
+# ML layer (Addendum 3). Optional: the peptide analysis pipeline and the web
+# interface run without it, and the ml/ package is not imported by either.
+#   torch>=2.0
