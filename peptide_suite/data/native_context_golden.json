@@ -14,45 +14,74 @@
     "Quantitative magnitudes are attributed to where they were actually stated. The",
     "fold-changes below came from the project addendum, not from a paper this",
     "system read, and they say so. Inventing a PMID to make an entry look rigorous",
-    "is the failure mode this field exists to prevent."
+    "is the failure mode this field exists to prevent.",
+    "",
+    "APPLIES_TO is an explicit alias list, matched exactly on normalised tokens.",
+    "Substring matching was tried first and was wrong: 'insulin' is a substring of",
+    "'insulin A-chain' and of 'proinsulin', so the B-chain B28/B29 contact was",
+    "attributed to both -- freezing residues on a chain that does not carry the",
+    "interface. A missing alias is a false negative and is fixed by adding one; a",
+    "loose match is a false positive that attaches a contact to the wrong molecule."
   ],
-
   "cases": {
     "insulin_b28_b29": {
       "peptide": "insulin",
       "contact": "B28/B29 dimer interface",
-      "residues": ["B28", "B29"],
+      "residues": [
+        "B28",
+        "B29"
+      ],
       "classification": "SCAFFOLD",
       "claim": "The B28/B29 interface mediates dimer and zinc-hexamer formation for storage in the beta-cell granule. It is not part of the insulin-receptor binding surface, so disrupting it accelerates dissociation to monomer without costing receptor activity.",
       "verification_path": "Isolated monomeric analogues retain full receptor activity, which is the SCAFFOLD test: an isolated form that stays active confirms the classification at zero experimental cost.",
       "design_outcomes": [
-        "lispro — ProB28/LysB29 inversion; disrupts the interface, fast-acting",
-        "aspart — ProB28Asp; same interface, same direction",
-        "degludec — hexadecanedioic acid at LysB29; the same analysis run in reverse, strengthening multihexamer formation for slow release"
+        "lispro \u2014 ProB28/LysB29 inversion; disrupts the interface, fast-acting",
+        "aspart \u2014 ProB28Asp; same interface, same direction",
+        "degludec \u2014 hexadecanedioic acid at LysB29; the same analysis run in reverse, strengthening multihexamer formation for slow release"
       ],
       "why_this_is_the_proof_case": "One contact classification supports opposite design directions and three approved drugs. Getting the class right matters more than getting any single number right.",
       "citation": "The lispro, aspart and degludec design rationales are described in their respective development literature.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "insulin",
+        "insulin B-chain",
+        "insulin lispro",
+        "insulin aspart",
+        "insulin degludec"
+      ],
+      "does_not_apply_to": [
+        "insulin A-chain",
+        "proinsulin",
+        "the A-chain does not carry the dimer interface, and in proinsulin the region is held by the C-peptide"
+      ]
     },
-
     "ghrelin_ser3_octanoylation": {
       "peptide": "ghrelin",
       "contact": "Ser3 O-octanoylation by GOAT",
-      "residues": ["Ser3"],
+      "residues": [
+        "Ser3"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "COVALENT_PTM",
       "claim": "Des-acyl ghrelin does not activate GHSR1a. The octanoyl group at Ser3 is required for receptor activation, not merely helpful.",
       "verification_path": "Compare acyl and des-acyl forms at GHSR1a. This is the case the system fails by omitting: 28 residues, one required acyl group, invisible in the sequence.",
       "citation": "Kojima et al., the original ghrelin identification, reports the acylation requirement.",
       "citation_precision": "named_work",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "ghrelin",
+        "acyl-ghrelin",
+        "acyl ghrelin"
+      ],
+      "does_not_apply_to": []
     },
-
     "cck8_tyr_sulfation": {
       "peptide": "CCK-8",
       "contact": "Tyr O-sulfation",
-      "residues": ["Tyr"],
+      "residues": [
+        "Tyr"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "COVALENT_PTM",
       "claim": "Desulfated CCK loses roughly three orders of magnitude at CCK1.",
@@ -60,13 +89,21 @@
       "verification_path": "Compare sulfated and desulfated CCK-8 at CCK1 versus CCK2. The receptor-subtype dependence is part of the claim.",
       "citation": "CCK receptor pharmacology literature.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "CCK-8",
+        "CCK8",
+        "cholecystokinin-8",
+        "sulfated CCK-8"
+      ],
+      "does_not_apply_to": []
     },
-
     "c_terminal_amidation": {
       "peptide": "calcitonin, gastrin, substance P, NPY, oxytocin, vasopressin, alpha-MSH",
       "contact": "C-terminal alpha-amidation",
-      "residues": ["C-terminus"],
+      "residues": [
+        "C-terminus"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "COVALENT_PTM",
       "claim": "The most common required covalent modification on small peptides. Removal typically costs two to three orders of magnitude.",
@@ -74,41 +111,72 @@
       "verification_path": "Compare the free-acid form against the amide at the cognate receptor. A synthetic peptide ordered without the amide is a different pharmacological molecule.",
       "citation": "Peptide hormone pharmacology; the amidation requirement is reported across this family.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "calcitonin",
+        "gastrin",
+        "substance P",
+        "NPY",
+        "neuropeptide Y",
+        "oxytocin",
+        "vasopressin",
+        "alpha-MSH",
+        "a-MSH"
+      ],
+      "does_not_apply_to": []
     },
-
     "pyroglutamate_n_terminus": {
       "peptide": "TRH, GnRH, neurotensin",
       "contact": "N-terminal pyroglutamate",
-      "residues": ["N-terminus"],
+      "residues": [
+        "N-terminus"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "COVALENT_PTM",
       "also_classified": "PROTECTIVE",
       "claim": "TRH is pGlu-His-Pro-NH2: a tripeptide carrying two essential modifications. The pyroglutamate is simultaneously ESSENTIAL for activity and PROTECTIVE, because a cyclised N-terminus blocks aminopeptidases.",
-      "why_dual_classification_matters": "The two classes carry opposite design consequences — ESSENTIAL freezes the footprint, PROTECTIVE requires a substitute if removed — so a contact that is both must satisfy both rules, not whichever is checked first.",
+      "why_dual_classification_matters": "The two classes carry opposite design consequences \u2014 ESSENTIAL freezes the footprint, PROTECTIVE requires a substitute if removed \u2014 so a contact that is both must satisfy both rules, not whichever is checked first.",
       "verification_path": "Compare the pGlu form against free Glu for both activity and aminopeptidase half-life. Testing only one confirms only one of the two classifications.",
       "citation": "TRH and GnRH structural pharmacology.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "TRH",
+        "thyrotropin-releasing hormone",
+        "GnRH",
+        "gonadotropin-releasing hormone",
+        "neurotensin"
+      ],
+      "does_not_apply_to": []
     },
-
     "gamma_carboxyglutamate": {
       "peptide": "conotoxins, coagulation factors",
       "contact": "gamma-carboxyglutamate (Gla) residues",
-      "residues": ["Gla"],
+      "residues": [
+        "Gla"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "ELECTROSTATIC",
       "claim": "Gla residues chelate Ca2+. The function depends on the chelation, so the modification is electrostatic in mechanism rather than conformational.",
       "verification_path": "Compare activity with and without Ca2+, and against the uncarboxylated Glu form.",
       "citation": "Vitamin K-dependent carboxylation literature; conotoxin structural work.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "conotoxin",
+        "factor IX",
+        "factor X",
+        "prothrombin",
+        "osteocalcin"
+      ],
+      "does_not_apply_to": []
     },
-
     "dermorphin_d_ala2": {
       "peptide": "dermorphin",
       "contact": "D-Ala at position 2",
-      "residues": ["Ala2"],
+      "residues": [
+        "Ala2"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "CONFORMATIONAL",
       "claim": "Position 2 is the D-enantiomer. The all-L sequence is a different molecule pharmacologically, and the sequence string alone does not show it.",
@@ -116,13 +184,18 @@
       "verification_path": "Compare the D-Ala2 form against the all-L peptide at the mu-opioid receptor.",
       "citation": "Dermorphin isolation and characterisation literature.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "dermorphin"
+      ],
+      "does_not_apply_to": []
     },
-
     "drosocin_thr11_glycosylation": {
       "peptide": "drosocin",
       "contact": "O-glycosylation at Thr11",
-      "residues": ["Thr11"],
+      "residues": [
+        "Thr11"
+      ],
       "classification": "ESSENTIAL",
       "subclass": "COVALENT_PTM",
       "claim": "Drosocin is a 19-residue proline-rich insect antimicrobial peptide, O-glycosylated at Thr11, and the glycan is required for full antibacterial activity. Pyrrhocoricin and formaecin behave likewise.",
@@ -130,7 +203,13 @@
       "verification_path": "Compare glycosylated and unglycosylated drosocin for antibacterial activity.",
       "citation": "Insect proline-rich antimicrobial peptide literature.",
       "citation_precision": "described_only",
-      "independently_verified": false
+      "independently_verified": false,
+      "applies_to": [
+        "drosocin",
+        "pyrrhocoricin",
+        "formaecin"
+      ],
+      "does_not_apply_to": []
     }
   }
 }

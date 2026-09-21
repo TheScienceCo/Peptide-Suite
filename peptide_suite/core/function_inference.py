@@ -54,6 +54,11 @@ class FunctionInference:
         return self.level <= 2
 
 
+# Shortest query that can be treated as a peptide name. Below this, a prefix
+# match lands on whichever name sorts shortest rather than on what was meant.
+MIN_NAME_QUERY_LENGTH = 3
+
+
 class FunctionInferencer:
     """Infers likely function from sequence, never returning nothing."""
 
@@ -238,11 +243,25 @@ class FunctionInferencer:
             return "".join(ch for ch in s.lower() if ch.isalnum())
 
         nq = norm(q)
+
+        # A query with no alphanumerics normalises to "", and "".startswith("")
+        # is true for every name -- so punctuation matched every peptide, the
+        # shortest name won, and typing "!!!!" came back as TRH at 0.95
+        # confidence. Reachable from the UI by typing a stray character.
+        if not nq:
+            return None
+
+        # A one- or two-character query is not a name. Prefix-matching it lands
+        # on whichever peptide happens to sort shortest, which is a coin flip
+        # presented as an identification.
+        if len(nq) < MIN_NAME_QUERY_LENGTH:
+            return None
+
         candidates = [(n, e) for n, e in peptides.items() if norm(n).startswith(nq)]
         if not candidates:
-            candidates = [(n, e) for n, e in peptides.items() if nq and nq in norm(n)]
+            candidates = [(n, e) for n, e in peptides.items() if nq in norm(n)]
         if not candidates:
-            candidates = [(n, e) for n, e in peptides.items() if nq and nq in norm(e.get("family", ""))]
+            candidates = [(n, e) for n, e in peptides.items() if nq in norm(e.get("family", ""))]
 
         if candidates:
             # Shortest name is the least qualified, so the most canonical
@@ -260,7 +279,10 @@ class FunctionInferencer:
         is a route forward rather than a miss.
         """
         q = query.strip().lower()
-        if not q:
+        # Same floor as resolve_name, for the same reason: substring-matching a
+        # one- or two-character query lands on whichever entry happens to
+        # contain that letter. Typing "a" returned a confident BDNF match.
+        if len(q) < MIN_NAME_QUERY_LENGTH:
             return None
 
         ontology_path = Path(__file__).parent.parent / "data" / "function_ontology.json"

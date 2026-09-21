@@ -26,6 +26,13 @@ AMBIGUITY_CODES = {
 
 ACCEPTED_AAS = CANONICAL_AAS | set(AMBIGUITY_CODES)
 
+# Below this length there is no design space: the move generators describe
+# capping an amino acid rather than engineering a peptide. Defined here, beside
+# the ceiling, so the floor and the ceiling cannot drift apart -- the workflow
+# had its own copy of this number.
+MIN_PEPTIDE_LENGTH = 5
+
+
 # Past some length a sequence is a protein, not a peptide. The distinction
 # changes what the analysis can honestly claim, so it is surfaced rather than
 # ignored. Where the line falls is a policy question.
@@ -109,8 +116,9 @@ class PeptideManager:
         if invalid:
             return False, f"Invalid amino acid(s): {', '.join(sorted(invalid))}"
 
-        if len(sequence) < 5:
-            return False, f"Sequence too short ({len(sequence)} residues; minimum 5)"
+        if len(sequence) < MIN_PEPTIDE_LENGTH:
+            return False, (f"Sequence too short ({len(sequence)} residues; minimum "
+                           f"{MIN_PEPTIDE_LENGTH})")
 
         return True, ""
 

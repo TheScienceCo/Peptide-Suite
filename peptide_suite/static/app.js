@@ -789,6 +789,10 @@ function renderTransformResults(d) {
   const out = $("#transform-results");
   const pn = policyNotice(d.policy);
   if (pn) out.append(pn);
+  // What the input's length means for the analysis, stated before the results
+  // rather than after: a protein run through a peptide frame produces output
+  // that looks ordinary, and the caveat is only useful ahead of it.
+  (d.length_notes || []).forEach((n) => out.append(notice(n, "warn", "!")));
   const p = d.physics;
 
   // --- how far the physics actually got

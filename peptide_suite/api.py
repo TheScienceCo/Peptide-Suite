@@ -732,6 +732,7 @@ def transform(req: TransformRequest) -> Dict:
         "structure_template": encode_structure_template(result["structure_template"]),
         "research_requests": result["research_requests"],
         "class_b1": result["class_b1"],
+        "length_notes": result["length_notes"],
         "feasibility": [
             {
                 "code": f.code, "severity": f.severity.value, "positions": f.positions,

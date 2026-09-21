@@ -122,6 +122,13 @@ class UniProtClient:
         self.timeout = timeout
         self.enabled = enabled
         self._unreachable_reason = ""
+        # Once the host is established unreachable, stop dialling it. The class
+        # promises to be "time-boxed, cached, and degrade gracefully offline",
+        # and without this the time box is per call rather than per run: on a
+        # network where the request hangs rather than refusing, every lookup
+        # costs the full timeout, and a scan that identifies many sequences
+        # pays it once each.
+        self._circuit_open = False
 
     # ---- plumbing --------------------------------------------------------
 
@@ -140,6 +147,10 @@ class UniProtClient:
         if not self.enabled:
             return None, "UniProt lookup disabled"
 
+        if self._circuit_open:
+            return None, (f"UniProt unreachable ({self._unreachable_reason}); not retried "
+                          f"for the rest of this run")
+
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
                                                    "Accept": "application/json"})
         try:
@@ -150,10 +161,14 @@ class UniProtClient:
         except urllib.error.HTTPError as e:
             return None, f"UniProt returned HTTP {e.code}"
         except urllib.error.URLError as e:
+            # The host did not answer. Open the circuit: a second identical
+            # failure tells us nothing and costs another timeout.
             self._unreachable_reason = str(e.reason)
+            self._circuit_open = True
             return None, f"UniProt unreachable: {e.reason}"
         except Exception as e:  # timeouts, malformed JSON
             self._unreachable_reason = str(e)
+            self._circuit_open = True
             return None, f"UniProt lookup failed: {e}"
 
     # ---- parsing ---------------------------------------------------------
@@ -289,6 +304,12 @@ class UniProtClient:
                      "Content-Type": "application/x-www-form-urlencoded"},
         )
 
+        if self._circuit_open:
+            return LookupResult(
+                reachable=False, route="peptide",
+                status=(f"UniProt unreachable ({self._unreachable_reason}); not retried "
+                        f"for the rest of this run"))
+
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 job_url = resp.headers.get("Location") or resp.geturl()
@@ -313,6 +334,7 @@ class UniProtClient:
 
         except urllib.error.URLError as e:
             self._unreachable_reason = str(e.reason)
+            self._circuit_open = True
             return LookupResult(reachable=False, route="peptide",
                                 status=f"UniProt peptide search unreachable: {e.reason}")
         except Exception as e:

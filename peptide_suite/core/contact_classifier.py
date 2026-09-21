@@ -235,21 +235,69 @@ class GoldenCases:
 
     @classmethod
     def for_peptide(cls, name: str) -> List[ContactClassification]:
-        """Golden cases naming this peptide. Matched loosely; the names vary in writing."""
+        """
+        Golden cases that apply to this peptide.
+
+        Matched against each case's explicit `applies_to` list, not against the
+        free-text peptide field. The free-text field describes the case; the
+        alias list decides what it applies to, and only the second is safe to
+        match on.
+        """
         if not name:
             return []
-        wanted = _normalise(name)
         raw = json.loads((_DATA / "native_context_golden.json").read_text())
-        hits = []
-        for key, entry in raw["cases"].items():
-            listed = [_normalise(p) for p in entry["peptide"].split(",")]
-            if any(wanted and (wanted in p or p in wanted) for p in listed if p):
-                hits.append(cls.all()[key])
-        return hits
+        return [cls.all()[key] for key, entry in raw["cases"].items()
+                if matches_any_alias(name, entry.get("applies_to", []))]
 
 
-def _normalise(name: str) -> str:
-    return "".join(c for c in name.lower() if c.isalnum())
+def _tokens(name: str) -> tuple:
+    """Normalised word tokens. Punctuation and case are not part of a name."""
+    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in (name or "").lower())
+    return tuple(t for t in cleaned.split() if t)
+
+
+def _matches_alias(query: str, alias: str) -> bool:
+    """
+    Whether a query names the same entity as an alias.
+
+    Whole tokens, and the alias's tokens must appear as a contiguous run in the
+    query with no extra tokens attached to the entity name. Substring matching
+    was tried first and was wrong in a way that mattered: "insulin" is inside
+    both "insulin A-chain" and "proinsulin", so a B-chain contact was attributed
+    to a chain that does not carry it and to the uncleaved precursor.
+
+    A missing alias is a false negative, fixed by adding one. A loose match
+    attaches a contact to the wrong molecule and freezes the wrong residues.
+    """
+    q, a = _tokens(query), _tokens(alias)
+    if not q or not a:
+        return False
+    if q == a:
+        return True
+    # The alias may appear as a contiguous run inside a longer query only when
+    # the extra tokens are qualifiers rather than part of the entity name.
+    for i in range(len(q) - len(a) + 1):
+        if q[i:i + len(a)] == a:
+            extra = set(q[:i]) | set(q[i + len(a):])
+            if extra and extra.issubset(_NEUTRAL_QUALIFIERS):
+                return True
+            if not extra:
+                return True
+    return False
+
+
+# Tokens that qualify a name without changing which molecule is meant. "human
+# oxytocin" is oxytocin; "insulin A-chain" is not insulin, so "chain" is
+# deliberately absent from this set.
+_NEUTRAL_QUALIFIERS = frozenset({
+    "human", "rat", "mouse", "porcine", "bovine", "synthetic", "recombinant",
+    "the", "peptide", "hormone", "amide", "acid", "free",
+})
+
+
+def matches_any_alias(query: str, aliases) -> bool:
+    return any(_matches_alias(query, alias) for alias in aliases or ())
+
 
 
 # Modifications a proposal can name. Used to tell "installs the essential

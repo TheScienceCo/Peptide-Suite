@@ -28,6 +28,7 @@ from peptide_suite.core.class_b1 import (
     Effect as B1Effect, ThreeFieldPrediction, conjugation_site_guidance,
     evaluate as evaluate_b1,
 )
+from peptide_suite.core.peptide_manager import MIN_PEPTIDE_LENGTH, PeptideManager
 from peptide_suite.core.partner_module import (
     PartnerCases, PartnerMode, PartnerProposal,
 )
@@ -72,6 +73,12 @@ def _unassessed(*objectives, reason=NO_STRUCTURE) -> List[ObjectiveDelta]:
     return [ObjectiveDelta.not_assessed(o, reason) for o in objectives]
 
 
+# The same floor the sequence loader enforces, imported rather than repeated so
+# the two cannot disagree. The loader refuses; this states why, for callers that
+# reach the workflow directly.
+MIN_DESIGNABLE_LENGTH = MIN_PEPTIDE_LENGTH
+
+
 class TransformWorkflow:
     """Produces a ranked transformation list for a peptide."""
 
@@ -79,6 +86,7 @@ class TransformWorkflow:
         self.physics = PhysicsStack()
         self.native = NativeContextAnalyzer()
         self.preorg = PreOrganizationAnalyzer()
+        self.peptides = PeptideManager()
 
     def run(
         self,
@@ -103,6 +111,23 @@ class TransformWorkflow:
         # carry them, which is the whole reason they are worth flagging. Whether
         # they are a property of the peptide or an artefact of excision is a
         # separate statement, made below rather than by dropping the charge.
+        # What the length itself means for the analysis. The optimize workflow
+        # already states this; transform did not, so a 300-residue protein came
+        # back with peptide-shaped proposals and nothing said the frame was
+        # wrong. Stated rather than refused: the physics below is still real,
+        # it is the design framing that does not transfer.
+        length_notes = []
+        classification = self.peptides.classify_length(seq)
+        if classification["is_protein"]:
+            length_notes.append(classification["note"])
+        elif len(seq) < MIN_DESIGNABLE_LENGTH:
+            length_notes.append(
+                f"This is {len(seq)} residue(s). Below about {MIN_DESIGNABLE_LENGTH} there "
+                f"is no meaningful design space: the transformations below are generated "
+                f"from sequence rules that assume a peptide, and at this length most of "
+                f"them describe capping a single amino acid rather than engineering a "
+                f"molecule.")
+
         # Synthesis and stability liabilities, computed from the sequence. No
         # gating: none of these checks needs a structure.
         feasibility = screen_feasibility(seq)
@@ -280,6 +305,7 @@ class TransformWorkflow:
             # product is.
             "partner_proposals": partner_proposals,
             "feasibility": feasibility,
+            "length_notes": length_notes,
             "class_b1": conjugation_site_guidance(seq, receptor) if receptor else
                         {"applies": False, "reason": "No receptor was specified."},
             "scaffold_opportunities": [

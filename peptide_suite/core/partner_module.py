@@ -304,14 +304,15 @@ class PartnerCases:
 
     @classmethod
     def for_peptide(cls, name: str) -> List[PartnerProposal]:
+        """
+        Partner cases that apply to this peptide.
+
+        Matched against each case's explicit `applies_to` list, for the same
+        reason as the native-contact set: matching on the free-text description
+        attributes a case to any name that happens to contain a component's.
+        """
         if not name:
             return []
-        wanted = "".join(c for c in name.lower() if c.isalnum())
-        hits = []
-        for key, entry in cls._raw()["cases"].items():
-            haystack = " ".join([entry["peptide"]] + entry["components"]).lower()
-            haystack = "".join(c for c in haystack if c.isalnum() or c == " ")
-            if any(wanted and (wanted in part or part in wanted)
-                   for part in haystack.split() if len(part) > 2):
-                hits.append(cls.all()[key])
-        return hits
+        from .contact_classifier import matches_any_alias
+        return [cls.all()[key] for key, entry in cls._raw()["cases"].items()
+                if matches_any_alias(name, entry.get("applies_to", []))]
