@@ -151,6 +151,71 @@ class TestNotComputedIsNotZero(unittest.TestCase):
         self.assertFalse(conservation[0]["computed"])
 
 
+class TestTheColumnMarginal(unittest.TestCase):
+    """
+    The strip above the grid is a reduction of the same cells. If it could
+    disagree with the grid it would be a second opinion, which is the one thing
+    a marginal must never be.
+    """
+
+    def test_there_is_one_summary_per_position(self):
+        ctx, recs = scan()
+        ls = build_landscape(ctx, recs)
+        self.assertEqual(len(ls.profile), len(SEQ))
+        for i, column in enumerate(ls.profile):
+            self.assertEqual(column.position, i)
+            self.assertEqual(column.wild_type_aa, SEQ[i])
+
+    def test_the_summary_is_the_grid_reduced_not_recomputed(self):
+        ctx, recs = scan()
+        ls = build_landscape(ctx, recs, "net_score")
+        for column in ls.profile:
+            cells = [c.value for c in ls.cells
+                     if c.position == column.position and c.state is CellState.COMPUTED]
+            self.assertEqual(column.best, max(cells))
+            self.assertEqual(column.worst, min(cells))
+            self.assertAlmostEqual(column.mean, sum(cells) / len(cells))
+
+    def test_favourable_follows_what_the_number_means(self):
+        ctx, recs = scan()
+        # Net score: higher is better. Off-target cost: lower is.
+        diverging = build_landscape(ctx, recs, "net_score").profile
+        sequential = build_landscape(ctx, recs, "off_target_cost").profile
+        for column in diverging:
+            self.assertGreaterEqual(column.best, column.worst)
+        for column in sequential:
+            self.assertLessEqual(column.best, column.worst)
+
+    def test_a_column_with_nothing_computed_reports_no_aggregate(self):
+        ctx, recs = scan()
+        ls = build_landscape(ctx, recs, "conservation_cost")
+        for column in ls.profile:
+            self.assertEqual(column.n_computed, 0)
+            self.assertIsNone(column.best)
+            self.assertIsNone(column.mean)
+            self.assertEqual(column.best_substitution, "")
+            self.assertIn("not a position where nothing helps", column.detail)
+
+    def test_the_best_substitution_names_a_cell_that_exists(self):
+        ctx, recs = scan()
+        ls = build_landscape(ctx, recs, "net_score")
+        cells = {(c.position, c.mutant_aa): c for c in ls.cells}
+        for column in ls.profile:
+            name = column.best_substitution
+            self.assertEqual(name[0], SEQ[column.position])
+            self.assertEqual(int(name[1:-1]), column.position + 1)
+            cell = cells[(column.position, name[-1])]
+            self.assertEqual(cell.value, column.best)
+
+    def test_an_empty_column_carries_no_aggregate_on_the_wire(self):
+        from peptide_suite.api import encode_landscape
+        ctx, recs = scan()
+        payload = encode_landscape(build_landscape(ctx, recs, "conservation_cost"))
+        for column in payload["profile"]:
+            for key in ("best", "worst", "mean"):
+                self.assertNotIn(key, column)
+
+
 class TestScale(unittest.TestCase):
 
     def test_a_diverging_scale_is_symmetric_about_zero(self):

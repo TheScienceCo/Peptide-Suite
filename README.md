@@ -124,6 +124,16 @@ hatched and none coloured. Entropy over one sequence is zero at every position
 by construction; filled in, it would have painted the peptide as perfectly
 conserved end to end. Supply three distinct homologs and the same grid fills.
 
+Above the grid sits its column marginal: for each position, the most
+favourable computed substitution available there, on a zero baseline. Above the
+line the best available change is a predicted gain; below it, the best
+available change is still a loss, which is the answer to "which positions
+tolerate change at all" and is invisible in a ranked top-five list. It is a
+reduction of the same cells rather than a second calculation, so it cannot
+disagree with the grid under it — and a column with nothing computed is hatched
+rather than drawn as a bar of no height, because a bar of no height is a claim
+that nothing helps.
+
 Two smaller rules follow from the same idea. The wild-type diagonal is its own
 state — not a substitution with no effect, not a substitution. And a one-signed
 quantity does not get a diverging scale: off-target cost runs 0..1 with no

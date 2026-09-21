@@ -594,6 +594,21 @@ def encode_landscape(ls: SubstitutionLandscape) -> Dict:
             }
             for c in ls.cells
         ],
+        # The column marginal, on the same terms: a column with nothing
+        # computed carries no aggregate key rather than a zero.
+        "profile": [
+            {
+                "position": p.position,
+                "wt": p.wild_type_aa,
+                "n_computed": p.n_computed,
+                "n_not_computed": p.n_not_computed,
+                "detail": p.detail,
+                "best_substitution": p.best_substitution,
+                **({"best": p.best, "worst": p.worst, "mean": p.mean}
+                   if p.n_computed else {}),
+            }
+            for p in ls.profile
+        ],
     }
 
 

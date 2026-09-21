@@ -97,7 +97,8 @@ Built so far:
       diverging one. Colour scale derived from the grid shown and declared as
       such. Diverging poles validated for colour-vision deficiency in both
       modes, with dark steps selected against the dark surface rather than
-      flipped.
+      flipped. The column marginal rides above it on a zero baseline: which
+      positions tolerate change at all, reduced from the same cells.
 
 Remaining, and mostly blocked on data and weights rather than design:
 

@@ -1417,3 +1417,27 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
 @media (max-width: 640px) {
   .hero-stat .figure { font-size: 28px; }
 }
+
+/* The grid's column marginal. Shares the heatmap's columns, so it is read as a
+   reduction of the chart above rather than as a separate chart. */
+.heat .hc.marg {
+  position: relative;
+  height: 34px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--axis);
+}
+.heat .hc.marg .margbar { position: absolute; left: 0; right: 0; border-radius: 1px; }
+/* Zero baseline for the diverging strip, drawn as chrome rather than as data. */
+.heat .hc.marg.marg-div {
+  border-bottom: none;
+  background: linear-gradient(var(--axis), var(--axis)) 0 50% / 100% 1px no-repeat;
+}
+.heat .hc.marg.nc { border-bottom: 1px solid var(--axis); }
+.heat .rowlab.marglab {
+  height: 34px;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 400;
+  align-items: flex-end;
+  padding-bottom: 3px;
+}

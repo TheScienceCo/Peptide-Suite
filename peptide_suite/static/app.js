@@ -1587,6 +1587,10 @@ const DIV_NEG = ["--div-neg-1", "--div-neg-2", "--div-neg-3", "--div-neg-4"];
 const DIV_POS = ["--div-pos-1", "--div-pos-2", "--div-pos-3", "--div-pos-4"];
 const SEQ_STEPS = ["--seq-100", "--seq-200", "--seq-350", "--seq-450", "--seq-600"];
 
+// Height of the column-marginal strip, in px. Kept in step with the .hc.marg
+// rule in the stylesheet: bar heights are computed against it.
+const MARGIN_STRIP_PX = 34;
+
 function cellColor(value, encoding, bound) {
   // No range to spread a scale across: every computed cell sits at the bottom
   // of the ramp rather than being scattered by rounding noise.
@@ -1684,6 +1688,50 @@ function landscapeGrid(ls) {
   const byKey = new Map();
   ls.cells.forEach((c) => byKey.set(`${c.position}:${c.aa}`, c));
 
+  // Column marginal, sharing the grid's columns so it reads as a reduction of
+  // the chart above rather than as a second chart that happens to sit nearby.
+  // Height encodes the most favourable computed value in the column; a column
+  // with nothing computed gets the hatch, not a zero-height bar, because a bar
+  // of no height is a claim that nothing helps.
+  const profile = ls.profile || [];
+  if (profile.length === ls.length) {
+    const computed = profile.filter((p) => p.n_computed > 0);
+    const span = computed.length
+      ? Math.max(...computed.map((p) => Math.abs(m.encoding === "diverging" ? p.best : p.best)), 1e-9)
+      : 0;
+    grid.append(el("div", "rowlab marglab", "best"));
+    for (let pos = 0; pos < ls.length; pos++) {
+      const col = profile[pos];
+      const cell = el("div", "hc marg");
+      if (!col || col.n_computed === 0) {
+        cell.classList.add("nc");
+      } else {
+        const bar = el("div", "margbar");
+        const frac = span > 0 ? Math.min(1, Math.abs(col.best) / span) : 0;
+        bar.style.background = cellColor(col.best, m.encoding, ls.scale_bound);
+        if (m.encoding === "diverging") {
+          // Anchored on a zero baseline, growing up for a gain and down for a
+          // loss. Bare height would encode magnitude alone, so a position where
+          // the best available substitution is strongly harmful would draw a
+          // tall bar and read as the best position on the strip.
+          cell.classList.add("marg-div");
+          // In px, not a percentage: a floor of a percent or two of the strip
+          // rounds a small negative to under a pixel, and a bar that does not
+          // render reads as a column with no result rather than as a column
+          // whose best option is still a loss.
+          bar.style.height = `${Math.max(3, frac * (MARGIN_STRIP_PX / 2))}px`;
+          if (col.best >= 0) bar.style.bottom = "50%"; else bar.style.top = "50%";
+        } else {
+          bar.style.bottom = "0";
+          bar.style.height = `${Math.max(3, frac * MARGIN_STRIP_PX)}px`;
+        }
+        cell.append(bar);
+      }
+      cell.dataset.margin = String(pos);
+      grid.append(cell);
+    }
+  }
+
   ls.rows.forEach((aa) => {
     grid.append(el("div", "rowlab", aa));
     for (let pos = 0; pos < ls.length; pos++) {
@@ -1713,7 +1761,28 @@ function landscapeGrid(ls) {
 
   const show = (ev) => {
     const cell = ev.target.closest(".hc");
-    if (!cell || !cell.dataset.key) { tip.hidden = true; return; }
+    if (!cell) { tip.hidden = true; return; }
+
+    if (cell.dataset.margin !== undefined) {
+      const col = (ls.profile || [])[Number(cell.dataset.margin)];
+      if (!col) { tip.hidden = true; return; }
+      tip.innerHTML = "";
+      tip.append(el("b", null, `Position ${col.position + 1} (${col.wt}) — column summary`));
+      if (col.n_computed > 0) {
+        tip.append(el("div", "val",
+          `best ${fmtValue(col.best, m)} · mean ${fmtValue(col.mean, m)} · ` +
+          `worst ${fmtValue(col.worst, m)}`));
+      }
+      tip.append(el("div", null, col.detail));
+      if (col.n_not_computed > 0) {
+        tip.append(el("div", null, `${col.n_not_computed} of ${col.n_not_computed + col.n_computed} not computed.`));
+      }
+      tip.hidden = false;
+      placeTip(cell);
+      return;
+    }
+
+    if (!cell.dataset.key) { tip.hidden = true; return; }
     const c = byKey.get(cell.dataset.key);
     if (!c) { tip.hidden = true; return; }
     tip.innerHTML = "";
@@ -1736,7 +1805,10 @@ function landscapeGrid(ls) {
       tip.append(el("div", null, `Overall confidence for this substitution: ${c.confidence}`));
     }
     tip.hidden = false;
+    placeTip(cell);
+  };
 
+  function placeTip(cell) {
     const box = wrap.getBoundingClientRect();
     const cb = cell.getBoundingClientRect();
     const left = Math.min(
@@ -1746,7 +1818,7 @@ function landscapeGrid(ls) {
     const above = cb.top - box.top - tip.offsetHeight - 8;
     tip.style.left = `${left}px`;
     tip.style.top = `${above > 0 ? above : cb.bottom - box.top + 8}px`;
-  };
+  }
 
   scroll.addEventListener("mousemove", show);
   scroll.addEventListener("mouseleave", () => { tip.hidden = true; });
@@ -1810,6 +1882,14 @@ function renderLandscape(d) {
     ));
   }
 
+  card.append(el("p", "footnote",
+    m.encoding === "diverging"
+      ? "Top strip: the most favourable computed substitution at each position, on a zero " +
+        "baseline — above the line the best available change is a predicted gain, below it " +
+        "the best available change is still a loss. The column marginal of the grid below, " +
+        "not a separate calculation."
+      : "Top strip: the least costly computed substitution at each position — the " +
+        "column marginal of the grid below, not a separate calculation."));
   card.append(landscapeGrid(ls));
   card.append(landscapeLegend(ls));
   if (ls.scale_basis) card.append(el("p", "footnote", ls.scale_basis));

@@ -179,6 +179,28 @@ class LandscapeError(ValueError):
     pass
 
 
+@dataclass(frozen=True)
+class PositionSummary:
+    """
+    One column of the grid, reduced.
+
+    The grid answers "what happens if I change this residue to that one". The
+    column marginal answers the question people actually arrive with: which
+    positions tolerate change at all. It is a reduction of the same computed
+    cells, never a separate calculation -- so it cannot disagree with the grid
+    above it.
+    """
+    position: int
+    wild_type_aa: str
+    n_computed: int
+    n_not_computed: int
+    best: Optional[float]      # None when nothing in this column was computed
+    worst: Optional[float]
+    mean: Optional[float]
+    best_substitution: str     # "" when nothing was computed
+    detail: str
+
+
 @dataclass
 class SubstitutionLandscape:
     """The grid, plus everything needed to read it without guessing."""
@@ -195,6 +217,7 @@ class SubstitutionLandscape:
     n_not_computed: int = 0
     not_computed_reason: str = ""
     notes: List[str] = field(default_factory=list)
+    profile: List[PositionSummary] = field(default_factory=list)
 
     @property
     def length(self) -> int:
@@ -344,6 +367,7 @@ def build_landscape(
             ))
 
     scale_bound, scale_basis = _scale(metric, computed_values)
+    profile = _profile(context.sequence, cells, metric)
 
     n_not_computed = sum(1 for c in cells if c.state is CellState.NOT_COMPUTED)
     landscape = SubstitutionLandscape(
@@ -365,8 +389,59 @@ def build_landscape(
             else ""
         ),
         notes=list(context.data_notes),
+        profile=profile,
     )
     return landscape
+
+
+def _profile(sequence: str, cells: List[LandscapeCell], metric: LandscapeMetric
+             ) -> List[PositionSummary]:
+    """
+    Reduce each column of the grid.
+
+    `best` means the most favourable computed value in that column, which for a
+    diverging metric is the largest and for a one-signed cost metric is the
+    smallest -- the direction is a property of what the number means, not a
+    convention chosen here. A column with nothing computed reports None rather
+    than an aggregate over an empty set, which numpy and Python both make
+    tempting to report as zero or nan.
+    """
+    by_position: Dict[int, List[LandscapeCell]] = {}
+    for cell in cells:
+        if cell.state is CellState.WILD_TYPE:
+            continue
+        by_position.setdefault(cell.position, []).append(cell)
+
+    favourable = max if metric.encoding == "diverging" else min
+    summaries: List[PositionSummary] = []
+    for position, wt_aa in enumerate(sequence):
+        column = by_position.get(position, [])
+        computed = [c for c in column if c.state is CellState.COMPUTED]
+        n_not = len(column) - len(computed)
+        if not computed:
+            summaries.append(PositionSummary(
+                position=position, wild_type_aa=wt_aa, n_computed=0, n_not_computed=n_not,
+                best=None, worst=None, mean=None, best_substitution="",
+                detail=(f"Nothing was computed at position {position + 1}, so this column "
+                        f"has no summary. It is not a position where nothing helps."),
+            ))
+            continue
+        values = [c.value for c in computed]
+        pick = favourable(computed, key=lambda c: c.value)
+        other = (min if favourable is max else max)(values)
+        summaries.append(PositionSummary(
+            position=position, wild_type_aa=wt_aa,
+            n_computed=len(computed), n_not_computed=n_not,
+            best=pick.value, worst=other, mean=sum(values) / len(values),
+            best_substitution=f"{wt_aa}{position + 1}{pick.mutant_aa}",
+            detail=(f"{len(computed)} substitutions computed at position {position + 1}; "
+                    f"most favourable is {wt_aa}{position + 1}{pick.mutant_aa} at "
+                    f"{pick.value:+.2f}" if metric.encoding == "diverging" else
+                    f"{len(computed)} substitutions computed at position {position + 1}; "
+                    f"least costly is {wt_aa}{position + 1}{pick.mutant_aa} at "
+                    f"{pick.value:.2f}"),
+        ))
+    return summaries
 
 
 def _scale(metric: LandscapeMetric, values: List[float]) -> Tuple[Optional[float], str]:
