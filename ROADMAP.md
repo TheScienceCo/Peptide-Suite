@@ -115,8 +115,13 @@ Remaining, and mostly blocked on data and weights rather than design:
       a set with no variation, and fixes the SVD's arbitrary sign so the plot
       does not mirror itself between runs. Two deterministic encoders with
       opposite limitations, both stated; the pretrained arm still raises.
-- [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
-      compared against single modality and naive concatenation.
+- [x] **Multimodal fusion** — modality-specific encoders and a gated fusion
+      whose mixture is learned per example, against both single modalities and
+      a naive concatenation given the same width and budget. The deliverable is
+      the verdict rule: overlapping bootstrap intervals are not a win, a
+      collapsed gate is disclosed even when fusion wins, and a permutation null
+      over shuffled labels decides whether the test could detect anything. On
+      this construction fusion does not help, and that is reported.
 - [x] **Explainability, the parts that do not need a trained model** — nearest
       examples in representation space, and an out-of-distribution warning that
       places a candidate inside the reference set's own nearest-neighbour

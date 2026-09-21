@@ -796,6 +796,7 @@ async function init() {
   $("#btn-infer").addEventListener("click", onAnalyze);
   $("#btn-find").addEventListener("click", onFind);
   $("#btn-ml").addEventListener("click", onRunML);
+  $("#btn-fusion").addEventListener("click", onFusion);
   $("#query").addEventListener("keydown", (e) => { if (e.key === "Enter") onFind(); });
 
   EXAMPLES.sequences.forEach((ex) => {
@@ -2306,4 +2307,80 @@ async function initRepresentation() {
   };
   sel.addEventListener("change", syncDesc);
   syncDesc();
+}
+
+/* ---------- Does fusion help? ---------- */
+
+function renderFusion(d) {
+  const out = $("#fusion-results");
+  out.innerHTML = "";
+  const card = el("div", "card");
+  card.append(el("h2", null, "Single modality, concatenation, learned fusion"));
+  card.append(el("div", "kv",
+    `modalities: ${d.modalities.join(" + ")} · split: ${d.split} · ` +
+    `${d.n_train} train, ${d.n_test} test`));
+
+  card.append(notice(d.claim_guidance, "warn", "!"));
+
+  (d.skipped || []).forEach((note) => card.append(notice(note, "warn", "!")));
+
+  if (d.arms.length) {
+    const table = el("table", "titration");
+    const thead = el("thead");
+    const hr = el("tr");
+    ["Arm", "ROC-AUC", "95% interval", "Gate"].forEach((h) => hr.append(el("th", null, h)));
+    thead.append(hr);
+    const tbody = el("tbody");
+    d.arms.forEach((a) => {
+      const tr = el("tr");
+      tr.append(el("td", "armname", a.name));
+      tr.append(el("td", "num", a.roc_auc === null ? "—" : a.roc_auc.toFixed(3)));
+      tr.append(el("td", "num",
+        a.ci_low === null ? "—" : `${a.ci_low.toFixed(3)}–${a.ci_high.toFixed(3)}`));
+      // A gate that puts everything on one modality is the single most useful
+      // thing this table can say, so it gets a column rather than a footnote.
+      tr.append(el("td", "grp", a.gate_share
+        ? a.gate_share.map((w, i) => `${d.modalities[i]} ${(w * 100).toFixed(0)}%`).join(" · ")
+        : "—"));
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    // Scroll the table, not the page: a horizontal page scroll at phone width
+    // makes every other card on the page unreadable too.
+    const scroll = el("div", "table-scroll");
+    scroll.append(table);
+    card.append(scroll);
+  }
+
+  if ((d.permutation_null || []).length) {
+    const lo = Math.min(...d.permutation_null), hi = Math.max(...d.permutation_null);
+    card.append(el("p", "footnote",
+      `Shuffled-label null: ${d.permutation_null.length} runs, ROC-AUC ` +
+      `${lo.toFixed(3)}–${hi.toFixed(3)}. A single run of it spans most of that range, ` +
+      `which is why the check is a permutation rather than one control.`));
+  }
+
+  if (d.resolution) card.append(notice(d.resolution, "info", "i"));
+  if (d.verdict) card.append(notice(d.verdict, "info", "i"));
+  out.append(card);
+}
+
+async function onFusion() {
+  const btn = $("#btn-fusion");
+  const out = $("#fusion-results");
+  out.innerHTML = "";
+  busy(btn, true);
+  const families = parseInt($("#fusion-families").value, 10);
+  const perms = parseInt($("#fusion-perms").value, 10);
+  try {
+    const params = new URLSearchParams({
+      n_families: Number.isFinite(families) ? families : 60,
+      n_permutations: Number.isFinite(perms) ? perms : 6,
+    });
+    renderFusion(await api(`/api/ml/fusion-benefit?${params}`));
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Run the comparison");
+  }
 }

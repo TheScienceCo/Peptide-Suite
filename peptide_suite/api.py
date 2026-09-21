@@ -1204,6 +1204,57 @@ def ml_representation(req: RepresentationRequest) -> Dict:
     }
 
 
+@app.get("/api/ml/fusion-benefit")
+def ml_fusion_benefit(n_families: int = 60, per_family: int = 8,
+                      n_permutations: int = 6, seed: int = 0) -> Dict:
+    """
+    Single modality vs naive concatenation vs learned fusion, run live.
+
+    Reports the verdict rule's answer rather than the winning number: arms whose
+    bootstrap intervals overlap have not been separated by this test, and a
+    comparison that cannot clear a shuffled-label null has not compared
+    anything.
+    """
+    try:
+        from ml.experiments.fusion_benefit import run
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"The ML layer is not installed ({e}).")
+
+    try:
+        result = run(n_families=n_families, per_family=per_family,
+                     n_permutations=n_permutations, seed=seed)
+    except Exception as e:
+        logger.exception("Fusion comparison failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "modalities": result.modalities,
+        "split": result.split,
+        "n_train": result.n_train,
+        "n_test": result.n_test,
+        "arms": [
+            {
+                "name": arm.name,
+                "kind": arm.kind,
+                "roc_auc": arm.metrics["roc_auc"].value,
+                "ci_low": arm.metrics["roc_auc"].ci_low,
+                "ci_high": arm.metrics["roc_auc"].ci_high,
+                "n": arm.metrics["roc_auc"].n,
+                "gate_share": arm.gate_share,
+            }
+            for arm in result.arms
+        ],
+        "permutation_null": result.permutation_null,
+        "resolution": result.resolution,
+        "verdict": result.verdict,
+        "skipped": result.skipped,
+        "is_synthetic": True,
+        "claim_guidance": ("This demonstrates that the comparison can be run and read, and "
+                           "supports no biological claim whatever the numbers say."),
+        "report": result.report(),
+    }
+
+
 @app.get("/api/calibration")
 def calibration() -> Dict:
     """Prediction-vs-outcome log summary, for the Brier-score check."""

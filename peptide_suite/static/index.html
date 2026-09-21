@@ -229,6 +229,39 @@
     </div>
 
     <div id="representation-results"></div>
+
+    <div class="card">
+      <div class="label">DOES FUSION ACTUALLY HELP?</div>
+      <p class="kv">
+        Two modalities — position-aware sequence, which can see a motif, and bulk
+        physicochemistry, which cannot — against a label that needs both. Four arms:
+        each modality alone, naive concatenation, and a gated learned fusion, all on a
+        sequence-clustered split. The answer reported is the verdict rule's, not the
+        winning number: arms whose bootstrap intervals overlap have not been separated
+        by this test, and a comparison that cannot clear a shuffled-label null has not
+        compared anything.
+      </p>
+      <div class="row">
+        <div>
+          <label for="fusion-families">Families</label>
+          <input type="text" id="fusion-families" value="60" inputmode="numeric">
+        </div>
+        <div>
+          <label for="fusion-perms">Shuffled-label runs</label>
+          <input type="text" id="fusion-perms" value="6" inputmode="numeric">
+        </div>
+        <div>
+          <button class="primary" id="btn-fusion">Run the comparison</button>
+        </div>
+      </div>
+      <p class="footnote">
+        Synthetic by construction, like the split comparison above. It demonstrates that
+        the comparison can be run and read, and supports no biological claim whatever the
+        numbers say.
+      </p>
+    </div>
+
+    <div id="fusion-results"></div>
   </section>
 
   <section class="panel" id="panel-find" role="tabpanel" aria-labelledby="tab-find" hidden>

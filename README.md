@@ -76,6 +76,11 @@ stored table.
 
 ![Split comparison](docs/screenshots/split-gap.png)
 
+Whether a learned fusion beats naive concatenation — answered by the verdict
+rule rather than by the winning number.
+
+![Does fusion help](docs/screenshots/fusion-benefit.png)
+
 ## Running
 
 The engine holds no coefficients. Every weight, threshold and cutoff comes from
@@ -301,6 +306,47 @@ the labelled data. Residue-level sensitivity is not duplicated either — the
 substitution landscape's column marginal already answers it, over the real
 pipeline rather than over a model.
 
+## Does fusion actually help?
+
+The multimodal ask is easy to satisfy dishonestly: build a fusion layer, run it
+once against a concatenation baseline nobody tried to make work, and report the
+larger number. So the comparison here is built around the parts that make it
+falsifiable.
+
+Two modalities, against a label that needs both. Position-aware sequence can
+see a motif; bulk physicochemistry — charge, hydrophobicity, composition
+fractions — cannot. The label is *motif present and net charge positive*. Four
+arms on a sequence-clustered split: each modality alone, naive concatenation,
+and a gated fusion whose mixture is learned per example. The baseline gets the
+same width and the same training budget as the thing meant to beat it.
+
+Three rules decide what may be claimed:
+
+- **Overlapping bootstrap intervals are not a win.** However far apart two
+  point estimates are, if the intervals overlap this test did not separate
+  them, and that is what gets reported.
+- **A collapsed gate is disclosed.** When the fusion model puts 95%+ of its
+  weight on one modality, what is being compared is that modality with extra
+  layers, not a mixture — stated even when the fusion arm wins.
+- **A shuffled-label null decides whether the test could detect anything.**
+  Without it, "the intervals overlap" might only mean the test set is too
+  small.
+
+That last rule had to be rebuilt. The first version used a single control run
+trained on shuffled labels, and it returned 0.783 ROC-AUC — which looks exactly
+like a leak. It was not: over ten shuffles the same arm spans roughly 0.28 to
+0.56 around a mean of 0.46. One draw from a distribution that wide certifies
+nothing, and using it as a resolution check would have called an under-powered
+test a leaking one, or the reverse, depending on the seed. The null is now a
+permutation over several shuffles and the bound is stated as what that many
+shuffles can resolve.
+
+The honest answer on this construction is that **fusion does not help**: all
+four arms land within each other's intervals, and the gate collapses onto the
+sequence modality. That is a real result about these two modalities — the
+sequence encoding already contains what the physicochemical one summarises —
+and it is reported rather than tuned away.
+
 ## Why named-entity holdouts overstate the result
 
 The obvious way to test whether the system can rediscover a known drug is to
@@ -357,6 +403,7 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 | `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
 | `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
 | `POST /api/find-peptides` | Functional keyword search |
+| `GET /api/ml/fusion-benefit` | Four-arm multimodal comparison with its verdict rule, run live |
 | `POST /api/ml/representation` | Reference and single substitutions in two principal components, with each candidate placed against the cloud |
 | `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |
 | `GET /api/parameterization` | The residue registry and the pipeline that would fill it |

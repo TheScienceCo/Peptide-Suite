@@ -1204,15 +1204,25 @@ table.titration td.sign {
 /* The split-comparison table has four columns, not the seven the titration
    table was sized for, so it does not need that min-width and inheriting it
    forced a scroll on a table that fits. */
-#ml-results table.titration { min-width: 340px; }
+#ml-results table.titration,
+#fusion-results table.titration { min-width: 340px; }
 
 /* Arm names are prose, not residue labels. The monospace residue cell is sized
    for things like "K28" and clipped "composition baseline" mid-word. */
-#ml-results td.armname {
+#ml-results td.armname,
+#fusion-results td.armname {
   font-weight: 600;
   color: var(--text-primary);
   min-width: 11rem;
   padding-right: 14px;
+}
+
+/* The fusion table's gate column is the widest thing in it, and at phone width
+   the whole table would push the page sideways. Scroll the table, not the page:
+   a horizontal page scroll makes every other card unreadable too. */
+.table-scroll { overflow-x: auto; }
+@media (max-width: 640px) {
+  #fusion-results td.grp { font-size: 10.5px; }
 }
 
 /* ---------- substitution landscape heatmap ---------- */
