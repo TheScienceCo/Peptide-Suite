@@ -177,7 +177,11 @@ Scope:
 12. **Documentation** — README rewritten so an ML engineer or computational
     biologist understands the project in about two minutes. Architecture
     diagram, UI screenshots, one performance comparison table, and a section
-    titled "Why sequence-aware evaluation matters".
+    titled "Why sequence-aware evaluation matters". *Done: `docs/architecture.svg`
+    (selected for dark mode rather than flipped), eight screenshots taken from
+    a live run rather than mocked, the split-gap table, and the section. A test
+    fails on a figure that is referenced but missing, or committed but shown
+    nowhere.*
 
 **Validation idea worth building toward:** take the learned properties together
 with those from the existing pipeline and predict the receptor or binding site a

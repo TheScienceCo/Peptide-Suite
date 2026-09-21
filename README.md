@@ -18,11 +18,63 @@ Three workflows:
 - **Find peptides** — functional keywords to capable cell types, checking known
   answers before ranking anything.
 
-And four gates that refuse rather than guess: a structure-template hierarchy
+And five gates that refuse rather than guess: a structure-template hierarchy
 whose last tier is refusal, a parameterized-residue registry that is empty (so
 non-canonical chemistry becomes a research request, not a recommendation), a
-native-contact classifier that freezes essential footprints, and a class B1
-placement rule that will not let an affinity gain stand alone as an improvement.
+native-contact classifier that freezes essential footprints, a class B1
+placement rule that will not let an affinity gain stand alone as an
+improvement, and a synthetic-feasibility check that blocks a regioselectivity
+conflict rather than costing it.
+
+![Architecture](docs/architecture.svg)
+
+## What it looks like
+
+The substitution landscape: every position against every residue, with the
+column marginal above it on a zero baseline. Hollow cells are the wild-type
+diagonal.
+
+![The substitution landscape](docs/screenshots/landscape.png)
+
+The same grid under a quantity nothing could compute. Automated homolog
+retrieval is not wired up in this build, so the conservation term has no input
+— and every substitution cell is hatched rather than filled with the zero that
+would have painted the peptide as perfectly conserved end to end.
+
+![A grid where nothing could be computed](docs/screenshots/landscape-not-computed.png)
+
+A transformation's objective vector. Three axes were assessed; five were not,
+and they are hatched rather than scored neutral, because an unassessed axis
+excluded from an average is not an axis with a value of zero. The coverage
+figure rides with the scalarised score for the same reason.
+
+![Ranked transformations and the objective vector](docs/screenshots/transformations.png)
+
+What did not run, and why. The physics tiers report their own absence in terms
+of the specific engine they would have needed.
+
+![Physics tiers](docs/screenshots/physics-tiers.png)
+
+Non-canonical chemistry does not become a recommendation. The parameterized
+residue registry is empty, so a move that needs chemistry nobody here has
+parameterized is emitted as a research request naming what the work would be.
+
+![Research requests](docs/screenshots/research-requests.png)
+
+Net charge against pH, computed per residue by Henderson-Hasselbalch rather
+than from a table of typical values.
+
+![Net charge against pH](docs/screenshots/transformation-detail.png)
+
+The representation explorer, leading with the share of variation the picture
+actually carries rather than with the picture.
+
+![Representation explorer](docs/screenshots/representation.png)
+
+Random versus sequence-clustered evaluation, run live rather than served from a
+stored table.
+
+![Split comparison](docs/screenshots/split-gap.png)
 
 ## Running
 
