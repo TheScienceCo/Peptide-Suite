@@ -143,8 +143,11 @@ Blocked on data, weights or tooling rather than on design:
 pip install -r requirements.txt
 export PEPTIDE_SUITE_POLICY=policy/demo.v1.json
 
-# the full suites
+# the analysis suite — no PyTorch required, the engine does not import it
 python -m unittest discover -t . -s peptide_suite/tests     # 618 tests
+
+# the ML layer is optional and PyTorch is its only extra dependency
+pip install torch
 python -m unittest discover -t . -s ml/tests                # 111 tests
 
 # the engine/policy boundary, which only ratchets down
