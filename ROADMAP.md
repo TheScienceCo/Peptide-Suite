@@ -117,8 +117,16 @@ Remaining, and mostly blocked on data and weights rather than design:
       opposite limitations, both stated; the pretrained arm still raises.
 - [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
       compared against single modality and naive concatenation.
-- [ ] Explainability: nearest training examples, residue sensitivity,
-      attribution, OOD warnings by embedding distance.
+- [x] **Explainability, the parts that do not need a trained model** — nearest
+      examples in representation space, and an out-of-distribution warning that
+      places a candidate inside the reference set's own nearest-neighbour
+      distance distribution rather than reporting a bare distance. Refuses a
+      reference set too small to have a spread; refuses a distance across two
+      encoder spaces. Residue sensitivity is the landscape's column marginal,
+      computed over the real pipeline, and is not duplicated here.
+- [ ] Attribution, once a model trained on real labels exists. Attributing the
+      synthetic split-gap model's recall of constructed sequences would be a
+      picture of nothing.
 - [ ] The receptor-prediction validation idea — take the learned properties
       together with the physics pipeline's and predict the binding site,
       ignoring the literature, then check against known biology.

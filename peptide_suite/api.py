@@ -1055,13 +1055,15 @@ def ml_split_comparison(n_families: int = 40, per_family: int = 8,
 class RepresentationRequest(BaseModel):
     sequence: str = Field(..., description="Reference peptide sequence")
     encoder: str = Field(
-        "deterministic-onehot-composition",
+        "deterministic-positional-onehot",
         description=(
-            "Which encoder produces the vectors. Mixing encoders is refused. The "
-            "composition encoder concentrates more variance into two components and "
-            "superimposes variants that differ only in where a substitution was made; "
-            "the positional one separates those and spreads the variance thin. Both "
-            "limitations ride with the response."
+            "Which encoder produces the vectors. Mixing encoders is refused. The default "
+            "is the positional encoder because the composition one collapses distinct "
+            "sequences onto each other -- roughly half of a single-substitution scan "
+            "lands on top of something else -- and a plot that silently merges half its "
+            "points is worse than one whose components carry little. The composition "
+            "encoder remains selectable and concentrates far more variance into two "
+            "dimensions; both limitations ride with the response."
         ),
     )
     candidates: Optional[List[str]] = Field(
@@ -1092,6 +1094,7 @@ def ml_representation(req: RepresentationRequest) -> Dict:
         from ml.embeddings.explorer import (
             ProjectionError, project, single_substitution_variants,
         )
+        from ml.explain.neighbours import NeighbourError, out_of_distribution
     except ImportError as e:
         raise HTTPException(status_code=503, detail=f"The ML layer is not installed ({e}).")
 
@@ -1139,8 +1142,46 @@ def ml_representation(req: RepresentationRequest) -> Dict:
     except ProjectionError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Where a supplied candidate sits relative to the substitution cloud, in the
+    # cloud's own terms. Only for candidates: asking whether a single
+    # substitution of the reference is out of distribution relative to the other
+    # single substitutions answers itself.
+    cloud = [(label, emb) for (label, _), emb in zip(pairs, embeddings)
+             if not label.startswith("candidate:")]
+    ood: List[Dict] = []
+    for (label, _), embedding in zip(pairs, embeddings):
+        if not label.startswith("candidate:"):
+            continue
+        try:
+            report = out_of_distribution(
+                embedding,
+                [e for _, e in cloud],
+                [l for l, _ in cloud],
+                query_label=label,
+            )
+        except NeighbourError as e:
+            ood.append({"label": label, "available": False, "reason": str(e)})
+            continue
+        ood.append({
+            "label": label,
+            "available": True,
+            "distance_to_nearest": report.distance_to_nearest,
+            "reference_median_nn_distance": report.reference_median_nn_distance,
+            "percentile": report.percentile,
+            "is_outside": report.is_outside,
+            "n_coincident": report.n_coincident,
+            "verdict": report.verdict,
+            "caveat": report.caveat,
+            "nearest": [
+                {"label": n.label, "sequence": n.sequence,
+                 "distance": n.distance, "rank": n.rank}
+                for n in report.nearest
+            ],
+        })
+
     return {
         "reference": sequence,
+        "ood": ood,
         "encoder": {
             "model": projection.encoder_model,
             "version": projection.encoder_version,
@@ -1148,6 +1189,8 @@ def ml_representation(req: RepresentationRequest) -> Dict:
             "has_learned_content": projection.encoder_has_learned_content,
             "input_dim": projection.input_dim,
         },
+        "distinct_positions": projection.distinct_positions,
+        "distinct_projected": projection.distinct_projected,
         "explained_variance_ratio": projection.explained_variance_ratio,
         "cumulative_explained": projection.cumulative_explained,
         "interpretation": projection.interpretation,

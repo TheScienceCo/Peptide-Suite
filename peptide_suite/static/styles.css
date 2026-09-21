@@ -1441,3 +1441,8 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
   align-items: flex-end;
   padding-bottom: 3px;
 }
+
+.ood { margin: 10px 0 4px; padding-top: 10px; border-top: 1px solid var(--hair, var(--border)); }
+.ood .t { font-weight: 600; color: var(--text-primary); font-size: 12.5px; margin-bottom: 6px; }
+.ood .chips { margin-top: 6px; }
+.chip.static { cursor: default; font-family: var(--mono); font-size: 11px; }

@@ -2168,6 +2168,43 @@ function representationTable(d) {
   return det;
 }
 
+function renderOOD(entries) {
+  // One block per supplied candidate. Deliberately not a chart: a handful of
+  // items with a verdict each is a list, and a chart here would be decoration
+  // over five numbers.
+  const wrap = el("div");
+  wrap.append(el("div", "label", "WHERE EACH CANDIDATE SITS"));
+  wrap.append(el("p", "footnote",
+    "Each candidate's distance to its nearest neighbour in the substitution cloud, placed " +
+    "inside the cloud's own nearest-neighbour distances. A raw distance answers nothing — " +
+    "the same number is close in one space and remote in another — so the reference set " +
+    "supplies the comparison."));
+
+  entries.forEach((o) => {
+    const block = el("div", "ood");
+    block.append(el("div", "t", o.label));
+    if (!o.available) {
+      block.append(notice(o.reason, "warn", "!"));
+      wrap.append(block);
+      return;
+    }
+    // Status wears an icon and a word, never colour alone.
+    block.append(notice(o.verdict, o.is_outside ? "warn" : "info", o.is_outside ? "!" : "i"));
+    block.append(el("div", "kv",
+      `distance to nearest ${o.distance_to_nearest.toFixed(3)} · ` +
+      `the cloud's own median nearest-neighbour distance ${o.reference_median_nn_distance.toFixed(3)} · ` +
+      `${(o.percentile * 100).toFixed(0)}th percentile`));
+    const chips = el("div", "chips");
+    o.nearest.forEach((n) => {
+      chips.append(el("span", "chip static", `${n.label}  ${n.distance.toFixed(3)}`));
+    });
+    block.append(chips);
+    block.append(el("p", "footnote", o.caveat));
+    wrap.append(block);
+  });
+  return wrap;
+}
+
 function renderRepresentation(d) {
   const out = $("#representation-results");
   out.innerHTML = "";
@@ -2200,6 +2237,7 @@ function renderRepresentation(d) {
   card.append(scatterPlot(d));
   card.append(scatterLegend(d));
   card.append(el("p", "footnote", d.interpretation));
+  if ((d.ood || []).length) card.append(renderOOD(d.ood));
   card.append(representationTable(d));
   out.append(card);
 }
@@ -2255,8 +2293,13 @@ async function initRepresentation() {
     o.disabled = !info.available;
     sel.append(o);
   });
+  // Prefer the positional encoder where it is available: the composition one
+  // maps distinct sequences to one vector, and a default that silently merges
+  // half a substitution scan is the wrong thing to show first.
+  const preferred = "deterministic-positional-onehot";
   const firstAvailable = Object.entries(encoders).find(([, i]) => i.available);
-  if (firstAvailable) sel.value = firstAvailable[0];
+  if (encoders[preferred] && encoders[preferred].available) sel.value = preferred;
+  else if (firstAvailable) sel.value = firstAvailable[0];
   const syncDesc = () => {
     const info = encoders[sel.value];
     desc.textContent = info ? info.note : "";

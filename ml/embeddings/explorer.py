@@ -85,6 +85,8 @@ class Projection:
     input_dim: int
     interpretation: str
     warnings: List[str] = field(default_factory=list)
+    distinct_positions: int = 0     # distinct vectors in the encoder's own space
+    distinct_projected: int = 0     # distinct spots once reduced to two dimensions
 
     @property
     def cumulative_explained(self) -> float:
@@ -182,6 +184,34 @@ def project(
             variant_class=variant, n_substitutions=n))
 
     warnings: List[str] = []
+
+    # Two different collapses, and they mean different things. Distinct
+    # sequences can share a vector -- the encoder's doing. And distinct vectors
+    # can land on the same spot once projected to two dimensions -- the
+    # projection's doing, and the concrete meaning of a low explained-variance
+    # figure. A reader counting marks is entitled to both numbers rather than
+    # to the conclusion that points went missing.
+    #
+    # Distinct sequences can share a vector -- composition is order-blind, so
+    # the same swap at two positions is one point. Without saying so, a plot of
+    # 592 sequences showing twenty marks looks like a rendering fault or, worse,
+    # like twenty clusters.
+    distinct_vectors = len({tuple(e.pooled) for e in embeddings})
+    if distinct_vectors < len(embeddings):
+        warnings.append(
+            f"{len(embeddings)} sequences occupy {distinct_vectors} distinct positions in this "
+            f"space: the encoder maps different sequences to the same vector, so marks are "
+            f"superimposed and the plot shows fewer points than there are sequences."
+        )
+
+    projected = len({(round(p.x, 9), round(p.y, 9)) for p in points})
+    if projected < len(points):
+        warnings.append(
+            f"In two dimensions these {len(points)} sequences fall on {projected} distinct "
+            f"spots: marks overlap, and the plot shows fewer points than there are sequences. "
+            f"This is what the explained-variance figure means in practice."
+        )
+
     cumulative = sum(ratios)
     if cumulative < 0.5:
         warnings.append(
@@ -191,9 +221,9 @@ def project(
         )
     if head.kind is not EncoderKind.PRETRAINED_LANGUAGE_MODEL:
         warnings.append(
-            "These vectors have no learned content. Distance here is a statement about "
-            "amino-acid composition and nothing else — in particular it is not a "
-            "statement about function, activity or binding."
+            f"These vectors have no learned content: they are {head.pooling}. Distance here "
+            f"is a statement about the encoding and nothing else — in particular it is not a "
+            f"statement about function, activity or binding."
         )
 
     return Projection(
@@ -204,17 +234,35 @@ def project(
         encoder_kind=head.kind.value,
         encoder_has_learned_content=head.kind.has_learned_content,
         input_dim=head.dim,
-        interpretation=_interpretation(head.kind),
+        interpretation=_interpretation(head),
         warnings=warnings,
+        distinct_positions=distinct_vectors,
+        distinct_projected=projected,
     )
 
 
-def _interpretation(kind: EncoderKind) -> str:
-    if kind is EncoderKind.PRETRAINED_LANGUAGE_MODEL:
+def _interpretation(embedding: Embedding) -> str:
+    """
+    What the axes are, in terms of the encoder that actually made them.
+
+    Branching on the encoder kind alone was wrong and quietly so: it told a
+    reader looking at a positional one-hot projection that the axes were
+    principal components of amino-acid composition, which is a different space
+    with a different limitation.
+    """
+    if embedding.kind is EncoderKind.PRETRAINED_LANGUAGE_MODEL:
         return (
-            "Axes are the first two principal components of a pretrained language "
-            "model's pooled representations. Proximity reflects what that model learned "
-            "about these sequences, which is not the same as functional similarity."
+            f"Axes are the first two principal components of {embedding.model}'s pooled "
+            f"representations ({embedding.pooling}). Proximity reflects what that model "
+            f"learned about these sequences, which is not the same as functional similarity."
+        )
+    if "positional" in embedding.model:
+        return (
+            "Axes are the first two principal components of a position-aware one-hot "
+            "encoding. Proximity means the sequences differ at few positions. Every "
+            "substitution moves a point by the same amount regardless of which residues "
+            "are involved, so a conservative swap and a drastic one are the same distance "
+            "— a limitation of the encoder rather than a finding about the peptides."
         )
     return (
         "Axes are the first two principal components of amino-acid composition. "

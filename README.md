@@ -266,13 +266,40 @@ unstatable.
 
 The two deterministic encoders are kept separate rather than merged, because
 their limitations are opposite and both are worth seeing. Composition
-concentrates variance into few components and is order-blind — the same swap
-made at two different positions lands in exactly the same place. Positional
-one-hot separates those and spreads the variance so thin that two components
-carry about 5% of it. Neither has any learned content, and neither is reported
-as though it does. ESM-2 is the intended encoder; its weights are unreachable
-from this environment and it raises rather than falling back, so nothing here
-can report amino-acid counts as a language-model embedding.
+concentrates variance into few components and is order-blind — under it roughly
+half of a single-substitution scan lands exactly on top of something else.
+Positional one-hot keeps all 591 apart and spreads the variance so thin that
+two components carry about 4% of it. The positional one is the default: a plot
+that silently merges half its points is worse than one whose components carry
+little and say so.
+
+Both kinds of collapse are counted and reported, because they mean different
+things and a reader counting marks deserves to know which is happening. "591
+sequences occupy 591 distinct positions in this space" is about the encoder.
+"In two dimensions these 591 sequences fall on 36 distinct spots" is about the
+projection — and is what a 4% explained-variance figure means in practice.
+
+Neither encoder has any learned content, and neither is reported as though it
+does. ESM-2 is the intended encoder; its weights are unreachable from this
+environment and it raises rather than falling back, so nothing here can report
+amino-acid counts as a language-model embedding.
+
+Supply candidate sequences and each is placed inside the substitution cloud's
+own nearest-neighbour distance distribution — "further from this reference set
+than 100% of its own members are from their nearest neighbour" — because a raw
+distance answers nothing: the same number is close in one space and remote in
+another. A reference set too small to have a spread is refused rather than
+given a verdict. The point of the warning is narrow and worth stating plainly:
+a prediction about a sequence unlike anything in the reference set is an
+extrapolation, and a model will make it with exactly the same confidence it
+uses for an interpolation.
+
+Attribution is deliberately absent. It explains a model's output, and the only
+model available here is the synthetic split-gap demonstration; attributing its
+recall of constructed sequences would be a picture of nothing. It arrives with
+the labelled data. Residue-level sensitivity is not duplicated either — the
+substitution landscape's column marginal already answers it, over the real
+pipeline rather than over a model.
 
 ## Why named-entity holdouts overstate the result
 
@@ -330,7 +357,7 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 | `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
 | `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
 | `POST /api/find-peptides` | Functional keyword search |
-| `POST /api/ml/representation` | Reference and single substitutions in two principal components |
+| `POST /api/ml/representation` | Reference and single substitutions in two principal components, with each candidate placed against the cloud |
 | `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |
 | `GET /api/parameterization` | The residue registry and the pipeline that would fill it |
 | `GET /api/holdout` | Holdout protocols, and the named-entity leakage table |

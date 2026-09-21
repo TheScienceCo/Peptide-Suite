@@ -80,10 +80,35 @@ class TestWhatTheProjectionReports(unittest.TestCase):
         self.assertFalse(p.encoder_has_learned_content)
         self.assertIn("composition", p.interpretation.lower())
 
+    def test_the_interpretation_describes_the_encoder_actually_used(self):
+        # Branching on the encoder kind alone told a reader looking at a
+        # positional projection that the axes were components of composition.
+        comp_e, comp_l = variants(40, DeterministicEncoder(max_length=len(REF)))
+        pos_e, pos_l = variants(40, PositionalOneHotEncoder(max_length=len(REF)))
+        composition = project(comp_e, comp_l, REF)
+        positional = project(pos_e, pos_l, REF)
+        self.assertIn("composition", composition.interpretation.lower())
+        self.assertNotIn("position-aware", composition.interpretation.lower())
+        self.assertIn("position-aware", positional.interpretation.lower())
+        self.assertNotIn("principal components of amino-acid composition",
+                         positional.interpretation.lower())
+
     def test_an_unlearned_space_says_so(self):
         embeddings, labels = variants(40)
         p = project(embeddings, labels, REF)
         self.assertTrue(any("no learned content" in w for w in p.warnings))
+
+    def test_the_two_kinds_of_collapse_are_counted_separately(self):
+        # One is the encoder mapping distinct sequences to one vector; the
+        # other is two dimensions not being enough to keep distinct vectors
+        # apart. Conflating them would blame the wrong thing.
+        encoder = PositionalOneHotEncoder(max_length=len(REF))
+        embeddings, labels = variants(150, encoder)
+        p = project(embeddings, labels, REF)
+        self.assertEqual(p.distinct_positions, len(embeddings))
+        self.assertLessEqual(p.distinct_projected, p.distinct_positions)
+        if p.distinct_projected < len(p.points):
+            self.assertTrue(any("distinct spots" in w for w in p.warnings))
 
     def test_a_weak_projection_warns_before_it_is_read(self):
         # A single-substitution cloud in one-hot space has no dominant
