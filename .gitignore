@@ -57,3 +57,8 @@ policy/legend*
 *.salt
 ml/runs/
 .embedding_cache/
+
+# Psi4 scratch, written into the working directory by a QM run
+timer.dat
+psi.*.clean
+*.psi4.log

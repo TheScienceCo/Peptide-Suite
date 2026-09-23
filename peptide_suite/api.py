@@ -866,7 +866,25 @@ def parameterization() -> Dict:
     from peptide_suite.core.ncaa_registry import NCAARegistry, pipeline_specification
     return {
         "registry_is_empty": NCAARegistry.is_empty(),
-        "parameterized_residues": sorted(NCAARegistry.registry()),
+        "parameterized_residues": sorted(NCAARegistry.usable()),
+        # Separate from the usable list on purpose: a partial record is real
+        # work and licenses nothing, and merging the two lists is exactly how a
+        # half-parameterized residue ends up in a ranking.
+        "in_progress_residues": {
+            code: {
+                "stages_completed": record.get("stages_completed", []),
+                "stages_outstanding": [s.value for s in NCAARegistry.cost(code).stages_outstanding],
+                "geometry_method": record.get("geometry_method", ""),
+                "esp_rrms": record.get("esp_rrms"),
+                "known_deficiencies": record.get("known_deficiencies", []),
+                "validated_against": record.get("validated_against", ""),
+            }
+            for code in sorted(NCAARegistry.registry())
+            if not NCAARegistry.status(code).permits_scoring
+            for record in [NCAARegistry.registry()[code]]
+        },
+        "engines": __import__("peptide_suite.core.qm_engine",
+                              fromlist=["engine_status"]).engine_status(),
         "pipeline": pipeline_specification(),
         "catalogue": [
             {

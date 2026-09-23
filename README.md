@@ -206,6 +206,51 @@ so underneath: a scan whose scores all fall within ±0.3 drawn against a
 theoretical ±1.0 is a uniformly pale chart that hides its own result. Two grids
 therefore do not share a scale, which is stated rather than left to be assumed.
 
+## What one residue's parameterization actually cost
+
+The registry of parameterized non-canonical residues is empty. That has always
+been its correct state — this project had parameterized nothing — and the
+honest way to change it is to do the work, not to lower the bar.
+
+Aib (α-aminoisobutyric acid, the Aib8 in semaglutide) now has three of six
+pipeline stages behind it, run here:
+
+| Stage | Level of theory | Result |
+|---|---|---|
+| Geometry optimisation | HF/6-31G* | converged, −531.89025452 Eh, 193 basis functions, 62 s |
+| Electrostatic potential | HF/6-31G* | four-shell Connolly surface, 1024 grid points |
+| RESP charges | two-stage restrained fit | ESP relative RMS **0.120**, charges sum to 0.000000 |
+
+The geometry was started from a GFN2-xTB optimisation, which is where the
+interesting distinction is. GFN2-xTB is a real electronic-structure method and
+it is the **wrong** one for deriving these charges — not because it is
+inaccurate, but because the force field these charges are going into had its
+Lennard-Jones terms fitted against HF/6-31G*'s overpolarisation. A
+better-converged charge set from a better method is inconsistent with the
+parameters it will sit beside. So the xtb result is recorded as a
+pre-optimisation, `satisfies_stage` comes back `False`, and it shortens the
+next stage instead of replacing it. B3LYP/6-31G** is refused for the same
+reason, which is the part that is easy to get backwards.
+
+**Aib is still not usable, and the registry still reports as empty.** Three
+stages is not six. Nothing has been validated against experimental
+conformational data, so the charges reproduce a calculation rather than a
+molecule, and the record says exactly that. What changed is that a research
+request for Aib now quotes the three stages genuinely remaining instead of all
+six.
+
+The record also carries what the fit gets wrong. A single-conformer RESP gives
+Aib's two constitutionally identical Cβ methyls different charges (−0.197 and
+−0.112); that is an artifact of the conformer, the remedy is a multi-conformer
+refit, and it is written on the record rather than left for a reader to notice.
+
+One bug worth recording, because it is the exact failure this project exists to
+prevent, committed inside its own tool: the first version of the QM script
+reported `esp_rrms = 0.865`. That is not a residual — it is index 1 of the
+unrestrained ESP charge array, a carbonyl carbon. It looked like a plausible
+fit quality and was a partial charge. The residual is now computed from the
+written grid, and a test asserts it is small enough to be one.
+
 ## Why sequence-aware evaluation matters
 
 Peptide datasets are full of near-duplicates: alanine scans, single-point

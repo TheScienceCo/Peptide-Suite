@@ -82,13 +82,27 @@ PIPELINE: tuple = tuple(ParameterizationStage)
 
 class ResidueStatus(Enum):
     CANONICAL = "canonical"                # in the standard library already
-    PARAMETERIZED = "parameterized"        # in the registry, work done and validated
-    UNPARAMETERIZED = "unparameterized"    # recognised, no parameters
+    PARAMETERIZED = "parameterized"        # every pipeline stage done and validated
+    IN_PROGRESS = "in_progress"            # some stages genuinely run, not all
+    UNPARAMETERIZED = "unparameterized"    # recognised, nothing run
     UNRECOGNISED = "unrecognised"          # not even identifiable
 
     @property
     def permits_scoring(self) -> bool:
         return self in (ResidueStatus.CANONICAL, ResidueStatus.PARAMETERIZED)
+
+    @property
+    def describe(self) -> str:
+        return {
+            ResidueStatus.CANONICAL: "already in the standard library",
+            ResidueStatus.PARAMETERIZED: "parameterized and validated by this project",
+            ResidueStatus.IN_PROGRESS: (
+                "partly parameterized: some stages have genuinely run and their artifacts "
+                "are recorded, but the pipeline is incomplete, so this residue still may "
+                "not be scored, simulated or ranked"),
+            ResidueStatus.UNPARAMETERIZED: "recognised, with no parameterization work done",
+            ResidueStatus.UNRECOGNISED: "not in the catalogue",
+        }[self]
 
 
 class ParameterizationError(Exception):
@@ -186,6 +200,14 @@ class ResearchRequest:
                 f"Not in the non-canonical catalogue, so the system cannot even say what "
                 f"parameterizing it would involve."
             )
+        if self.status is ResidueStatus.IN_PROGRESS:
+            done = len(PIPELINE) - len(self.cost.stages_outstanding)
+            return (
+                f"Parameterization has started: {done} of {len(PIPELINE)} stages have run "
+                f"and their artifacts are recorded. That is real progress and it licenses "
+                f"nothing -- an incomplete pipeline yields no usable parameters, so this "
+                f"is still a research request rather than a recommendation."
+            )
         absent = (", ".join(self.catalogue.absent_from)
                   if self.catalogue and self.catalogue.absent_from
                   else "standard force fields")
@@ -237,13 +259,34 @@ class NCAARegistry:
         return cls._registry
 
     @classmethod
+    def completed_stages(cls, residue: str) -> set:
+        record = cls.registry().get(residue) or {}
+        return {ParameterizationStage(s) for s in record.get("stages_completed", [])}
+
+    @classmethod
+    def usable(cls) -> Dict[str, dict]:
+        """
+        The residues that may actually be scored: every stage complete.
+
+        Separate from `registry()`, which also holds partial records. A record
+        exists to make progress checkable; only a complete one licenses
+        anything, and conflating the two would let a half-parameterized residue
+        into a ranking on the strength of having a file.
+        """
+        return {code: record for code, record in cls.registry().items()
+                if cls.completed_stages(code) >= set(PIPELINE)}
+
+    @classmethod
     def is_empty(cls) -> bool:
-        return not cls.registry()
+        """Whether anything at all may be scored. Partial records do not count."""
+        return not cls.usable()
 
     @classmethod
     def status(cls, residue: str) -> ResidueStatus:
-        if residue in cls.registry():
+        if residue in cls.usable():
             return ResidueStatus.PARAMETERIZED
+        if cls.completed_stages(residue):
+            return ResidueStatus.IN_PROGRESS
         entry = cls.catalogue().get(residue)
         if entry is None:
             return ResidueStatus.UNRECOGNISED
@@ -424,20 +467,95 @@ STAGE_REQUIREMENTS: Dict[ParameterizationStage, StageRequirement] = {
 }
 
 
-def run_stage(stage: ParameterizationStage, residue: str, **_kwargs):
+@dataclass(frozen=True)
+class StageResult:
     """
-    Run one pipeline stage. Not implemented, by design at this build step.
+    What one stage produced, and at what level of theory.
 
-    Step 6d is "registry, empty, with the QM pipeline stubbed". The stub is here
-    so the shape of the work is fixed and visible before anything depends on its
-    output, and so that nothing can quietly acquire parameters in the meantime.
+    Returned rather than written anywhere. Running a stage never touches the
+    registry: a record is a claim that work was done and validated, and it is
+    made by a person invoking the recording tool, not as a side effect of a
+    calculation succeeding. That separation is the whole reason a residue
+    cannot acquire parameters by accident.
+    """
+    stage: ParameterizationStage
+    residue: str
+    level_of_theory: str
+    satisfies_stage: bool
+    artifact: Dict
+    note: str
+
+    def describe(self) -> str:
+        verdict = ("satisfies the stage" if self.satisfies_stage
+                   else "does NOT satisfy the stage")
+        return (f"{self.stage.value} for {self.residue} at {self.level_of_theory}: "
+                f"{verdict}. {self.note}")
+
+
+def run_stage(stage: ParameterizationStage, residue: str, smiles: Optional[str] = None,
+              **kwargs) -> "StageResult":
+    """
+    Run one pipeline stage, where an engine for it exists.
+
+    GFN2-xTB is installed, so the geometry stage runs for real -- and returns a
+    result that says it does not satisfy the stage, because GFN2-xTB is not the
+    level of theory the charge derivation downstream requires. A pre-optimised
+    geometry is a genuine contribution to the stage that follows and is not the
+    stage itself, and the distinction is carried in the return value rather than
+    in a comment.
+
+    Every other stage raises and names the engine it is missing. The engines are
+    checked at call time, not at import: this module is the gate and must stay
+    importable in an environment with no computational chemistry installed at
+    all.
     """
     requirement = STAGE_REQUIREMENTS[stage]
+
+    if stage is ParameterizationStage.GEOMETRY_OPTIMIZATION:
+        if not smiles:
+            raise ValueError(
+                f"Optimising {residue} needs its capped structure as SMILES. Without one "
+                f"there is nothing to optimise, and guessing a structure for a residue "
+                f"whose chemistry is the thing in question would be the whole error."
+            )
+        from .qm_engine import LevelOfTheory, build_from_smiles, optimise
+
+        symbols, positions = build_from_smiles(smiles, seed=kwargs.get("seed", 0xF00D))
+        geometry = optimise(symbols, positions,
+                            fmax=kwargs.get("fmax", 0.02),
+                            max_steps=kwargs.get("max_steps", 500))
+        return StageResult(
+            stage=stage,
+            residue=residue,
+            level_of_theory=geometry.level.value,
+            # False deliberately, and this is the load-bearing line of the
+            # module: the calculation ran, converged, and still does not tick
+            # the stage off, because the stage is defined by the level of
+            # theory its output has to feed.
+            satisfies_stage=geometry.level.licenses_resp_charges,
+            artifact={
+                "level_of_theory": geometry.level.value,
+                "energy_hartree": geometry.energy_hartree,
+                "converged": geometry.converged,
+                "steps": geometry.steps,
+                "max_force_ev_per_angstrom": geometry.max_force_ev_per_angstrom,
+                "force_threshold_ev_per_angstrom": geometry.force_threshold_ev_per_angstrom,
+                "symbols": list(geometry.symbols),
+                "positions_angstrom": [list(row) for row in geometry.positions_angstrom],
+                "formula": geometry.formula,
+            },
+            note=(f"{geometry.describe()} {LevelOfTheory.GFN2_XTB.value} is "
+                  f"{LevelOfTheory.GFN2_XTB.role}, so this is a starting point for the "
+                  f"HF/6-31G* optimisation rather than a replacement for it."),
+        )
+
     raise PipelineNotImplemented(
-        f"The parameterization pipeline is not implemented (build step 6d stubs it). "
+        f"No engine is wired up for this stage in this process. "
         f"Stage {requirement.describe()} "
-        f"Until it runs for {residue}, that residue stays out of the registry and every "
-        f"proposal using it is a research request."
+        f"Psi4 is conda-only and the analysis engine must stay pip-installable, so the "
+        f"HF/6-31G* stages run out of process -- see tools/qm/run_qm_stages.py. Until "
+        f"every stage has run for {residue}, that residue stays out of the usable "
+        f"registry and every proposal using it is a research request."
     )
 
 

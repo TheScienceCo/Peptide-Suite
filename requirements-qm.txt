@@ -1,0 +1,24 @@
+# The parameterization pipeline (Addendum 2, step 6d). Optional: the analysis
+# engine, the web interface and the ML layer all run without any of it.
+#
+# Two halves, because they cannot live in one interpreter.
+#
+# 1. pip-installable, and enough for the pre-optimisation stage:
+rdkit>=2024.3         # 3D structure from SMILES
+ase>=3.23             # the optimiser that drives it
+xtb>=22.1             # GFN2-xTB energies and gradients
+#
+# 2. conda-only, and where the stages that actually count happen. Psi4 has no
+#    PyPI distribution, so it goes in its own environment and is reached across
+#    a process boundary:
+#
+#      micromamba create -p ./qm -c conda-forge python=3.11 psi4 resp crest xtb
+#      export PEPTIDE_SUITE_QM_PYTHON=$PWD/qm/bin/python
+#
+#    Then: python tools/qm/run_qm_stages.py input.json output.json
+#
+# Why the split matters rather than being an annoyance: GFN2-xTB is a real
+# electronic-structure method and is the wrong one for deriving RESP charges,
+# because the force field's Lennard-Jones terms were fitted against HF/6-31G*'s
+# overpolarisation. The pip half can pre-optimise; only the conda half can
+# produce a charge set that is consistent with the force field it goes into.

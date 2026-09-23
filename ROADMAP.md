@@ -52,15 +52,38 @@ are eligible, which proposals owe a mechanistic account, and which operation is
 forbidden. Wiring an engine in changes one value per module rather than the
 shape of every consumer.
 
-Remaining, and blocked on tooling rather than on design:
+Remaining. The tooling turned out to be reachable after all -- conda-forge and
+PyPI both resolve from this environment, which an earlier note in this file got
+wrong -- so most of what follows is compute and care rather than procurement:
 
-- [ ] Install a conformational search (CREST + GFN2-xTB) and make
-      `conformer_ensemble.generate` return ensembles
-- [ ] Install NBO and make `backbone_nbo.analyse` return stabilisation energies
-- [ ] Install a QM package with SAPT0/DFT-SAPT and make
-      `contact_decomposition.decompose` return real components
-- [ ] Run the 6d parameterization pipeline for at least one residue, so the
-      registry stops being empty
+- [x] **The 6d pipeline, run for real on one residue.** GFN2-xTB via pip
+      (rdkit + ASE + xtb), Psi4 1.11 and the `resp` package via conda-forge.
+      Aib (ACE-Aib-NME, 25 atoms) now has three of six stages behind it:
+      geometry optimised at HF/6-31G* from a GFN2-xTB starting point, ESP on a
+      four-shell Connolly surface, and a two-stage RESP fit with an ESP
+      relative RMS of 0.120 over 1024 grid points. The charges sum to zero and
+      the methyls came out equivalenced.
+
+      **The registry is still empty of usable residues, and that is correct.**
+      Aib is `IN_PROGRESS`: three stages is not six, nothing has been validated
+      against experiment, and an incomplete pipeline yields no usable
+      parameters. What changed is that the cost quoted in a research request is
+      now the real remaining cost rather than the whole of it.
+- [ ] Torsion scans for Aib. Now tractable rather than blocked: the driver is
+      the backbone phi/psi map, so a relaxed 2D scan at HF/6-31G* is a few
+      hours of compute on this machine, not a missing engine.
+- [ ] Fit the scanned profiles (ForceBalance or equivalent), then validate
+      against experimental conformational data. These are the two stages that
+      would let Aib into the usable registry, and the second needs a literature
+      source rather than compute.
+- [ ] A multi-conformer RESP refit. The single-conformer fit gives Aib's two
+      constitutionally identical Cbeta methyls different charges; that is an
+      artifact of the conformer and is recorded as a known deficiency on the
+      record rather than left for a reader to find.
+- [ ] Wire CREST (installed) into `conformer_ensemble.generate`.
+- [ ] Wire Psi4's SAPT into `contact_decomposition.decompose`.
+- [ ] NBO for `backbone_nbo.analyse`. The one genuinely blocked item: NBO is
+      commercially licensed and no licence is available here.
 
 These come last rather than first because they are explanatory depth on a system
 that had to be honest before it was deep. All three depend on the QM pipeline

@@ -111,12 +111,18 @@ whole thesis in two images.
 - **ESM-2 weights are unreachable**, so the four-arm transfer-learning
   comparison the addendum asks for cannot be run. The arms that exist are the
   ones that can be run honestly.
-- **No QM, MD or NBO engine is installed.** Conformer ensembles, n→π* backbone
-  analysis and SAPT decomposition are built as contracts and gates; each raises
-  rather than estimating.
-- **The parameterized-residue registry is empty**, so every non-canonical
-  proposal is a research request rather than a recommendation. This is the
-  correct state, not a gap to paper over.
+- **QM is installed; MD and NBO are not.** GFN2-xTB (pip) and Psi4 1.11 with
+  CREST and the `resp` package (conda-forge) run here — an earlier version of
+  this document said the tooling was unreachable, which was wrong. Conformer
+  ensembles and SAPT decomposition remain contracts because nothing is wired
+  into them yet, not because the engines are missing. NBO is genuinely blocked:
+  it is commercially licensed.
+- **The parameterized-residue registry holds no usable residue**, so every
+  non-canonical proposal is still a research request. Aib now has three of six
+  stages recorded with real HF/6-31G* artifacts behind them and is reported as
+  `IN_PROGRESS`, which licenses nothing. A record and a result are deliberately
+  different things here: writing one is an explicit act, never a side effect of
+  a calculation returning without an exception.
 - **Homolog retrieval is not wired up**, so conservation is not computed unless
   sequences are supplied. The landscape hatches that entire metric rather than
   filling it with zeros.
@@ -135,8 +141,11 @@ Blocked on data, weights or tooling rather than on design:
 
 1. Real labelled datasets for the seven declared tasks.
 2. ESM-2 weights, then the four-arm comparison per task.
-3. CREST + GFN2-xTB, NBO, and a SAPT-capable QM package.
-4. The 6d parameterization pipeline run for at least one residue.
+3. Aib's remaining three stages: torsion scans (tractable — a few hours of
+   HF/6-31G* on this machine), the force-field fit, and validation against
+   experimental conformational data.
+4. Wire the installed CREST into `conformer_ensemble.generate` and Psi4's SAPT
+   into `contact_decomposition.decompose`. NBO stays blocked on a licence.
 5. Attribution, once a model trained on real labels exists.
 6. The receptor-prediction validation: take the learned properties together
    with the physics pipeline's and predict the binding site, ignoring the
