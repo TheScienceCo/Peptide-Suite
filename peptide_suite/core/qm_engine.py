@@ -38,6 +38,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 def ev_per_hartree() -> float:
@@ -329,3 +330,51 @@ def qm_stage_status() -> Dict[str, object]:
                 "reason": f"{interpreter} has no working Psi4/resp: {proof.stderr.strip()[:200]}"}
     return {"available": True, "reason": "", "interpreter": interpreter,
             "psi4_version": proof.stdout.strip()}
+
+
+def external_tool_status() -> Dict[str, Dict[str, object]]:
+    """
+    Which external calculation tools are on the machine, checked rather than asserted.
+
+    Two modules used to state in their refusal text that no conformational
+    search and no SAPT-capable QM package existed "in this deployment". Both
+    sentences were true when written and stopped being true the moment CREST
+    and Psi4 were installed, and nothing noticed -- the claim was a string, so
+    it could not go stale visibly. A refusal that misreports why it is refusing
+    is worse than no refusal: it sends the reader to solve the wrong problem.
+
+    So the capability is probed, and the modules that refuse say which of the
+    two things they are missing -- the engine, or the input the engine needs.
+    """
+    import shutil
+    import subprocess
+
+    status: Dict[str, Dict[str, object]] = {}
+
+    crest = shutil.which("crest")
+    if not crest:
+        interpreter = qm_interpreter()
+        if interpreter:
+            candidate = Path(interpreter).parent / "crest"
+            crest = str(candidate) if candidate.exists() else None
+    status["crest"] = {
+        "available": bool(crest),
+        "path": crest or "",
+        "provides": "conformer ensemble generation (GFN-FF/GFN2 metadynamics search)",
+    }
+
+    sapt = {"available": False, "path": "", "provides": "SAPT0 energy decomposition"}
+    interpreter = qm_interpreter()
+    if interpreter:
+        try:
+            proof = subprocess.run(
+                [interpreter, "-c",
+                 "import psi4; print('sapt0' in psi4.driver.proc_table.procedures['energy'])"],
+                capture_output=True, text=True, timeout=180)
+            if proof.returncode == 0 and "True" in proof.stdout:
+                sapt = {"available": True, "path": interpreter,
+                        "provides": "SAPT0 energy decomposition"}
+        except Exception:                                # pragma: no cover - env dependent
+            pass
+    status["sapt"] = sapt
+    return status

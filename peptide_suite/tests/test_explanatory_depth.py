@@ -257,3 +257,41 @@ class TestWorkflowIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestARefusalMustNotMisreportItsOwnBlocker(unittest.TestCase):
+    """
+    Both refusals used to assert that no engine existed "in this deployment".
+    That was true when written and became false the moment CREST and Psi4 were
+    installed -- and nothing noticed, because the claim was a string rather
+    than a check. A refusal that names the wrong blocker sends the reader to
+    solve the wrong problem, which is worse than a bare refusal.
+    """
+
+    def test_the_capability_is_probed_rather_than_asserted(self):
+        from peptide_suite.core.qm_engine import external_tool_status
+        status = external_tool_status()
+        for tool in ("crest", "sapt"):
+            self.assertIn(tool, status)
+            self.assertIn("available", status[tool])
+            self.assertTrue(status[tool]["provides"])
+
+    def test_neither_module_hardcodes_a_deployment_wide_absence(self):
+        import inspect
+        from peptide_suite.core import conformer_ensemble, contact_decomposition
+        for module in (conformer_ensemble, contact_decomposition):
+            source = inspect.getsource(module)
+            with self.subTest(module=module.__name__):
+                self.assertIn("external_tool_status", source,
+                              "the refusal must check what is installed, not assert it")
+                self.assertNotIn("None is available in this deployment", source)
+
+    def test_the_decomposition_refusal_names_the_input_not_only_the_engine(self):
+        from peptide_suite.core.contact_decomposition import (
+            DecompositionNotAvailable, decompose,
+        )
+        with self.assertRaises(DecompositionNotAvailable) as caught:
+            decompose("Trp25", "Phe12")
+        message = str(caught.exception)
+        self.assertIn("interface structure", message)
+        self.assertIn("structure-template gate", message)

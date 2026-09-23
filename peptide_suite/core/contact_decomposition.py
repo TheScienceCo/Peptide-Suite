@@ -206,9 +206,18 @@ def decompose(residue_a: str, residue_b: str, **_kwargs) -> ContactDecomposition
     direction. A fabricated dispersion-dominated result sends someone to enlarge
     a hydrophobic surface on a contact that is actually electrostatic.
     """
+    from .qm_engine import external_tool_status
+    sapt = external_tool_status()["sapt"]
+    engine = ("A SAPT0-capable QM package IS installed, so the engine is no longer what "
+              "is missing."
+              if sapt["available"] else
+              "No SAPT-capable QM package is installed.")
     raise DecompositionNotAvailable(
         f"No SAPT decomposition was produced for {residue_a}-{residue_b}. It needs a QM "
         f"package with SAPT0 or DFT-SAPT, an interface structure to truncate contact "
-        f"pairs from, and a declared truncation scheme. None is available in this "
-        f"deployment, so contacts are not decomposed and no component is attributed."
+        f"pairs from, and a declared truncation scheme. {engine} What is missing is the "
+        f"interface structure: the structure-template gate has not supplied one, and "
+        f"decomposing a contact pair truncated from a geometry nobody validated would "
+        f"attribute components to a structure rather than to the molecule. So contacts "
+        f"are not decomposed and no component is attributed."
     )

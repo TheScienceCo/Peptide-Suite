@@ -156,8 +156,15 @@ def generate(sequence: str, description: str = ""):
     a population of one and report the result as a conformational average.
     """
     assessment = assess(sequence, description)
+    from .qm_engine import external_tool_status
+    crest = external_tool_status()["crest"]
+    engine = (f"A conformational search engine IS installed ({crest['path']}), so the "
+              f"blocker is no longer the engine: this module has not been wired to drive "
+              f"it, and a search nobody has driven has produced no ensemble."
+              if crest["available"] else
+              "No conformational search engine is installed, so no search could be run.")
     raise EnsembleNotAvailable(
-        f"No conformer ensemble was generated. {assessment.reason} "
+        f"No conformer ensemble was generated. {assessment.reason} {engine} "
         f"Conformational claims that depend on an ensemble are unsupported here; they "
         f"are not approximated."
     )
