@@ -1,49 +1,66 @@
 {
+  "_about": [
+    "Local fixture panel. NOT a database, and never reported as one: the",
+    "retriever marks anything sourced here LOCAL_FIXTURE.",
+    "",
+    "Audited and corrected. Three entries were wrong in ways that would have",
+    "produced confidently wrong downstream analysis:",
+    "",
+    "  IGF1     held a 33-residue sequence sharing not one 6-mer with mature",
+    "           IGF-1. It was not the mature peptide, the precursor, or a",
+    "           fragment of either. Replaced with the canonical 70-residue",
+    "           mature chain.",
+    "",
+    "  INS      held the 21-residue insulin A-chain under the name of insulin,",
+    "           which is a two-chain 51-residue molecule. The sequence was",
+    "           right and the label was wrong; the entry now says which it is.",
+    "",
+    "  BPC157   held a 53-residue sequence that contradicts the 15-residue",
+    "           BPC-157 in reference_peptides.json and does not contain it.",
+    "           Its provenance could not be established, so it is flagged for",
+    "           verification rather than guessed at.",
+    "",
+    "Also removed: `known_var_effects`, which carried a position-6 L->I claim",
+    "at confidence 0.8 with no citation. Mature IGF-1 has cysteine at position",
+    "6, nothing in the codebase read the field, and an uncited numeric",
+    "confidence is exactly what this project refuses to emit.",
+    "",
+    "The `homologs` lists each held one distinct sequence repeated, so the",
+    "conservation gate correctly declined to compute entropy from them. They",
+    "are empty now and say why, rather than looking like retrieved alignments."
+  ],
   "IGF1": {
     "full_name": "Insulin-like growth factor 1",
-    "sequence": "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
+    "form": "MATURE_PEPTIDE",
+    "sequence": "GPETLCGAELVDALQFVCGDRGFYFNKPTGYGSSSRRAPQTGIVDECCFRSCDLRRLEMYCAPLKPAKSA",
     "function": "IGF-1 receptor binding, growth promotion, mitogenic signaling",
-    "homologs": [
-      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
-      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT",
-      "MGFPGLQPRRVSCGQAKDEARGYLCFSQTPRAT"
-    ],
-    "known_var_effects": [
-      {
-        "position": 6,
-        "wt": "L",
-        "mutant": "I",
-        "known_effect": "minimal_impact",
-        "confidence": 0.8
-      }
-    ]
+    "homologs": [],
+    "homolog_note": "No verified orthologue sequences are bundled. Conservation is reported as not computed rather than computed over copies of the query."
   },
   "INS": {
-    "full_name": "Insulin",
+    "full_name": "Insulin A-chain",
+    "form": "ISOLATED_CHAIN",
     "sequence": "GIVEQCCTSICSLYQLENYCN",
-    "function": "Glucose homeostasis, IR/IGF-1R signaling",
-    "homologs": [
-      "GIVEQCCTSICSLYQLENYCN",
-      "GIVEQCCTSICSLYQLENYCN"
-    ],
-    "known_var_effects": []
+    "function": "The A chain of insulin. Insulin itself is a two-chain, 51-residue molecule; this chain alone is not insulin and does not bind the insulin receptor on its own.",
+    "homologs": [],
+    "homolog_note": "No verified orthologue sequences are bundled."
   },
   "GCG": {
     "full_name": "Glucagon",
+    "form": "MATURE_PEPTIDE",
     "sequence": "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT",
-    "function": "Blood glucose elevation via GCGR, counterregulatory hormone",
-    "homologs": [
-      "HSQGTFTSDYSKYLDSRRAQDFVQWLMNT"
-    ],
-    "known_var_effects": []
+    "function": "Counter-regulatory hormone: raises blood glucose via the glucagon receptor",
+    "homologs": [],
+    "homolog_note": "No verified orthologue sequences are bundled."
   },
   "BPC157": {
-    "full_name": "Body Protection Compound 157",
+    "full_name": "Unverified sequence previously filed under BPC-157",
+    "form": "UNKNOWN",
+    "needs_verification": true,
     "sequence": "GEPGDWGDPEHPPGAGQGDSPGAGAGQGDQGAGAGAEAEQGAGAGRGRGDSPR",
-    "function": "Wound healing, GI repair, anti-inflammatory, neuroprotection",
-    "homologs": [
-      "GEPGDWGDPEHPPGAGQGDSPGAGAGQGDQGAGAGAEAEQGAGAGRGRGDSPR"
-    ],
-    "known_var_effects": []
+    "function": "",
+    "verification_note": "This 53-residue sequence contradicts the 15-residue BPC-157 recorded in reference_peptides.json (GEPPPGKPADDAGLV) and does not contain it. It may be a fragment of the gastric juice protein BPC from which BPC-157 derives, but that was not established. It is retained, flagged, and given no function annotation rather than being deleted or relabelled on a guess.",
+    "homologs": [],
+    "homolog_note": "No verified orthologue sequences are bundled."
   }
 }

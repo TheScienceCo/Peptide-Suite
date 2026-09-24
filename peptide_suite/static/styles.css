@@ -1456,3 +1456,51 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
 .ood .t { font-weight: 600; color: var(--text-primary); font-size: 12.5px; margin-bottom: 6px; }
 .ood .chips { margin-top: 6px; }
 .chip.static { cursor: default; font-family: var(--mono); font-size: 11px; }
+
+/* ---------- biological context ---------- */
+
+.bio-context h3 { margin: 2px 0 8px; font-size: 16px; color: var(--text-primary); }
+.bcsection { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+.bcsection:first-of-type { border-top: none; margin-top: 4px; padding-top: 0; }
+.bchead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bctitle {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.bcrows { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; }
+.bcrow { display: contents; }
+.bclabel { font-size: 11px; color: var(--text-muted); }
+.bcvalue { font-size: 12.5px; color: var(--text-secondary); }
+
+/* An evidence badge wears its own muted tone, never a series colour: it labels
+   a claim, it does not identify a series. */
+.tier {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 9px; white-space: nowrap;
+  border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-1);
+}
+.tier-direct_experimental { border-color: var(--status-good); color: var(--status-good); }
+.tier-homolog_experimental { border-color: var(--series-1); color: var(--series-1); }
+.tier-biochemical_principle { border-color: var(--axis); color: var(--text-secondary); }
+.tier-inference_only { border-color: var(--border); color: var(--text-muted); }
+
+.receptor, .region {
+  padding: 9px 11px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1);
+}
+.rhead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; }
+.pill {
+  font-size: 10px; padding: 1px 7px; border-radius: 9px;
+  background: var(--page); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.pill.primary { border-color: var(--series-1); color: var(--series-1); font-weight: 600; }
+.seqline {
+  font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
+  word-break: break-all; margin: 3px 0;
+}
+.muted-note { color: var(--text-muted); font-style: italic; }
+
+@media (max-width: 560px) {
+  .bcrows { grid-template-columns: 1fr; gap: 0 0; }
+  .bclabel { margin-top: 6px; font-weight: 600; }
+}

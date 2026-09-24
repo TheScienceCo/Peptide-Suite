@@ -367,6 +367,15 @@
       "native_context_note": "Internal fragment of the laminin alpha-4 LG3 module. Both termini are excision artefacts, and natively this segment is displayed on a folded LG beta-sandwich rather than as a free linear peptide. Laminin-411 (alpha4-beta1-gamma1) is a vascular and peripheral-nerve basement membrane laminin, distinct from the laminin-211 that dominates the Schwann cell basal lamina.",
       "provenance": "USER_ASSERTED",
       "verification_note": "Sequence-to-identity mapping supplied by the user, not independently confirmed here. Confirm against the original A4G peptide-series publication before relying on it."
+    },
+    "IGF-1": {
+      "sequence": "GPETLCGAELVDALQFVCGDRGFYFNKPTGYGSSSRRAPQTGIVDECCFRSCDLRRLEMYCAPLKPAKSA",
+      "family": "insulin superfamily",
+      "function": "Mitogenic and anabolic growth factor signalling through the IGF-1 receptor; mediates much of the growth-promoting action of growth hormone.",
+      "suggested_goal": "binding_affinity",
+      "goal_reason": "IGF-1's engineering literature is dominated by receptor selectivity (IGF1R against the insulin receptor) and by evading the IGF binding proteins that sequester most circulating IGF-1. Both are binding problems rather than stability problems.",
+      "form": "MATURE_PEPTIDE",
+      "note": "The mature 70-residue circulating chain, not the precursor (which carries a signal peptide and a C-terminal E-peptide)."
     }
   },
   "bioactive_motifs": {

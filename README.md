@@ -206,6 +206,62 @@ so underneath: a scan whose scores all fall within ±0.3 drawn against a
 theoretical ±1.0 is a uniformly pale chart that hides its own result. Two grids
 therefore do not share a scale, which is stated rather than left to be assumed.
 
+## Known biology comes before prediction
+
+The system could optimise a peptide it could not describe. Submit mature IGF-1,
+select a binding-affinity goal, and it would rank substitutions without ever
+naming IGF1R — not because it disagreed about the receptor, but because nothing
+in the pipeline was responsible for saying what the molecule was. Engineering
+ran straight off a sequence.
+
+Analyze now resolves identity first and renders what is known before any score
+appears.
+
+![Biological context for IGF-1](docs/screenshots/biological-context.png)
+
+The design rule is that **provenance lives on the field, not on the object.** A
+record can hold a sequence verified against UniProt this minute, a domain
+layout curated into this repository months ago, and a receptor with a PMID
+behind it — and those are three different kinds of claim. Collapsing them into
+one confidence number is how a curated guess gets read as a database record. So
+every claim carries a `Provenance`, and `Provenance.max_tier` decides what
+evidence tier it may reach. A curated record with no citation caps at
+`BIOCHEMICAL_PRINCIPLE`, however certain whoever wrote it felt. That rule is
+enforced in one method rather than left to each caller to remember.
+
+Nothing in this environment can reach UniProt, PubMed, EBI or RCSB. So every
+curated record is stamped `curated · unverified`, the receptors show as
+curated rather than experimental, and the Data Availability section reports
+UniProt as *unreachable* rather than as an absence of information — which are
+different answers. No PMID or PDB identifier is recorded anywhere, because a
+fabricated accession is worse than a missing one: it looks checkable and
+survives review.
+
+What the layer refuses to do matters more than what it shows. It will not infer
+a receptor from sequence resemblance — a peptide one substitution from GLP-1
+does not acquire GLP1R. It will not substitute hydrophobicity reasoning for a
+binding interface; when no structural annotation was retrieved it says so. And
+an unknown peptide gets a stated absence rather than an empty context object,
+because "we have no record of this" and "we looked and it has no receptors"
+render identically if the only difference is an empty list.
+
+### Three errors in the reference data
+
+Auditing the built-in data turned up three entries that would have produced
+confidently wrong analysis:
+
+| Entry | Was | Now |
+|---|---|---|
+| `IGF1` | a 33-residue sequence sharing **not one 6-mer** with mature IGF-1 — not the mature peptide, the precursor, or a fragment of either | the canonical 70-residue mature chain, marked `MATURE_PEPTIDE` |
+| `INS` | the 21-residue insulin **A-chain**, under the name of insulin — a two-chain 51-residue molecule | same sequence, correctly labelled `ISOLATED_CHAIN` |
+| `BPC157` | a 53-residue sequence contradicting the 15-residue BPC-157 elsewhere in the repo, and not containing it | retained, flagged `needs_verification`, function annotation removed rather than guessed |
+
+Also removed: a `known_var_effects` record asserting a position-6 L→I effect at
+confidence 0.8 with no citation. Mature IGF-1 has cysteine at position 6, and
+nothing in the codebase read the field. And the `homologs` lists, which each
+held one distinct sequence repeated — the conservation gate refused them
+anyway, but they looked like retrieved alignments.
+
 ## What one residue's parameterization actually cost
 
 The registry of parameterized non-canonical residues is empty. That has always

@@ -124,6 +124,12 @@ function renderGate(info) {
   const slot = $("#gate-slot");
   slot.innerHTML = "";
 
+  // Known biology first. Clicking Analyze used to land straight on engineering
+  // controls, so a reader saw a score before they saw what the system thought
+  // the molecule was.
+  const bio = renderBiologicalContext(info.biological_context);
+  if (bio) slot.append(bio);
+
   // A name that matched a protein rather than a peptide: report what is known
   // and which derived motifs can actually be analysed.
   if (!info.sequence && info.protein_match) {
@@ -2383,4 +2389,211 @@ async function onFusion() {
   } finally {
     busy(btn, false, "Run the comparison");
   }
+}
+
+/* ---------- Biological context: known biology, before any score ---------- */
+
+// Evidence tiers, rendered as a badge. The badge exists so a reader can tell a
+// database record from a curated note from a calculation without opening the
+// JSON, which was previously the only way.
+const TIER_LABEL = {
+  DIRECT_EXPERIMENTAL: "experimental",
+  HOMOLOG_EXPERIMENTAL: "database",
+  BIOCHEMICAL_PRINCIPLE: "curated",
+  INFERENCE_ONLY: "inferred",
+};
+
+function tierBadge(tier, needsVerification) {
+  const badge = el("span", `tier tier-${(tier || "INFERENCE_ONLY").toLowerCase()}`);
+  badge.textContent = TIER_LABEL[tier] || "inferred";
+  if (needsVerification) {
+    badge.textContent += " · unverified";
+    badge.title = "Curated into this repository and not checked against its primary "
+                + "source. It cannot be reported as an experimental observation.";
+  }
+  return badge;
+}
+
+// Element.append() returns undefined, so it cannot be chained. A helper, so the
+// mistake has one place to not be made in.
+function sectionHead(title) {
+  const head = el("div", "bchead");
+  head.append(el("span", "bctitle", title));
+  return head;
+}
+
+function contextRow(label, value, extra) {
+  if (!value) return null;
+  const row = el("div", "bcrow");
+  row.append(el("span", "bclabel", label));
+  const body = el("span", "bcvalue");
+  body.append(document.createTextNode(value));
+  if (extra) body.append(extra);
+  row.append(body);
+  return row;
+}
+
+function renderReceptor(r) {
+  const box = el("div", "receptor");
+  const head = el("div", "rhead");
+  head.append(el("b", null, r.target_gene || r.target_name));
+  if (r.is_primary) head.append(el("span", "pill primary", "primary"));
+  else head.append(el("span", "pill", r.interaction_type.replace(/_/g, " ").toLowerCase()));
+  head.append(tierBadge(r.tier, r.needs_verification));
+  box.append(head);
+
+  if (r.target_name && r.target_name !== r.target_gene) {
+    box.append(el("div", "kv", r.target_name));
+  }
+  if (r.receptor_class) box.append(el("div", "kv", r.receptor_class));
+  if (r.role) box.append(el("div", "r", r.role));
+
+  // An unmeasured affinity is stated as unmeasured. The alternative -- an empty
+  // field, or worse a zero -- reads as a number.
+  if (r.affinity_available) {
+    const a = r.affinity;
+    box.append(el("div", "kv", `${a.kind} ${a.value} ${a.unit}${r.assay_context ? " · " + r.assay_context : ""}`));
+  } else {
+    box.append(el("div", "kv muted-note", "No measured affinity was retrieved with a source, so none is shown."));
+  }
+  if (r.notes) box.append(el("p", "footnote", r.notes));
+  box.append(el("p", "footnote", `Source: ${r.source}`));
+  return box;
+}
+
+function renderBiologicalContext(bc) {
+  if (!bc) return null;
+  const card = el("div", "card bio-context");
+  card.append(el("div", "label", "BIOLOGICAL CONTEXT"));
+
+  if (!bc.is_established) {
+    card.append(notice(
+      "No established peptide identity was found for this sequence. Everything below is "
+      + "derived from the sequence itself: no receptor, domain structure or function is "
+      + "asserted, and none is inferred from resemblance to a peptide family.",
+      "warn", "!"));
+    (bc.unavailable_sources || []).forEach((u) =>
+      card.append(el("p", "footnote", `Not consulted or unreachable — ${u}`)));
+    return card;
+  }
+
+  // --- identification ---
+  const ident = el("div", "bcsection");
+  ident.append(el("h3", null, bc.name));
+  const rows = el("div", "bcrows");
+  [["Gene", bc.gene], ["Organism", bc.organism], ["UniProt", bc.uniprot],
+   ["Family", bc.family], ["Form", bc.form_description]]
+    .forEach(([k, v]) => { const r = contextRow(k, v); if (r) rows.append(r); });
+  if (bc.aliases.length) {
+    const r = contextRow("Also called", bc.aliases.join(", "));
+    if (r) rows.append(r);
+  }
+  ident.append(rows);
+  if (bc.needs_verification) {
+    ident.append(notice(
+      "The records below were curated into this repository and have not been checked "
+      + "against UniProt or primary literature from this environment. They are shown as "
+      + "curated, and none of them is reported as an experimental observation.",
+      "warn", "!"));
+  }
+  (bc.retrieval_notes || []).forEach((n) => ident.append(el("p", "footnote", n)));
+  card.append(ident);
+
+  // --- function ---
+  if (bc.function) {
+    const fn = el("div", "bcsection");
+    const head = el("div", "bchead");
+    head.append(el("span", "bctitle", "Function"), tierBadge(bc.function.tier, bc.function.needs_verification));
+    fn.append(head, el("p", "r", bc.function.value));
+    card.append(fn);
+  }
+
+  // --- structure ---
+  if (bc.regions.length || bc.disulfides.length || bc.precursor_of) {
+    const st = el("div", "bcsection");
+    st.append(sectionHead("Structure"));
+    if (bc.mature_length) {
+      st.append(el("div", "kv", `Mature peptide: ${bc.mature_length} residues`));
+    }
+    if (bc.precursor_of) st.append(el("p", "footnote", bc.precursor_of));
+    bc.regions.forEach((r) => {
+      const row = el("div", "region");
+      const head = el("div", "rhead");
+      head.append(el("b", null, r.name), el("span", "pill", `${r.start}–${r.end}`),
+                  tierBadge(r.tier, r.needs_verification));
+      row.append(head);
+      if (r.residues) row.append(el("div", "seqline", r.residues));
+      if (r.role) row.append(el("div", "r", r.role));
+      st.append(row);
+    });
+    if (bc.disulfides.length) {
+      const ds = el("div", "kv");
+      ds.append(document.createTextNode(
+        "Disulfides: " + bc.disulfides.map((b) => `C${b.first}–C${b.second}`).join(", ")));
+      st.append(ds);
+      // A pairing that does not land on cysteines means the table and the
+      // sequence disagree, and one of them is wrong.
+      if ((bc.disulfide_inconsistencies || []).length) {
+        st.append(notice(
+          `Curated disulfide pair(s) ${bc.disulfide_inconsistencies.join(", ")} do not land `
+          + `on cysteines in the stored sequence. Neither is used until that is resolved.`,
+          "error", "×"));
+      }
+    }
+    card.append(st);
+  }
+
+  // --- receptors ---
+  const rec = el("div", "bcsection");
+  rec.append(sectionHead("Receptors and molecular targets"));
+  if (!bc.primary_receptors.length && !bc.secondary_receptors.length) {
+    rec.append(notice("No established receptor or molecular target was retrieved for this peptide.",
+                      "warn", "!"));
+  } else {
+    bc.primary_receptors.forEach((r) => rec.append(renderReceptor(r)));
+    if (bc.secondary_receptors.length) {
+      rec.append(el("p", "footnote",
+        "Secondary interactions — cross-reactivity, binding proteins and proteases. "
+        + "Design-relevant, and not the principal receptor."));
+      bc.secondary_receptors.forEach((r) => rec.append(renderReceptor(r)));
+    }
+  }
+  card.append(rec);
+
+  // --- binding interface ---
+  const iface = el("div", "bcsection");
+  iface.append(sectionHead("Binding interface"));
+  if (!bc.interface_available) {
+    iface.append(notice(
+      "No sufficiently supported binding-interface annotation was retrieved. Residue-level "
+      + "contacts come from structures and mutagenesis; none is substituted from "
+      + "hydrophobicity or charge reasoning.",
+      "warn", "!"));
+  } else {
+    bc.interfaces.forEach((i) => {
+      const box = el("div", "receptor");
+      const ihead = el("div", "rhead");
+      ihead.append(el("b", null, i.target_gene), tierBadge(i.tier, i.needs_verification));
+      box.append(ihead);
+      if (i.ligand_regions.length) box.append(el("div", "kv", `Ligand side: ${i.ligand_regions.join(", ")}`));
+      if (i.receptor_regions.length) box.append(el("div", "kv", `Receptor side: ${i.receptor_regions.join(", ")}`));
+      if (i.critical_residues.length) box.append(el("div", "kv", `Critical residues: ${i.critical_residues.join(", ")}`));
+      if (i.activation_mechanism) box.append(el("div", "r", i.activation_mechanism));
+      if (i.structures.length) box.append(el("div", "kv", `Structures: ${i.structures.join(", ")}`));
+      iface.append(box);
+    });
+  }
+  card.append(iface);
+
+  // --- data availability ---
+  if ((bc.unavailable_sources || []).length) {
+    const avail = el("div", "bcsection");
+    avail.append(sectionHead("Data availability"));
+    bc.unavailable_sources.forEach((u) => avail.append(el("div", "kv", u)));
+    avail.append(el("p", "footnote",
+      "A source that could not be reached is reported as unreachable, not as an absence of "
+      + "information. The two are different answers."));
+    card.append(avail);
+  }
+  return card;
 }

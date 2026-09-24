@@ -21,6 +21,8 @@ from peptide_suite.runtime import load_active_policy
 from peptide_suite.core import PeptideContext, SubstitutionRecommendation, evidence_weight
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
+from peptide_suite.core.biological_context import BiologicalContext
+from peptide_suite.core.biological_context import retrieve as retrieve_context
 from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.peptide_manager import PeptideManager
 from peptide_suite.core.substitution_landscape import (
@@ -356,6 +358,49 @@ class TransformRequest(BaseModel):
     receptor: str = ""
 
 
+def encode_biological_context(context: BiologicalContext) -> Dict[str, Any]:
+    """
+    Serialise what is known about the peptide, before any score.
+
+    Every section carries its own tier and source string rather than inheriting
+    one from the object, because a record can hold a verified accession beside
+    a curated domain layout and those are not the same claim. The interface
+    renders the badge from these fields; it does not decide them.
+    """
+    sequence = context.mature_sequence
+    return {
+        "is_established": context.is_established,
+        "summary": context.summary(),
+        "name": context.name,
+        "aliases": list(context.aliases),
+        "gene": context.gene,
+        "organism": context.organism,
+        "uniprot": context.uniprot,
+        "family": context.family,
+        "form": context.form.value,
+        "form_description": context.form.describe,
+        "precursor_of": context.precursor_of,
+        "mature_sequence": sequence,
+        "mature_length": len(sequence),
+        "sequence_matches_mature": context.sequence_matches_mature,
+        "needs_verification": context.needs_verification,
+        "function": context.function.encode() if context.function else None,
+        "regions": [r.encode(sequence) for r in context.regions],
+        "disulfides": [d.encode(sequence) for d in context.disulfides],
+        "disulfide_inconsistencies": context.disulfide_inconsistencies(),
+        "modifications": [m.encode() for m in context.modifications],
+        "primary_receptors": [r.encode() for r in context.primary_receptors],
+        "secondary_receptors": [r.encode() for r in context.secondary_receptors],
+        "interfaces": [i.encode() for i in context.interfaces],
+        # Rendered as its own state. "No interface annotation was retrieved" and
+        # "the interface has no notable features" are different sentences and
+        # an empty list alone reads as the second.
+        "interface_available": bool(context.interfaces),
+        "retrieval_notes": context.retrieval_notes,
+        "unavailable_sources": context.unavailable_sources,
+    }
+
+
 def _inferred_name(sequence: str) -> str:
     """The peptide's name from identification, or empty if it was not recognised."""
     inference = _inferencer.infer(sequence)
@@ -474,7 +519,18 @@ def infer_function(req: InferRequest) -> Dict:
     inference = _inferencer.infer(sequence, name=name, raw_input=raw)
 
     rec = inference.uniprot
+
+    # Known biology comes before prediction. The interface renders this section
+    # above the engineering output, so a reader learns what the system thinks
+    # the molecule is before seeing a number about it.
+    context = retrieve_context(
+        sequence,
+        name=inference.matched_name or name,
+        uniprot_client=_inferencer.uniprot,
+    )
+
     return {
+        "biological_context": encode_biological_context(context),
         "sequence": sequence,
         "name": name,
         "length": len(sequence),
