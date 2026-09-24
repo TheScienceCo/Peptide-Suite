@@ -85,11 +85,34 @@ class TestTheIGF1AcceptanceCase(unittest.TestCase):
         self.assertEqual(len(self.context.disulfides), 3)
         self.assertEqual(self.context.disulfide_inconsistencies(), [])
 
-    def test_no_binding_interface_is_manufactured(self):
-        # Residue-level contacts come from structures and mutagenesis. None was
-        # retrieved, so none is asserted -- and in particular none is invented
-        # from hydrophobicity.
-        self.assertEqual(self.context.interfaces, [])
+    def test_no_residue_level_contact_is_manufactured(self):
+        """
+        Residue-level contacts come from structures and mutagenesis. None was
+        retrieved, so none is asserted -- and in particular none is invented
+        from hydrophobicity.
+
+        This asserted `interfaces == []`, which was the right protection stated
+        too broadly: it forbade the whole object rather than the fabrication.
+        The record now carries a REGION-level interface whose spans are its own
+        curated domain boundaries restated as positions, so the substitution
+        scorer can ask which residues touch the receptor. That introduces no
+        new biology -- the coordinates and the role text are already in
+        `regions` -- and the guard below now says precisely what stays
+        forbidden: named residues, structure identifiers, and any span that is
+        not one of the curated domains.
+        """
+        boundaries = {(r.start, r.end) for r in self.context.regions}
+        for interface in self.context.interfaces:
+            with self.subTest(target=interface.target_gene):
+                self.assertEqual(interface.critical_residues, ())
+                self.assertEqual(interface.structures, ())
+                for span in interface.spans:
+                    self.assertIn(
+                        (span.start, span.end), boundaries,
+                        "a contact span that is not one of the curated domain regions "
+                        "is a new structural claim, not a restatement of an old one")
+                    self.assertIs(span.provenance.max_tier,
+                                  EvidenceTier.BIOCHEMICAL_PRINCIPLE)
 
 
 class TestProvenanceCapsWhatMayBeClaimed(unittest.TestCase):
@@ -201,8 +224,20 @@ class TestTheCuratedFileKeepsItsOwnRules(unittest.TestCase):
         # checkable and survives review. Scoped to the records -- the header
         # prose says the word while explaining that none are claimed.
         blob = json.dumps(self.raw["peptides"]).lower()
-        for tell in ('"pmid"', '"doi"', '"pdb"', '"structures"'):
+        for tell in ('"pmid"', '"doi"', '"pdb"'):
             self.assertNotIn(tell, blob)
+
+        # `structures` is matched on its VALUE, not its key. The key now exists
+        # on the interface records and is empty everywhere, and an empty list
+        # claims nothing -- asserting on the key name flagged the absence of a
+        # claim as if it were one.
+        for name, record in self.raw["peptides"].items():
+            for interface in record.get("interfaces", []):
+                with self.subTest(peptide=name, target=interface.get("target_gene")):
+                    self.assertEqual(
+                        interface.get("structures", []), [],
+                        "a structure identifier is recorded that nothing in this "
+                        "environment could have verified")
 
     def test_every_peptide_declares_a_form(self):
         for name, record in self.raw["peptides"].items():

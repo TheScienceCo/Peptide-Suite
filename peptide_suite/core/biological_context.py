@@ -657,6 +657,38 @@ def unknown_context(sequence: str, unavailable: Optional[List[str]] = None
     )
 
 
+@dataclass(frozen=True)
+class ContactContext:
+    """
+    The contact map, packaged for a scorer that must not reach into a record.
+
+    Exists so the substitution predictor can ask one question -- does anything
+    bind at this position -- without importing the biological-context layer or
+    knowing how many targets a record describes. `has_map` is separate from an
+    empty `spans` list on purpose: "nothing binds here" and "nobody recorded
+    what binds anywhere" are different answers and the scorer says different
+    things about them.
+    """
+    spans: Tuple[InterfaceSpan, ...] = ()
+
+    @property
+    def has_map(self) -> bool:
+        return bool(self.spans)
+
+    def spans_at(self, position: int) -> List[InterfaceSpan]:
+        """1-indexed. Empty when this position is not a known contact."""
+        return [s for s in self.spans if s.covers(position)]
+
+    @property
+    def targets(self) -> List[str]:
+        return sorted({s.target_gene for s in self.spans if s.target_gene})
+
+
+def contact_context(context: "BiologicalContext") -> ContactContext:
+    """The contact map for a record, ready to hand to the scorer."""
+    return ContactContext(spans=tuple(contact_spans(context)))
+
+
 def contact_spans(context: "BiologicalContext") -> List[InterfaceSpan]:
     """
     Every positional contact span this record carries, across all targets.

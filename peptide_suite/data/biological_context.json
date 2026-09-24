@@ -19,13 +19,17 @@
     "are absent rather than guessed: a wrong accession is worse than a missing",
     "one, because it looks checkable and survives review."
   ],
-
   "schema_version": "1.0.0",
-
   "peptides": {
     "IGF-1": {
       "name": "Insulin-like growth factor 1",
-      "aliases": ["IGF-1", "IGF1", "somatomedin C", "IGF-I", "mechano growth factor parent"],
+      "aliases": [
+        "IGF-1",
+        "IGF1",
+        "somatomedin C",
+        "IGF-I",
+        "mechano growth factor parent"
+      ],
       "gene": "IGF1",
       "organism": "Homo sapiens",
       "uniprot": "P05019",
@@ -35,15 +39,44 @@
       "mature_sequence": "GPETLCGAELVDALQFVCGDRGFYFNKPTGYGSSSRRAPQTGIVDECCFRSCDLRRLEMYCAPLKPAKSA",
       "function": "Mitogenic and anabolic growth factor; mediates much of the growth-promoting action of growth hormone, and signals through the IGF-1 receptor tyrosine kinase.",
       "regions": [
-        {"name": "B domain", "start": 1, "end": 29, "role": "Contributes to receptor binding; structurally analogous to the insulin B chain."},
-        {"name": "C domain", "start": 30, "end": 41, "role": "Connecting domain, retained in the mature peptide unlike insulin's C-peptide. Implicated in IGF1R selectivity over the insulin receptor."},
-        {"name": "A domain", "start": 42, "end": 62, "role": "Structurally analogous to the insulin A chain; contributes to the receptor-binding surface."},
-        {"name": "D domain", "start": 63, "end": 70, "role": "C-terminal extension with no insulin counterpart."}
+        {
+          "name": "B domain",
+          "start": 1,
+          "end": 29,
+          "role": "Contributes to receptor binding; structurally analogous to the insulin B chain."
+        },
+        {
+          "name": "C domain",
+          "start": 30,
+          "end": 41,
+          "role": "Connecting domain, retained in the mature peptide unlike insulin's C-peptide. Implicated in IGF1R selectivity over the insulin receptor."
+        },
+        {
+          "name": "A domain",
+          "start": 42,
+          "end": 62,
+          "role": "Structurally analogous to the insulin A chain; contributes to the receptor-binding surface."
+        },
+        {
+          "name": "D domain",
+          "start": 63,
+          "end": 70,
+          "role": "C-terminal extension with no insulin counterpart."
+        }
       ],
       "disulfides": [
-        {"first": 6, "second": 48},
-        {"first": 18, "second": 61},
-        {"first": 47, "second": 52}
+        {
+          "first": 6,
+          "second": 48
+        },
+        {
+          "first": 18,
+          "second": 61
+        },
+        {
+          "first": 47,
+          "second": 52
+        }
       ],
       "modifications": [],
       "receptors": [
@@ -78,13 +111,49 @@
           "notes": ""
         }
       ],
-      "interfaces": [],
+      "interfaces": [
+        {
+          "target_gene": "IGF1R",
+          "ligand_regions": [
+            "B domain (1-29)",
+            "C domain (30-41)",
+            "A domain (42-62)"
+          ],
+          "receptor_regions": [
+            "ectodomain"
+          ],
+          "critical_residues": [],
+          "activation_mechanism": "Ligand binding to the ectodomain drives a conformational change and trans-autophosphorylation of the intracellular kinase domains.",
+          "structures": [],
+          "notes": "Spans are this record's own curated domains, restated as positions, and only those domains whose curated role already states a receptor-binding function. The D domain is deliberately absent: its curated role is 'C-terminal extension with no insulin counterpart' and says nothing about receptor contact, so it is not marked as one.",
+          "spans": [
+            {
+              "start": 1,
+              "end": 29,
+              "role": "B domain: contributes to the receptor-binding surface."
+            },
+            {
+              "start": 30,
+              "end": 41,
+              "role": "C domain: implicated in IGF1R selectivity over the insulin receptor."
+            },
+            {
+              "start": 42,
+              "end": 62,
+              "role": "A domain: contributes to the receptor-binding surface."
+            }
+          ]
+        }
+      ],
       "curation_note": "Domain boundaries and the disulfide pattern follow the standard B/C/A/D description of mature IGF-1. The disulfide pairs are checked against the stored sequence at load time (all six partners must be cysteines) but that check cannot confirm the pairing itself. No PDB identifiers are listed because none could be verified from this environment."
     },
-
     "GLP-1 (7-37)": {
       "name": "Glucagon-like peptide 1 (7-37)",
-      "aliases": ["GLP-1", "GLP-1 (7-37)", "glucagon-like peptide-1"],
+      "aliases": [
+        "GLP-1",
+        "GLP-1 (7-37)",
+        "glucagon-like peptide-1"
+      ],
       "gene": "GCG",
       "organism": "Homo sapiens",
       "uniprot": "P01275",
@@ -94,8 +163,18 @@
       "mature_sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",
       "function": "Incretin hormone: potentiates glucose-dependent insulin secretion, suppresses glucagon, slows gastric emptying and promotes satiety.",
       "regions": [
-        {"name": "N-terminal activation region", "start": 1, "end": 8, "role": "Required for receptor activation. The class B1 two-domain model places this segment in the receptor transmembrane core; it is also where DPP-4 cleaves."},
-        {"name": "C-terminal affinity helix", "start": 9, "end": 31, "role": "Helical segment engaging the receptor extracellular domain; dominates binding affinity."}
+        {
+          "name": "N-terminal activation region",
+          "start": 1,
+          "end": 8,
+          "role": "Required for receptor activation. The class B1 two-domain model places this segment in the receptor transmembrane core; it is also where DPP-4 cleaves."
+        },
+        {
+          "name": "C-terminal affinity helix",
+          "start": 9,
+          "end": 31,
+          "role": "Helical segment engaging the receptor extracellular domain; dominates binding affinity."
+        }
       ],
       "disulfides": [],
       "modifications": [],
@@ -121,7 +200,35 @@
           "notes": ""
         }
       ],
-      "interfaces": [],
+      "interfaces": [
+        {
+          "target_gene": "GLP1R",
+          "ligand_regions": [
+            "N-terminal activation region (residues 1-8 of the stored sequence)",
+            "C-terminal affinity helix (residues 9-31 of the stored sequence)"
+          ],
+          "receptor_regions": [
+            "extracellular domain",
+            "transmembrane core"
+          ],
+          "critical_residues": [],
+          "activation_mechanism": "Class B1 two-domain mechanism: the C-terminal helix binds the receptor extracellular domain and carries most of the affinity, while the N-terminus inserts into the transmembrane core and drives activation. The two halves do different jobs, so a substitution's consequence depends on which one it lands in.",
+          "structures": [],
+          "notes": "The spans below are the SAME coordinates as this record's curated domain regions, restated as positions so the substitution scorer can use them. No new structural claim is made here and no residue-level contact list is asserted: region resolution is what is curated, so region resolution is what is stored.",
+          "spans": [
+            {
+              "start": 1,
+              "end": 8,
+              "role": "N-terminal activation region: inserts into the receptor transmembrane core. Substitutions here bear on activation rather than on affinity."
+            },
+            {
+              "start": 9,
+              "end": 31,
+              "role": "C-terminal affinity helix: engages the receptor extracellular domain and carries most of the binding affinity."
+            }
+          ]
+        }
+      ],
       "curation_note": "Region boundaries describe the standard class B1 two-domain division and are approximate; they are recorded as curated rather than as structurally resolved. No PDB identifiers are listed because none could be verified from this environment."
     }
   }

@@ -279,6 +279,16 @@ class OptimizeWorkflow:
         all_recs = []
         sequence = peptide_context.sequence
 
+        # Which residues actually touch a receptor. Resolved once for the whole
+        # scan rather than per substitution: it is a property of the molecule,
+        # and 570 identical lookups is 570 chances for one of them to differ.
+        #
+        # Without this the binding lane was position-blind -- it scored a charge
+        # swap on a solvent-facing loop exactly like one inside the contact
+        # helix, because nothing in the scorer had ever been told which was
+        # which.
+        contact = _contact_context_for(peptide_context)
+
         for position in range(len(sequence)):
             wt_aa = sequence[position]
 
@@ -296,6 +306,7 @@ class OptimizeWorkflow:
                     inferred_goal=peptide_context.confirmed_goal or "generic_improvement",
                     ph=ph,
                     conservation_available=peptide_context.conservation_available,
+                    contact=contact,
                 )
 
                 # Combine scores
@@ -458,3 +469,26 @@ def format_workflow_summary(peptide_context: PeptideContext, recommendations: Li
     lines.append(f"  - See logs/prediction_calibration.jsonl for audit trail")
 
     return "\n".join(lines)
+
+
+def _contact_context_for(peptide_context) -> "ContactContext":
+    """
+    The contact map for the peptide under scan, or an empty one.
+
+    Keyed on the identified NAME, not on the sequence: the curated records are
+    keyed by name and a scanned sequence may be a variant of one. An empty
+    ContactContext is returned when nothing is known, and the scorer treats
+    that as "unknown", never as "nothing binds anywhere".
+    """
+    from peptide_suite.core.biological_context import (
+        ContactContext, contact_context, retrieve,
+    )
+    name = (peptide_context.name or "").strip()
+    if not name or name == "unnamed_peptide":
+        return ContactContext()
+    try:
+        return contact_context(retrieve(name=name, sequence=peptide_context.sequence))
+    except Exception:
+        # A contact map is an enhancement; failing to build one must never take
+        # the scan down with it.
+        return ContactContext()
