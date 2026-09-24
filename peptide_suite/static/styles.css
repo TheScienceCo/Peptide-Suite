@@ -1504,3 +1504,44 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
   .bcrows { grid-template-columns: 1fr; gap: 0 0; }
   .bclabel { margin-top: 6px; font-weight: 600; }
 }
+
+/* ---------- capability and limits ---------- */
+
+.capability {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-1); padding: 12px 14px; margin-bottom: 14px;
+}
+.caphead { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.capcols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.capsub {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.limitlist { margin: 0; padding-left: 16px; }
+.limitlist li { font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; }
+
+.limits {
+  border-left: 2px solid var(--axis); padding: 2px 0 2px 11px; margin: 10px 0;
+}
+.limits > b {
+  display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px;
+}
+
+.kinds { margin-top: 8px; display: grid; gap: 6px; }
+.kind {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 9px; background: var(--page);
+}
+.khead { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+.kstate {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 9px; border: 1px solid var(--border);
+  color: var(--text-muted); white-space: nowrap;
+}
+.kind.on .kstate { border-color: var(--status-good); color: var(--status-good); }
+.kind.off { opacity: 0.72; }
+
+@media (max-width: 640px) {
+  .capcols { grid-template-columns: 1fr; gap: 10px; }
+}

@@ -242,6 +242,7 @@ function renderGate(info) {
   sel.id = "goal-select";
   GOALS.forEach((g) => {
     const o = el("option", null, g.label + (g.quick_win ? "  — quick win" : ""));
+    o.title = g.description || "";
     o.value = g.id;
     sel.append(o);
   });
@@ -271,7 +272,10 @@ function renderGate(info) {
   const btnWrap = el("div", "shrink");
   const run = el("button", "primary", "Run substitution scan");
   run.id = "btn-scan";
-  run.addEventListener("click", () => runScan(info.sequence, sel.value));
+  run.addEventListener("click", () => {
+    ACTIVE_GOAL = GOALS.find((g) => g.id === sel.value) || null;
+    runScan(info.sequence, sel.value);
+  });
   btnWrap.append(run);
 
   row.append(goalWrap, btnWrap);
@@ -326,6 +330,10 @@ function renderOptimizeResults(data) {
   const out = $("#opt-results");
   const pn = policyNotice(data.policy);
   if (pn) out.append(pn);
+
+  // What the selected lane computes, before any score from it.
+  const cap = renderCapability(ACTIVE_GOAL);
+  if (cap) out.append(cap);
   const ctx = data.context;
   const hitPositions = new Set(data.recommendations.map((r) => r.position));
 
@@ -512,6 +520,74 @@ function renderConservation(ctx) {
   return card;
 }
 
+// The goal the current scan ran against, so a recommendation can state the
+// limits of the lane that produced it.
+let ACTIVE_GOAL = null;
+
+function limitsOf(rec) {
+  const box = el("div", "limits");
+  const goal = ACTIVE_GOAL
+    || GOALS.find((g) => g.id === rec.target_category)
+    || null;
+
+  box.append(el("b", null, "What this does not establish"));
+  const list = el("ul", "limitlist");
+  const items = (goal && goal.does_not_compute) ? goal.does_not_compute.slice() : [];
+
+  // The direction limit is already in the goal's does_not_compute list, so it
+  // is not appended again here. It appeared twice in the first version.
+  if (!items.length) items.push("No limits were declared for this goal.");
+  items.forEach((t) => list.append(el("li", null, t)));
+  box.append(list);
+
+  if (goal && goal.reasoning_kinds) {
+    box.append(el("div", "kv",
+      "Four kinds of reasoning could bear on a binding question. This result uses "
+      + "only the ones marked available:"));
+    const table = el("div", "kinds");
+    goal.reasoning_kinds.forEach((k) => {
+      const row = el("div", `kind ${k.available ? "on" : "off"}`);
+      const head = el("div", "khead");
+      head.append(el("span", "kstate", k.available ? "used" : "unavailable"),
+                  el("b", null, k.label));
+      row.append(head);
+      row.append(el("div", "kv", k.available ? k.what_it_is : k.what_it_is_not));
+      table.append(row);
+    });
+    box.append(table);
+  }
+  return box;
+}
+
+function renderCapability(goal) {
+  // The capability panel: what the selected lane computes and what it does
+  // not. A label reading "Binding affinity" implied a computed dissociation
+  // constant; what is computed is the size of a perturbation.
+  if (!goal) return null;
+  const box = el("div", "capability");
+  const head = el("div", "caphead");
+  head.append(el("span", "bctitle", "What this analysis computes"));
+  if (goal.strongest_evidence) head.append(tierBadge(goal.strongest_evidence, false));
+  box.append(head);
+
+  const cols = el("div", "capcols");
+  const yes = el("div", "capcol");
+  yes.append(el("div", "capsub", "Computed"));
+  const yesList = el("ul", "limitlist");
+  (goal.computes || []).forEach((t) => yesList.append(el("li", null, t)));
+  yes.append(yesList);
+
+  const no = el("div", "capcol");
+  no.append(el("div", "capsub", "Not computed"));
+  const noList = el("ul", "limitlist");
+  (goal.does_not_compute || []).forEach((t) => noList.append(el("li", null, t)));
+  no.append(noList);
+
+  cols.append(yes, no);
+  box.append(cols);
+  return box;
+}
+
 const VERDICT = {
   recommend: { glyph: "✓", word: "Recommend" },
   recommend_with_caveats: { glyph: "~", word: "With caveats" },
@@ -543,6 +619,11 @@ function renderRec(rec, rank) {
   body.append(el("div", "kv",
     `Target category: ${rec.target_category} · overall confidence: ${rec.overall_confidence}` +
     (limitedBy ? ` — limited by: ${limitedBy}` : "")));
+
+  // What this result does not establish. Placed before the arithmetic rather
+  // than after it: a reader who meets the limits only after the number has
+  // already formed a view about the number.
+  body.append(limitsOf(rec));
 
   const bd = rec.score_breakdown;
   if (bd && bd.formula) {

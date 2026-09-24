@@ -245,6 +245,34 @@ an unknown peptide gets a stated absence rather than an empty context object,
 because "we have no record of this" and "we looked and it has no receptors"
 render identically if the only difference is an empty list.
 
+### Labels that do not overstate the capability
+
+"Binding affinity" implies a computed dissociation constant. What is computed
+is the size of a physicochemical perturbation, and the *direction* of the
+effect is explicitly not determined without a receptor structure. The lane is
+now labelled **"Binding-interface perturbation (not a predicted Kd)"**, and
+every goal declares what it computes and what it does not — structurally, not
+in prose the interface can truncate.
+
+![What the analysis computes](docs/screenshots/capability-panel.png)
+
+Four kinds of reasoning could bear on a binding question, and presenting them
+as one number is the overstatement this structure exists to prevent. Each
+recommendation names all four and marks which were actually used:
+
+| Kind | Here |
+|---|---|
+| Sequence-derived perturbation | **used** — charge by Henderson-Hasselbalch, hydrophobicity by Kyte-Doolittle |
+| Experimentally measured mutation effect | unavailable — no evidence store populated, PubMed unreachable |
+| Structure-supported interaction prediction | unavailable — the structure-template gate supplied no interface |
+| Learned model prediction | unavailable — no model here is trained on real labels |
+
+Each recommendation opens with what it does *not* establish, before the
+arithmetic rather than after it — a reader who meets the limits only after the
+number has already formed a view about the number.
+
+![What a recommendation does not establish](docs/screenshots/recommendation-limits.png)
+
 ### Literature retrieval
 
 `retrieve_literature_context` used to return an invented PMID and an abstract

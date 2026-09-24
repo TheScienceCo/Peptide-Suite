@@ -286,3 +286,57 @@ class TestTheCorrectedReferenceData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLabelsDoNotOverstateCapability(unittest.TestCase):
+    """
+    A label reading "Binding affinity" implies a computed dissociation
+    constant. What is computed is the size of a physicochemical perturbation,
+    and the direction of the effect is explicitly not determined.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from peptide_suite.api import goals
+        cls.payload = goals()
+        cls.goals = {g["id"]: g for g in cls.payload["goals"]}
+
+    def test_the_binding_label_disclaims_a_predicted_constant(self):
+        label = self.goals["binding_affinity"]["label"]
+        self.assertNotEqual(label, "Binding affinity")
+        self.assertIn("not a predicted Kd", label)
+
+    def test_every_goal_declares_what_it_does_not_compute(self):
+        for goal_id, goal in self.goals.items():
+            with self.subTest(goal=goal_id):
+                self.assertTrue(goal["computes"])
+                self.assertTrue(goal["does_not_compute"])
+                self.assertIn(goal["strongest_evidence"], [t.name for t in EvidenceTier])
+
+    def test_the_binding_lane_disclaims_every_affinity_constant(self):
+        disclaimed = " ".join(self.goals["binding_affinity"]["does_not_compute"]).lower()
+        for constant in ("kd", "ki", "ic50", "ec50"):
+            self.assertIn(constant, disclaimed)
+        self.assertIn("direction is not determined", disclaimed)
+
+    def test_the_four_reasoning_kinds_are_distinguished(self):
+        kinds = self.payload["binding_reasoning_kinds"]
+        self.assertEqual(
+            [k["kind"] for k in kinds],
+            ["sequence_derived", "experimental_mutation", "structure_supported",
+             "learned_model"])
+
+    def test_only_the_sequence_derived_kind_is_available_here(self):
+        # Presenting all four as one "binding affinity prediction" is the
+        # overstatement this structure exists to prevent.
+        kinds = {k["kind"]: k["available"] for k in self.payload["binding_reasoning_kinds"]}
+        self.assertTrue(kinds["sequence_derived"])
+        self.assertFalse(kinds["experimental_mutation"])
+        self.assertFalse(kinds["structure_supported"])
+        self.assertFalse(kinds["learned_model"])
+
+    def test_every_unavailable_kind_says_why(self):
+        for kind in self.payload["binding_reasoning_kinds"]:
+            if not kind["available"]:
+                with self.subTest(kind=kind["kind"]):
+                    self.assertIn("Not available", kind["what_it_is_not"])
