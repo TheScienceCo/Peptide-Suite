@@ -628,6 +628,16 @@ axes are. Letting a visualiser perform the reduction would put the axes'
 derivation somewhere nobody records, and the axes are the part that gets
 interpreted.
 
+### The bridge to the evidence store
+
+A training run mirrored into Aim carries its dataset's exclusions, not just its
+row count. A run trained on 12 rows out of a 400-record store and one trained
+on 380 are different results and the dashboard draws the metric identically, so
+the counts and the reasons travel with the run. The split's leakage verdict
+goes on as a tag in both directions — `split-clean` and `SPLIT-LEAKS` — because
+a comparison view that cannot filter out a leaking run will eventually include
+one, and its number will be the best on the chart.
+
 ### What a real install found
 
 The adapter was written against a fake `aim` module, because CI has no real

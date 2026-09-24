@@ -30,6 +30,9 @@ from ml.aim_tracking import (
     mirror_tracked_runs, status_report,
 )
 from ml.reproducibility import RunRecord
+from peptide_suite.core.variant_evidence import OutcomeMeasure as _OutcomeMeasure
+
+OUTCOME = _OutcomeMeasure.PROTEASE_STABILITY
 from ml.tracking import Experiment, Tracker
 
 
@@ -613,3 +616,78 @@ class TestAgainstRealAim(unittest.TestCase):
             names = {m.name for m in run.metrics()
                      if not m.name.startswith("__system__")}
         self.assertEqual(names, {"loss"})
+
+
+class TestADatasetCarriesWhatItLeftOut(unittest.TestCase):
+    """
+    The bridge between the variant-evidence store and the dashboard.
+
+    A run trained on 12 rows out of a 400-record store and one trained on 380
+    are different results, and the dashboard draws the metric identically. Row
+    count alone cannot tell them apart, so the exclusions travel with the run.
+    """
+
+    def build(self):
+        from ml.datasets.variant_evidence_dataset import build_dataset
+        from peptide_suite.core.variant_evidence import (
+            Modification, ModificationKind, OutcomeMeasure, VariantEvidenceStore,
+            VariantRecord,
+        )
+        from peptide_suite.core.biological_context import Provenance, SourceKind
+
+        store = VariantEvidenceStore()
+        store._records = [VariantRecord(
+            name="design-only", parent="PARENT",
+            provenance=Provenance(kind=SourceKind.CURATED_UNVERIFIED),
+            modifications=(Modification(kind=ModificationKind.SUBSTITUTION,
+                                        description="A8G", position=8,
+                                        wild_type="A", mutant="G"),))]
+        return build_dataset(OutcomeMeasure.PROTEASE_STABILITY, store=store)
+
+    def test_the_exclusions_reach_aim(self):
+        with fake_aim() as runs:
+            mirror = AimMirror()
+            mirror.open(record())
+            report = mirror.log_dataset(self.build())
+        stored = runs[0].params["dataset"]
+        self.assertEqual(stored["rows"], 0)
+        self.assertIn("NO_MEASURED_OUTCOME", stored["excluded"])
+        self.assertIn("excluded", " ".join(report.notes))
+
+    def test_a_leaking_split_is_tagged(self):
+        from ml.datasets.variant_evidence_dataset import check_leakage, TrainingRow
+        from peptide_suite.core import EvidenceTier
+
+        def row(parent, name):
+            return TrainingRow(parent=parent, variant_name=name,
+                               modification_label="A8G", position=8, wild_type="A",
+                               mutant="G", measure=OUTCOME, target_value=2.0,
+                               target_is_fold_change=True, comparator="parent",
+                               assay="synthetic", tier=EvidenceTier.DIRECT_EXPERIMENTAL)
+
+        leakage = check_leakage([row("GLP-1", "v1")], [row("GLP-1", "v2")])
+        with fake_aim() as runs:
+            mirror = AimMirror()
+            mirror.open(record())
+            report = mirror.log_dataset(self.build(), leakage=leakage)
+        self.assertIn("SPLIT-LEAKS", runs[0].tags)
+        self.assertFalse(runs[0].params["dataset"]["leakage"]["is_clean"])
+        self.assertIn("SPLIT-LEAKS", " ".join(report.notes))
+
+    def test_a_clean_split_is_tagged_too(self):
+        """
+        Both ways, so a filter on "clean" returns the runs that were checked
+        rather than the runs that happened to be logged by a newer version.
+        """
+        from ml.datasets.variant_evidence_dataset import check_leakage
+        leakage = check_leakage([], [])
+        with fake_aim() as runs:
+            mirror = AimMirror()
+            mirror.open(record())
+            mirror.log_dataset(self.build(), leakage=leakage)
+        self.assertIn("split-clean", runs[0].tags)
+
+    def test_logging_a_dataset_without_aim_is_safe(self):
+        with no_aim():
+            report = AimMirror().log_dataset(self.build())
+        self.assertFalse(report.reached_aim)

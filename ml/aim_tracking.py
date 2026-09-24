@@ -430,6 +430,47 @@ class AimMirror:
         return MirrorReport(status=AimStatus.LIVE, transmitted=len(payload["points"]),
                             notes=notes)
 
+    def log_dataset(self, build, leakage=None,
+                    name: str = "dataset") -> MirrorReport:
+        """
+        Record what a dataset was built from, including what it excluded.
+
+        Takes a `DatasetBuild` from `ml/datasets/variant_evidence_dataset.py`.
+        The exclusions are the part worth having: a run trained on 12 rows out
+        of a 400-record store is a different result from one trained on 380,
+        and the dashboard shows the metric either way. Row count alone cannot
+        tell them apart, so the counts and the reasons travel with the run.
+
+        `leakage` is the `LeakageReport` for the split. It is logged as a tag
+        as well as a parameter, because a comparison view that cannot filter
+        out a leaking run will eventually include one and its number will be
+        the best on the chart.
+        """
+        if self._status is not AimStatus.LIVE:
+            return MirrorReport(status=self._status)
+
+        payload = dict(build.to_dict())
+        notes = []
+        if leakage is not None:
+            payload["leakage"] = {"is_clean": leakage.is_clean,
+                                  "statement": leakage.statement(),
+                                  "shared_parents": list(leakage.shared_parents),
+                                  "shared_variants": list(leakage.shared_variants)}
+            try:
+                self._run.add_tag("split-clean" if leakage.is_clean else "SPLIT-LEAKS")
+            except Exception:
+                pass
+            if not leakage.is_clean:
+                notes.append("Tagged SPLIT-LEAKS in Aim: " + leakage.statement())
+        try:
+            self._run[name] = payload
+        except Exception as exc:
+            return MirrorReport(status=AimStatus.LIVE,
+                                notes=[f"Aim rejected the dataset record: {exc}"])
+        if build.excluded:
+            notes.append(build.report())
+        return MirrorReport(status=AimStatus.LIVE, transmitted=len(payload), notes=notes)
+
     def describe(self) -> str:
         return self._status.explanation
 
