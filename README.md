@@ -465,6 +465,90 @@ the labelled data. Residue-level sensitivity is not duplicated either — the
 substitution landscape's column marginal already answers it, over the real
 pipeline rather than over a model.
 
+## Aim, and why it is a window rather than a filing cabinet
+
+Aim gives this repository the one thing it lacked: metrics over time, across
+runs, in a browser. What it does not give it is a place to keep runs.
+`ml/tracking.py` writes an append-only JSONL line per run and `RunRecord`
+decides whether that run can be replayed; both keep working with Aim absent,
+switched off, or broken. `ml/aim_tracking.py` mirrors an already-recorded run
+into Aim so it can be looked at.
+
+The direction is the design. One writer means the two can never disagree about
+what a run was, and deleting the adapter loses a dashboard rather than a run.
+
+```
+ml/tracking.py  ──writes──▶  experiments.jsonl   ← the record
+                                   │
+                                   └──read by──▶  ml/aim_tracking.py ──▶ Aim
+```
+
+```bash
+pip install aim                                   # optional
+python -c "from ml.aim_tracking import status_report; print(status_report())"
+aim up --repo .aim                                # the dashboard
+export PEPTIDE_SUITE_AIM=0                        # switch the mirror off
+```
+
+The switch can only turn the mirror **off**. There is no value that makes an
+uninstalled Aim transmit, because a switch that can turn a capability on is a
+switch someone can set and then believe the capability is present.
+
+### Four things it refuses
+
+**A no-op is not a success.** Aim is not installed in CI, on purpose. Every
+call still works and every call still reports that nothing was transmitted —
+`AimStatus` distinguishes `LIVE`, `READY`, `NOT_INSTALLED`, `DISABLED`,
+`FAILED` and `CLOSED`, and never collapses them to a boolean. A tracker that
+swallows its own failure is worse than one that raises, because the run appears
+to have been logged.
+
+**`None` is not a metric.** `Experiment.metrics` holds `Optional[float]`
+because a metric that was not computed is recorded as not computed, and there
+is no faithful way to draw that. NaN renders as a gap, which is what a skipped
+step looks like; zero renders as a result. Unmeasured metrics are omitted and
+counted, so a report reads *"3 metric(s) were not computed and were omitted
+rather than sent as zero or NaN: auc, converged, spearman"* instead of three
+flat lines along the axis. `True` is refused for the same reason — it is a
+float to Python and would plot as 1.0, a flag drawn in the shape of a
+measurement.
+
+**Two runs are not comparable because both are in the database.** Dataset
+version, split strategy, encoder identity and metric definition decide that,
+and `comparability()` computes it here rather than leaving it to whoever is
+looking at two lines on one axis. A field missing from either run is reported
+as *unknown*, never as agreement: two runs that both fail to record their
+dataset version are not thereby known to share one.
+
+**The reduction happens before Aim sees it.** `ml/embeddings/explorer.py`
+computes the PCA — on the SVD of the mean-centred matrix, with a four-point
+floor, a refusal when every vector is identical, and a warning when the first
+two components explain little. Aim receives finished coordinates, the
+explained-variance ratio that produced them, and the sentence saying what the
+axes are. Letting a visualiser perform the reduction would put the axes'
+derivation somewhere nobody records, and the axes are the part that gets
+interpreted.
+
+### What a real install found
+
+The adapter was written against a fake `aim` module, because CI has no real
+one. Installing Aim for real turned up something the fake could not: Aim writes
+each run to its own chunk directory and builds the searchable index from a
+separate daemon that `aim up` starts, and `Repo.iter_runs` reads the index. A
+run mirrored and closed by a script that then exits is on disk and invisible.
+The first version of this module reported *"10 values sent to Aim"* for a run
+that `iter_runs` could not find at all — the module's own stated failure mode,
+arriving from the other side. Closing now indexes the run, and says so when it
+cannot:
+
+> Run 1a2b3c4d5e6f indexed and visible in the Aim repository.
+
+> The run was written but could not be indexed (…), so it will not appear in
+> the Aim UI until `aim up` indexes it. The JSONL record is unaffected.
+
+The integration tests run wherever Aim is installed and skip loudly where it is
+not, rather than being quietly absent.
+
 ## Does fusion actually help?
 
 The multimodal ask is easy to satisfy dishonestly: build a fusion layer, run it
@@ -588,6 +672,17 @@ whether a host happens to be reachable.
 `-t .` matters. It lets the test package load the demonstration pack before any
 test imports — without it the suite fails at the first coefficient read, which
 is the boundary working as intended rather than a broken suite.
+
+The ML suite is separate, because it does need PyTorch:
+
+```bash
+python -m unittest discover -t . -s ml/tests
+```
+
+Aim is not installed for it either. The adapter's absent path is therefore the
+one CI exercises for real, its live path runs against a fake `aim` module, and
+the integration tests against a real install skip with a stated reason rather
+than vanishing.
 
 ```bash
 python tools/check_policy_boundary.py --scope all

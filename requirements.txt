@@ -21,3 +21,9 @@ uvicorn[standard]>=0.27
 # `ml`, and the two ML endpoints report the layer as unavailable rather than
 # failing. Install it to run ml/ and its tests:
 #   pip install torch          (2.14 here, CPU; ml/tests need it)
+
+# Experiment tracking dashboard (Phase 2). Optional, and a view rather than a
+# store: `ml/tracking.py` writes the run record and stays the system of record
+# whether or not this is installed. `ml/aim_tracking.py` imports it lazily and
+# reports NOT_INSTALLED rather than failing, so nothing here depends on it:
+#   pip install aim            (3.29 here; needed only for the dashboard)
