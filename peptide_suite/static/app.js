@@ -98,6 +98,66 @@ function busy(btn, on, label) {
 
 /* ---------- Workflow 1 ---------- */
 
+/**
+ * Identification without being asked for it.
+ *
+ * A button is the wrong affordance for the first question. Pasting a sequence
+ * you already know the name of and then having to press "Identify" to be told
+ * it is a peptide you named is a step that buys nothing: the answer is already
+ * determined by what was pasted. So a paste runs it immediately, and typing
+ * runs it once you stop.
+ *
+ * The Identify button stays, because auto-identification is deliberately
+ * conservative -- it will not fire on something too short to be worth a
+ * request, and a user who wants it anyway needs a way to insist.
+ */
+const AUTO_IDENTIFY_DELAY_MS = 800;
+
+//: Below this many characters an input is more likely half-typed than
+//: finished, and identifying it spends a request to report a failure the user
+//: already knows about. Short peptide NAMES exist, which is why the button
+//: exists; this only governs what happens without being asked.
+const AUTO_IDENTIFY_MIN_CHARS = 4;
+
+let autoIdentifyTimer = null;
+let autoIdentifyLast = "";
+
+function wireAutoIdentify() {
+  const box = $("#seq");
+  if (!box) return;
+
+  const schedule = (delay) => {
+    clearTimeout(autoIdentifyTimer);
+    autoIdentifyTimer = setTimeout(maybeAutoIdentify, delay);
+  };
+
+  box.addEventListener("input", () => {
+    // Editing invalidates whatever is on screen: it describes a different
+    // molecule now. Clearing first means the page is never showing one
+    // peptide's receptors above another one's sequence, not even briefly.
+    if (IDENTIFIED && IDENTIFIED.input !== currentInput()) resetSteps({ clear: true });
+    schedule(AUTO_IDENTIFY_DELAY_MS);
+  });
+
+  // A paste is a complete input by definition -- there is no more of it
+  // coming -- so it does not wait out the typing delay. The timeout is only
+  // to let the value land before it is read.
+  box.addEventListener("paste", () => schedule(0));
+
+  // Example chips set the value directly, which fires no input event.
+  box.addEventListener("change", () => schedule(0));
+}
+
+function maybeAutoIdentify() {
+  const input = currentInput();
+  if (input.length < AUTO_IDENTIFY_MIN_CHARS) return;
+  if (input === autoIdentifyLast) return;        // already answered this one
+  if (IDENTIFIED && IDENTIFIED.input === input) return;
+  if (document.querySelector("#btn-identify[data-busy]")) return;
+  autoIdentifyLast = input;
+  runIdentify({ auto: true });
+}
+
 // The identification the user is currently looking at, and the input it was
 // made from. Keyed on the input so that editing the sequence invalidates it:
 // showing GLP-1's receptors above a scan of something else is the exact
@@ -118,17 +178,22 @@ function currentInput() {
  * a reader chose an engineering objective while still reading what the thing
  * was.
  */
-async function runIdentify({ thenGate = false } = {}) {
+async function runIdentify({ thenGate = false, auto = false } = {}) {
   const btn = thenGate ? $("#btn-analyze") : $("#btn-identify");
   const input = currentInput();
   $("#gate-slot").innerHTML = "";
   $("#opt-results").innerHTML = "";
 
   if (!input) {
-    $("#gate-slot").append(notice("Enter a peptide sequence or a peptide name.", "error", "×"));
+    // Only when asked. An automatic run that scolds you for an empty box you
+    // are still filling in is worse than staying quiet.
+    if (!auto) {
+      $("#gate-slot").append(notice("Enter a peptide sequence or a peptide name.", "error", "×"));
+    }
     return;
   }
 
+  btn.setAttribute("data-busy", "1");
   busy(btn, true);
   try {
     const info = await api("/api/infer-function", { input });
@@ -144,6 +209,7 @@ async function runIdentify({ thenGate = false } = {}) {
     $("#gate-slot").append(notice(e.message, "error", "×"));
     resetSteps();          // buttons only: the error above is what to read
   } finally {
+    btn.removeAttribute("data-busy");
     busy(btn, false, thenGate ? "Analyze" : "Identify");
   }
 }
@@ -212,6 +278,9 @@ function resetSteps({ clear = false } = {}) {
     $("#gate-slot").innerHTML = "";
     $("#opt-results").innerHTML = "";
     IDENTIFIED = null;
+    // Forget what was last auto-identified too. Without this, clearing the box
+    // and pasting the same sequence back does nothing at all.
+    autoIdentifyLast = "";
   }
   const identify = $("#btn-identify");
   const analyze = $("#btn-analyze");
@@ -1094,12 +1163,7 @@ async function init() {
   $("#btn-transform").addEventListener("click", onTransform);
   $("#btn-identify").addEventListener("click", () => runIdentify());
   $("#btn-analyze").addEventListener("click", onAnalyze);
-  // Editing the sequence invalidates the identification on screen, so the flow
-  // returns to its start rather than letting Analyze scan one peptide under
-  // another one's receptors.
-  $("#seq").addEventListener("input", () => {
-    if (IDENTIFIED && IDENTIFIED.input !== currentInput()) resetSteps({ clear: true });
-  });
+  wireAutoIdentify();
   $("#btn-find").addEventListener("click", onFind);
   $("#btn-ml").addEventListener("click", onRunML);
   $("#btn-fusion").addEventListener("click", onFusion);

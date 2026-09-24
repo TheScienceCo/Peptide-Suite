@@ -124,7 +124,23 @@ def _function_body(name: str) -> str:
     match = re.search(rf"^(?:async\s+)?function\s+{re.escape(name)}\s*\(", APP_JS, re.M)
     if not match:
         raise AssertionError(f"no top-level function named {name}")
-    start = APP_JS.index("{", match.end() - 1)
+
+    # Walk the parameter list to its closing paren before looking for the body
+    # brace. Taking the first `{` after the name grabs a DESTRUCTURED PARAMETER
+    # instead -- `function resetSteps({ clear = false })` returned the
+    # parameter object as the body, so every assertion about that function
+    # tested its own signature.
+    depth = 0
+    for i in range(match.end() - 1, len(APP_JS)):
+        if APP_JS[i] == "(":
+            depth += 1
+        elif APP_JS[i] == ")":
+            depth -= 1
+            if depth == 0:
+                start = APP_JS.index("{", i)
+                break
+    else:
+        raise AssertionError(f"unbalanced parameter list in {name}")
     depth = 0
     for i in range(start, len(APP_JS)):
         if APP_JS[i] == "{":
@@ -138,3 +154,88 @@ def _function_body(name: str) -> str:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIdentificationDoesNotWaitToBeAskedFor(unittest.TestCase):
+    """
+    A button is the wrong affordance for the first question. Pasting a sequence
+    and then pressing "Identify" to be told what you pasted is a step that buys
+    nothing: the answer is already determined by the paste.
+    """
+
+    def test_a_paste_triggers_identification(self):
+        body = _function_body("wireAutoIdentify")
+        self.assertIn('addEventListener("paste"', body)
+
+    def test_a_paste_does_not_wait_out_the_typing_delay(self):
+        """A paste is complete by definition; there is no more of it coming."""
+        body = _function_body("wireAutoIdentify")
+        self.assertRegex(body, r'addEventListener\("paste",\s*\(\)\s*=>\s*schedule\(0\)\)')
+
+    def test_typing_is_debounced_rather_than_firing_per_keystroke(self):
+        body = _function_body("wireAutoIdentify")
+        self.assertIn("AUTO_IDENTIFY_DELAY_MS", body)
+        self.assertIn("clearTimeout", _joined_literals(APP_JS))
+
+    def test_a_chip_click_is_picked_up(self):
+        """Example chips set the value directly, which fires no input event."""
+        self.assertIn('addEventListener("change"', _function_body("wireAutoIdentify"))
+
+    def test_too_short_an_input_does_not_spend_a_request(self):
+        body = _function_body("maybeAutoIdentify")
+        self.assertIn("AUTO_IDENTIFY_MIN_CHARS", body)
+
+    def test_the_same_input_is_not_identified_twice(self):
+        body = _function_body("maybeAutoIdentify")
+        self.assertIn("autoIdentifyLast", body)
+        self.assertIn("IDENTIFIED.input === input", body)
+
+    def test_clearing_forgets_what_was_auto_identified(self):
+        """
+        Otherwise clearing the box and pasting the same sequence back does
+        nothing at all, because the memo still says it was already answered.
+        """
+        self.assertIn("autoIdentifyLast = \"\"", _function_body("resetSteps"))
+
+    def test_an_automatic_run_does_not_scold_an_empty_box(self):
+        """
+        The empty-input notice is for someone who pressed the button. Firing it
+        at a user who is still filling the box in is worse than staying quiet.
+        """
+        body = _function_body("runIdentify")
+        self.assertIn("if (!auto)", body)
+
+    def test_the_button_survives_as_the_way_to_insist(self):
+        """
+        Auto-identification is deliberately conservative, so there has to be a
+        way to ask for it anyway.
+        """
+        self.assertIn('id="btn-identify"', INDEX)
+        self.assertIn('$("#btn-identify").addEventListener', APP_JS)
+
+
+class TestTheBrowserCannotServeAStaleInterface(unittest.TestCase):
+    """
+    `index.html` gains a button, the browser reuses a cached `app.js` that has
+    no handler for it, and the page is broken in a way reloading does not
+    reliably fix. The markup and the script have to version together.
+    """
+
+    def test_the_assets_are_version_stamped(self):
+        api = Path("peptide_suite/api.py").read_text(encoding="utf-8")
+        self.assertIn("/static/app.js?v=", api)
+        self.assertIn("/static/styles.css?v=", api)
+
+    def test_the_version_is_a_content_hash_not_a_timestamp(self):
+        """
+        A checkout, a rebuild or a rebase changes mtimes without changing a
+        byte, and a version that churns defeats caching without buying
+        correctness.
+        """
+        api = Path("peptide_suite/api.py").read_text(encoding="utf-8")
+        self.assertIn("hashlib.sha256", api)
+        self.assertNotIn("st_mtime", api)
+
+    def test_the_page_itself_is_not_cached(self):
+        api = Path("peptide_suite/api.py").read_text(encoding="utf-8")
+        self.assertIn('"Cache-Control": "no-cache"', api)

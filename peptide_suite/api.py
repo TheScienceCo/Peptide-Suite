@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+import hashlib
+
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -1298,9 +1300,43 @@ def favicon():
     return Response(content=FAVICON, media_type="image/svg+xml")
 
 
+def _asset_version() -> str:
+    """
+    A token that changes whenever the served JS or CSS changes.
+
+    Stamped onto the asset URLs so a browser holding a cached `app.js` cannot
+    render a stale interface against a fresh `index.html`. That failure is
+    invisible and self-inflicted -- the markup gains a button, the cached
+    script has no handler for it, and the page looks broken in a way that
+    reloading does not reliably fix.
+
+    Content hash rather than mtime: a checkout, a rebuild or a rebase changes
+    mtimes without changing a byte, and a version that churns defeats caching
+    without buying correctness.
+    """
+    digest = hashlib.sha256()
+    for name in sorted(("app.js", "styles.css", "index.html")):
+        path = STATIC_DIR / name
+        if path.exists():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 @app.get("/")
 def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    """
+    The page, with its asset URLs version-stamped.
+
+    Rewritten on the way out rather than at build time: this repository has no
+    build step, and a version someone has to remember to bump is a version that
+    is wrong exactly when it matters.
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    version = _asset_version()
+    html = html.replace("/static/app.js", f"/static/app.js?v={version}")
+    html = html.replace("/static/styles.css", f"/static/styles.css?v={version}")
+    return Response(content=html, media_type="text/html",
+                    headers={"Cache-Control": "no-cache"})
 
 
 if STATIC_DIR.exists():
