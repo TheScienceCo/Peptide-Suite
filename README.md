@@ -608,6 +608,72 @@ the labelled data. Residue-level sensitivity is not duplicated either — the
 substitution landscape's column marginal already answers it, over the real
 pipeline rather than over a model.
 
+## Does it propose what was actually made?
+
+The benchmark: take a peptide that was really engineered, hide the engineered
+form, feed the parent in, and ask where the modification that was actually made
+and validated lands in the proposal list.
+
+```bash
+python tools/run_recovery_benchmark.py --drug semaglutide
+```
+
+### Why not blind on the name
+
+The obvious protocol — "ignore every mention of semaglutide" — is the one
+`holdout.Protocol.NAMED_ENTITY` exists to mark **insufficient**. Removing
+semaglutide leaves liraglutide, which carries Arg34 and γ-Glu-linked acylation
+at Lys26, and taspoglutide, which is [Aib8, Aib35]-GLP-1. The union of those
+two is semaglutide's answer. A named-entity run would score beautifully with
+the answer sitting in the corpus under two other names.
+
+So **motif ablation** removes every molecule carrying the chemistry, whatever
+it is called — blinding semaglutide removes five molecules, not one — and
+**temporal** freezes the corpus at a year. No first-publication year is
+recorded for any drug, so temporal runs currently refuse rather than inventing
+a plausible one.
+
+### Three things that make the number honest
+
+**Whether the answer was even proposable.** The scan enumerates single
+canonical substitutions. `Aib8` is a non-canonical residue and a C18 diacid is
+not a substitution, so for those the true answer was never in the candidate
+space. Reported as out of scope, never as a miss — scoring it as a miss
+understates the method and dropping it overstates it. Of semaglutide's three
+modifications, exactly one is scoreable.
+
+**The rank, with its total.** 2nd of 3 and 2nd of 47 are different results,
+and `RankedOutcome` has no boolean anywhere in it.
+
+**What chance alone produces.** On a 31-residue peptide there are 589
+candidates, so "in the top 10" is 1.7% of the list and sounds like a lot.
+
+### The first result is a negative one
+
+> `Arg34` ranked **178th of 589** proposals under motif_ablation.
+> Permutation null over 1000 shuffles: median rank 294, p ≈ 0.32.
+
+Better than chance and nowhere near distinguishable from it. That is the
+honest state of the binding lane against a real engineered modification, and
+it is exactly the number this harness exists to produce rather than avoid.
+
+It also exposed a category error worth fixing before reading too much into it:
+Arg34's purpose in semaglutide and liraglutide is to remove Lys34 so that
+acylation goes regioselectively to Lys26 — it is not a binding optimisation at
+all, and scoring it under a binding goal asks whether the system stumbles onto
+the right residue for the wrong reason. The report says so whenever a
+modification has no recorded purpose, and `modification_purpose` in the golden
+set is how that gets fixed.
+
+### Numbering, again
+
+Semaglutide's `Arg34` is GLP-1 (7-37) numbering: position 34 is index 28 of
+the 31-residue stored chain. Applied without the offset it lands six residues
+away, the scan is asked about the wrong substitution, and the run still
+produces a presentable number. The offset must be recorded — never inferred,
+because searching for the offset that makes the answer work is fitting the
+benchmark to the result — and the mapped position is checked before use.
+
 ## Experimental precedent, and the store that is empty on purpose
 
 The system can say a substitution is a large physicochemical perturbation. It

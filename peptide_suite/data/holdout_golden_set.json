@@ -11,76 +11,159 @@
     "The modification lists are drawn from the addendum and from widely reported",
     "drug descriptions; no primary source was read by this system."
   ],
-
   "drugs": {
     "semaglutide": {
-      "parent": "GLP-1",
-      "modifications": ["Aib8", "Arg34", "C18 diacid at Lys26 via gamma-Glu-2xOEG"],
-      "motifs": ["aib", "lipidation", "gamma_glu_linker", "regioselectivity_substitution"],
-      "note": "The case that exposed the problem. Excluding documents naming semaglutide leaves liraglutide (Arg34 and gamma-Glu-linked acylation at Lys26) and taspoglutide ([Aib8, Aib35]-GLP-1) intact, and the union of those two is the complete answer."
+      "parent": "GLP-1 (7-37)",
+      "modifications": [
+        "Aib8",
+        "Arg34",
+        "C18 diacid at Lys26 via gamma-Glu-2xOEG"
+      ],
+      "motifs": [
+        "aib",
+        "lipidation",
+        "gamma_glu_linker",
+        "regioselectivity_substitution"
+      ],
+      "note": "The case that exposed the problem. Excluding documents naming semaglutide leaves liraglutide (Arg34 and gamma-Glu-linked acylation at Lys26) and taspoglutide ([Aib8, Aib35]-GLP-1) intact, and the union of those two is the complete answer.",
+      "numbering_offset": 6,
+      "numbering_note": "Modifications are written in GLP-1 (7-37) numbering, where position 7 is the first residue of the stored 31-residue chain. Offset 6 maps a stated position to the stored index; map_to_sequence checks the result."
     },
     "liraglutide": {
-      "parent": "GLP-1",
-      "modifications": ["Arg34", "C16 palmitoyl at Lys26 via gamma-Glu"],
-      "motifs": ["lipidation", "gamma_glu_linker", "regioselectivity_substitution"]
+      "parent": "GLP-1 (7-37)",
+      "modifications": [
+        "Arg34",
+        "C16 palmitoyl at Lys26 via gamma-Glu"
+      ],
+      "motifs": [
+        "lipidation",
+        "gamma_glu_linker",
+        "regioselectivity_substitution"
+      ],
+      "numbering_offset": 6,
+      "numbering_note": "Modifications are written in GLP-1 (7-37) numbering, where position 7 is the first residue of the stored 31-residue chain. Offset 6 maps a stated position to the stored index; map_to_sequence checks the result."
     },
     "taspoglutide": {
-      "parent": "GLP-1",
-      "modifications": ["Aib8", "Aib35"],
-      "motifs": ["aib"]
+      "parent": "GLP-1 (7-37)",
+      "modifications": [
+        "Aib8",
+        "Aib35"
+      ],
+      "motifs": [
+        "aib"
+      ],
+      "numbering_offset": 6,
+      "numbering_note": "Modifications are written in GLP-1 (7-37) numbering, where position 7 is the first residue of the stored 31-residue chain. Offset 6 maps a stated position to the stored index; map_to_sequence checks the result."
     },
     "tirzepatide": {
       "parent": "GIP/GLP-1 chimera",
-      "modifications": ["Aib2", "Aib13", "C20 diacid via gamma-Glu-2xAEEA"],
-      "motifs": ["aib", "lipidation", "gamma_glu_linker", "chimera"]
+      "modifications": [
+        "Aib2",
+        "Aib13",
+        "C20 diacid via gamma-Glu-2xAEEA"
+      ],
+      "motifs": [
+        "aib",
+        "lipidation",
+        "gamma_glu_linker",
+        "chimera"
+      ]
     },
     "exenatide": {
       "parent": "exendin-4",
-      "modifications": ["natural exendin-4 sequence, DPP-4 resistant at position 2"],
-      "motifs": ["natural_analogue"]
+      "modifications": [
+        "natural exendin-4 sequence, DPP-4 resistant at position 2"
+      ],
+      "motifs": [
+        "natural_analogue"
+      ]
     },
     "pramlintide": {
       "parent": "amylin",
-      "modifications": ["Pro25", "Pro28", "Pro29"],
-      "motifs": ["proline_substitution", "aggregation_disruption"]
+      "modifications": [
+        "Pro25",
+        "Pro28",
+        "Pro29"
+      ],
+      "motifs": [
+        "proline_substitution",
+        "aggregation_disruption"
+      ]
     },
     "teriparatide": {
       "parent": "PTH",
-      "modifications": ["PTH(1-34) fragment"],
-      "motifs": ["truncation"]
+      "modifications": [
+        "PTH(1-34) fragment"
+      ],
+      "motifs": [
+        "truncation"
+      ]
     },
     "degarelix": {
       "parent": "GnRH",
-      "modifications": ["multiple D-residues", "non-canonical aromatic residues"],
-      "motifs": ["d_residue", "noncanonical_aromatic"]
+      "modifications": [
+        "multiple D-residues",
+        "non-canonical aromatic residues"
+      ],
+      "motifs": [
+        "d_residue",
+        "noncanonical_aromatic"
+      ]
     },
     "plecanatide": {
       "parent": "uroguanylin",
-      "modifications": ["Asp3 substitution"],
-      "motifs": ["ph_sensitivity"]
+      "modifications": [
+        "Asp3 substitution"
+      ],
+      "motifs": [
+        "ph_sensitivity"
+      ]
     },
     "setmelanotide": {
       "parent": "alpha-MSH",
-      "modifications": ["cyclic", "D-residue", "non-canonical residues"],
-      "motifs": ["cyclization", "d_residue"]
+      "modifications": [
+        "cyclic",
+        "D-residue",
+        "non-canonical residues"
+      ],
+      "motifs": [
+        "cyclization",
+        "d_residue"
+      ]
     },
     "insulin_lispro": {
       "parent": "insulin",
-      "modifications": ["ProB28/LysB29 inversion"],
-      "motifs": ["scaffold_disruption"]
+      "modifications": [
+        "ProB28/LysB29 inversion"
+      ],
+      "motifs": [
+        "scaffold_disruption"
+      ]
     },
     "insulin_glargine": {
       "parent": "insulin",
-      "modifications": ["GlyA21", "two Arg at the B-chain C-terminus"],
-      "motifs": ["pi_shift", "charge_engineering"]
+      "modifications": [
+        "GlyA21",
+        "two Arg at the B-chain C-terminus"
+      ],
+      "motifs": [
+        "pi_shift",
+        "charge_engineering"
+      ]
     },
     "insulin_degludec": {
       "parent": "insulin",
-      "modifications": ["desB30", "hexadecanedioic acid at LysB29 via gamma-Glu"],
-      "motifs": ["lipidation", "gamma_glu_linker", "scaffold_strengthening"]
+      "modifications": [
+        "desB30",
+        "hexadecanedioic acid at LysB29 via gamma-Glu"
+      ],
+      "motifs": [
+        "lipidation",
+        "gamma_glu_linker",
+        "scaffold_strengthening"
+      ]
     }
   },
-
   "decoys": {
     "_about": [
       "Peptides where a motif is known NOT to help. If the system proposes it",
