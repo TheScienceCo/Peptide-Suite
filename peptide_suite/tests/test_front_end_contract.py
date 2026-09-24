@@ -239,3 +239,73 @@ class TestTheBrowserCannotServeAStaleInterface(unittest.TestCase):
     def test_the_page_itself_is_not_cached(self):
         api = Path("peptide_suite/api.py").read_text(encoding="utf-8")
         self.assertIn('"Cache-Control": "no-cache"', api)
+
+
+class TestAMissingTorchIsReportedNotCrashed(unittest.TestCase):
+    """
+    The Model evaluation tab returned "Request failed (500)".
+
+    The endpoints guarded themselves with `try: from ml... except ImportError`
+    around the IMPORT STATEMENT, and every ml module imports torch LAZILY,
+    inside the function that needs it. So the module imported cleanly, the
+    guard never fired, and the ImportError escaped at call time as an
+    unhandled 500 with no body -- leaving the interface to print its generic
+    fallback, which names neither the cause nor the one thing a user has to do.
+
+    `/api/ml/status` was worse: it reported `available: true` on a machine
+    where every ML endpoint 500'd, because the two modules it imported to check
+    also import torch lazily. It asserted a capability it never tested, which
+    is the failure mode this repository exists to avoid.
+    """
+
+    API = Path("peptide_suite/api.py").read_text(encoding="utf-8")
+
+    def test_status_checks_torch_itself(self):
+        status = _python_function_body(self.API, "ml_status")
+        self.assertIn("import torch", status)
+
+    def test_every_ml_endpoint_requires_torch_up_front(self):
+        for name in ("ml_split_comparison", "ml_representation", "ml_fusion_benefit"):
+            with self.subTest(endpoint=name):
+                self.assertIn("_require_torch()",
+                              _python_function_body(self.API, name))
+
+    def test_the_guard_imports_torch_rather_than_a_module_that_defers_it(self):
+        guard = _python_function_body(self.API, "_require_torch")
+        self.assertIn("import torch", guard)
+        self.assertIn("503", guard)
+
+    def test_the_message_names_the_remedy_not_just_the_problem(self):
+        self.assertIn("pip install", self.API[self.API.index("ML_NEEDS_TORCH = "):][:900])
+        self.assertIn("download.pytorch.org",
+                      self.API[self.API.index("ML_NEEDS_TORCH = "):][:900])
+
+    def test_the_message_says_the_rest_of_the_app_is_unaffected(self):
+        blob = self.API[self.API.index("ML_NEEDS_TORCH = "):][:900]
+        self.assertIn("Nothing else in Peptide Suite depends on it", blob)
+
+    def test_a_lazy_import_that_still_escapes_is_caught(self):
+        """
+        Belt and braces: `_require_torch` catches the common case, and the call
+        sites catch an ImportError raised deeper for any other reason rather
+        than letting it become a bare 500.
+        """
+        self.assertIn("_ml_unavailable", self.API)
+        for name in ("ml_split_comparison", "ml_fusion_benefit"):
+            with self.subTest(endpoint=name):
+                self.assertIn("except ImportError",
+                              _python_function_body(self.API, name))
+
+
+def _python_function_body(source: str, name: str) -> str:
+    """A top-level or decorated Python function's source, by indentation."""
+    match = re.search(rf"^def {re.escape(name)}\(", source, re.M)
+    if not match:
+        raise AssertionError(f"no function named {name}")
+    lines = source[match.start():].splitlines()
+    body = [lines[0]]
+    for line in lines[1:]:
+        if line and not line.startswith((" ", "\t", ")")):
+            break
+        body.append(line)
+    return "\n".join(body)

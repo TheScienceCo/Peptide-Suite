@@ -982,6 +982,38 @@ def holdout() -> Dict:
     }
 
 
+ML_NEEDS_TORCH = (
+    "The model-evaluation layer needs PyTorch, which is not installed here. "
+    "Install it with: pip install --index-url https://download.pytorch.org/whl/cpu torch "
+    "(the CPU wheel; the default index serves a multi-gigabyte CUDA build). "
+    "Nothing else in Peptide Suite depends on it -- identification, biological context "
+    "and the substitution scan all run without it."
+)
+
+
+def _require_torch() -> None:
+    """
+    Refuse an ML request up front when torch is missing, with a message.
+
+    This existed as `try: from ml... except ImportError` around the import
+    statement, which never fired: every ml module imports torch LAZILY, inside
+    the function that needs it, so the module imports cleanly and the
+    ImportError escapes at call time as an unhandled 500. The interface showed
+    "Request failed (500)", which tells a user nothing about the one thing they
+    need to do.
+    """
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        raise HTTPException(status_code=503, detail=ML_NEEDS_TORCH)
+
+
+def _ml_unavailable(exc: ImportError) -> HTTPException:
+    """For a lazy import that still escapes: report it, never a bare 500."""
+    return HTTPException(status_code=503,
+                         detail=f"{ML_NEEDS_TORCH} (underlying error: {exc})")
+
+
 @app.get("/api/ml/status")
 def ml_status() -> Dict:
     """
@@ -992,12 +1024,17 @@ def ml_status() -> Dict:
     server returns and must not be read as the same kind of number.
     """
     try:
+        # torch explicitly. These two modules import cleanly without it -- they
+        # import it lazily, inside the functions that use it -- so importing
+        # them proved nothing and this reported `available: true` on a machine
+        # where every ML endpoint returned a 500.
+        import torch  # noqa: F401
         from ml.datasets.registry import TASKS, trainable_tasks
         from ml.embeddings.encoder import available_encoders
     except ImportError as e:
         return {"available": False,
-                "reason": f"The ML layer requires torch, which is not installed ({e}). "
-                          f"The peptide analysis pipeline does not depend on it."}
+                "reason": ML_NEEDS_TORCH,
+                "underlying_error": str(e)}
     return {
         "available": True,
         "encoders": available_encoders(),
@@ -1024,14 +1061,15 @@ def ml_split_comparison(n_families: int = 40, per_family: int = 8,
     the label is a known function of the input. Running it live rather than
     serving a stored number means the table cannot drift from the code.
     """
-    try:
-        from ml.experiments.split_gap import run
-    except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"ML layer unavailable: {e}")
+    _require_torch()
+    from ml.experiments.split_gap import run
 
     n_families = max(4, min(n_families, 80))
     per_family = max(2, min(per_family, 16))
-    result = run(n_families=n_families, per_family=per_family, seed=seed)
+    try:
+        result = run(n_families=n_families, per_family=per_family, seed=seed)
+    except ImportError as e:
+        raise _ml_unavailable(e)
     return {
         "n_sequences": result.n_sequences,
         "n_clusters": result.n_clusters,
@@ -1090,16 +1128,14 @@ def ml_representation(req: RepresentationRequest) -> Dict:
     category from a computed physical quantity, and the response says which
     encoder made it and how much of the variation the picture actually carries.
     """
-    try:
-        from ml.embeddings.encoder import (
-            DeterministicEncoder, EncoderUnavailable, ESM2Encoder, PositionalOneHotEncoder,
-        )
-        from ml.embeddings.explorer import (
-            ProjectionError, project, single_substitution_variants,
-        )
-        from ml.explain.neighbours import NeighbourError, out_of_distribution
-    except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"The ML layer is not installed ({e}).")
+    _require_torch()
+    from ml.embeddings.encoder import (
+        DeterministicEncoder, EncoderUnavailable, ESM2Encoder, PositionalOneHotEncoder,
+    )
+    from ml.embeddings.explorer import (
+        ProjectionError, project, single_substitution_variants,
+    )
+    from ml.explain.neighbours import NeighbourError, out_of_distribution
 
     sequence = "".join(req.sequence.split()).upper()
     if not sequence or any(c not in "ACDEFGHIKLMNPQRSTVWY" for c in sequence):
@@ -1218,14 +1254,14 @@ def ml_fusion_benefit(n_families: int = 60, per_family: int = 8,
     comparison that cannot clear a shuffled-label null has not compared
     anything.
     """
-    try:
-        from ml.experiments.fusion_benefit import run
-    except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"The ML layer is not installed ({e}).")
+    _require_torch()
+    from ml.experiments.fusion_benefit import run
 
     try:
         result = run(n_families=n_families, per_family=per_family,
                      n_permutations=n_permutations, seed=seed)
+    except ImportError as e:
+        raise _ml_unavailable(e)
     except Exception as e:
         logger.exception("Fusion comparison failed")
         raise HTTPException(status_code=500, detail=str(e))
