@@ -1,7 +1,33 @@
-# Peptide-Suite
+# Peptide-Suite Redux (PDR)
 
 Peptide engineering analysis with the provenance of every number carried
 alongside it.
+
+Note that PDR is 
+
+The Science: Each extrinsic factor influencing a peptide (from surrounding pH, weak Van 
+der Waals forces to quantum mechanics-mediated covalent and ionic bonds) and each intrinsic 
+property of the peptide (from simple hydrophobicity/hydrophilicity analysis influencing 
+3D structure, to protease susceptibility, to identifying preserved motifs across 
+similar peptides), PDR attempts to assign each factor a quantified "importance" in its 
+core functions: 
+1. **Optimization** - Determine singe Amino Acid (AA) substitutions to endogenous
+peptides to enhance its function, either by various methods, including directly
+increasing its binding affinity or efficacy, by decreasing the ability of proteases to
+degrade the peptide (thereby increasing its effective half-life), or by whichever
+measure the user opts to optimize for
+2. **Transformation** - An extension of Optimization, proposes larger scale changes
+to peptides beyond single AA substitutions.
+3. **Peptide Discovery** - A side function created for my amusement whilst looking
+for a novel peptide to test this model on, but I incorporated it, as it has its uses:
+e.g. when you know which downstream molecule needs modulating, a literature-heavy
+analysis of peptides involved in the signalling cascade will determine which peptides
+are involved and to what extent - and importantly, specificity to the specific desired
+function, and ranks the peptides based on (a) specificity to the desired function,
+(b) modularity (c) potency of downstream effects.
+
+
+The ML engine:
 
 The organising rule: **a score appears only if it was computed from real input
 data.** Where a factor could not be computed — no structure, no assay, no
