@@ -117,10 +117,19 @@ class SubstitutionRecommendation:
     net_score: float = 0.0
     ranking_rationale: str = ""
     score_breakdown: Dict = None
+    # What the variant-evidence store knows about this exact change, if
+    # anything. Absent rather than empty when no lookup was made, so that "not
+    # searched" and "searched and found nothing" stay distinguishable -- they
+    # render identically as an empty list and mean opposite things.
+    experimental_precedent: Optional[Dict] = None
 
     def __post_init__(self):
         if self.off_target_effects is None:
             self.off_target_effects = []
+
+    @property
+    def has_experimental_precedent(self) -> bool:
+        return bool((self.experimental_precedent or {}).get("has_precedent"))
 
 
 @dataclass

@@ -287,6 +287,11 @@ def encode_recommendation(rec: SubstitutionRecommendation) -> Dict:
         "net_score": round(rec.net_score, 3),
         "ranking_rationale": rec.ranking_rationale,
         "score_breakdown": rec.score_breakdown or {},
+        # Known biology before prediction. Sent whether or not anything was
+        # found, because "searched and found nothing" is a result and needs to
+        # be distinguishable from "not searched".
+        "experimental_precedent": rec.experimental_precedent,
+        "has_experimental_precedent": rec.has_experimental_precedent,
     }
 
 
@@ -419,6 +424,19 @@ def health() -> Dict:
 def goals() -> Dict:
     """Serve the engine's goal catalogue. The capabilities live in core."""
     return goal_catalog()
+
+
+@app.get("/api/variant-evidence")
+def variant_evidence() -> Dict:
+    """
+    What the empirical variant-evidence store holds.
+
+    Served so the interface can say "the store is empty" rather than rendering
+    an absence of precedent as an absence of interest. The two look the same in
+    a results list and mean different things.
+    """
+    from peptide_suite.core.variant_evidence import store
+    return store().status()
 
 
 @app.post("/api/infer-function")

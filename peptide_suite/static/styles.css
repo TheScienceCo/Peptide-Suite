@@ -1545,3 +1545,43 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
 @media (max-width: 640px) {
   .capcols { grid-template-columns: 1fr; gap: 10px; }
 }
+
+/* ---- experimental precedent ---------------------------------------------
+   Rendered whether or not anything was found. A missing section reads as
+   "nobody has measured this" while meaning "we did not look", so the empty
+   state is a state rather than an absence. */
+.precedent {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 11px; margin: 10px 0; background: var(--page);
+}
+.phead { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.phead > b {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.pstate {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 1px 6px; border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.pstate.yes  { color: var(--status-good); border-color: var(--status-good); }
+.pstate.none { color: var(--text-muted); }
+
+.pmatch {
+  margin-top: 8px; padding-left: 9px; border-left: 2px solid var(--border);
+}
+.pmatch.usable { border-left-color: var(--status-good); }
+.pmhead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 3px; }
+.pkind {
+  font-family: var(--mono); font-size: 10px; color: var(--text-secondary);
+}
+/* The confounding note sits above the outcomes on purpose: a reader who meets
+   "12-fold" first has already attributed it to the substitution. */
+.confound {
+  margin: 5px 0; padding: 5px 8px; border-radius: var(--radius);
+  background: var(--surface-2, var(--page));
+  border: 1px solid var(--status-warning, var(--border));
+  color: var(--text-secondary); font-size: 12px;
+}
+.outcomes { margin: 4px 0 0; padding-left: 17px; color: var(--text-secondary); }
+.outcomes li { margin: 2px 0; }

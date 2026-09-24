@@ -23,6 +23,7 @@ from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.conservation import ConservationAnalyzer
 from peptide_suite.core.substitution_predictor import SubstitutionPredictor
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
+from peptide_suite.core.variant_evidence import precedent_for
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +340,12 @@ class OptimizeWorkflow:
                     net_score=net_score,
                     ranking_rationale=f"Score {net_score:.2f}, confidence {combined_confidence.value}",
                     score_breakdown=breakdown,
+                    # Known biology before prediction: if anyone has actually
+                    # made this change and measured it, that outranks anything
+                    # computed here. Positions are 0-indexed internally and
+                    # 1-indexed in the literature's numbering.
+                    experimental_precedent=precedent_for(
+                        peptide_context.name, position + 1, wt_aa, mutant_aa).to_dict(),
                 )
 
                 all_recs.append(rec)
@@ -369,8 +376,17 @@ class OptimizeWorkflow:
             not_recs.sort(key=lambda r: r.net_score, reverse=True)
             good_recs.extend(not_recs[: 3 - len(good_recs)])
 
-        # Sort by score
-        good_recs.sort(key=lambda r: r.net_score, reverse=True)
+        # Sort by score, with measured precedent ahead of it.
+        #
+        # This is the one place evidence is allowed to reorder the list, and it
+        # does so WITHOUT touching net_score. The two axes stay separate: a
+        # published measurement of this exact change in this exact molecule does
+        # not make the perturbation larger, it makes the claim that the
+        # perturbation matters better supported. So a substitution somebody has
+        # measured comes before an equally-scored one nobody has, and neither
+        # number moves.
+        good_recs.sort(key=lambda r: (r.has_experimental_precedent, r.net_score),
+                       reverse=True)
 
         return good_recs
 

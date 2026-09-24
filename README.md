@@ -465,6 +465,105 @@ the labelled data. Residue-level sensitivity is not duplicated either — the
 substitution landscape's column marginal already answers it, over the real
 pipeline rather than over a model.
 
+## Experimental precedent, and the store that is empty on purpose
+
+The system can say a substitution is a large physicochemical perturbation. It
+could not say whether anyone has ever made that substitution and measured what
+happened. Those are different claims and the second is better, so where it
+exists it now goes above the arithmetic rather than below it.
+
+![Experimental precedent](docs/screenshots/experimental-precedent.png)
+
+**The store is empty, and that is the honest state.** Every outcome worth
+storing needs a citation, and no literature host is reachable from this
+deployment — PubMed, UniProt, EBI and RCSB all fail to connect. Populating it
+from memory would produce exactly the artefact the module exists to prevent: a
+citation-shaped store whose citations nobody can follow, which reads as
+retrieved evidence after one copy-paste. So the schema, the retrieval, the
+ranking and the confounding logic are real and tested, and they currently
+return *"no precedent found"*, which is true. Same shape as the NCAA registry,
+which reports itself empty rather than promoting a residue that has completed
+three of six pipeline stages.
+
+An absence here is an absence **in this store**. It is not evidence that no
+measurement exists, and nothing in the codebase reads it as one.
+
+### A design is not evidence
+
+`Modification` is what someone changed. `MeasuredOutcome` is what they
+measured. A record holding the first without the second is stored as a design:
+`has_evidence` is False and nothing may use it to support a claim about effect.
+The distinction exists because a table of modification names sitting under a
+column headed Evidence acquires the column's meaning.
+
+### A measurement needs a baseline
+
+"Three-fold more potent" is not a fact until it says three-fold more potent
+*than what*, in *what assay*. Both are required fields, refused at
+construction rather than checked at display time, because the number survives
+being copied into a summary and the missing baseline does not. An affinity with
+no named target is refused too — it names no interaction. So is `UNCHANGED`
+recorded alongside a twelve-fold change: one of the two is wrong and which
+cannot be guessed here.
+
+### Combination changes are confounded, and saying so is the feature
+
+The long-acting GLP-1 analogues are the standing example. A marketed analogue
+differs from its parent at several places at once — a backbone substitution, a
+sequence substitution, an attached fatty-acid chain — and its measured
+half-life is a property of that whole construct. Attributing it to the
+substitution is the readiest error in this domain, precisely because the
+substitution is the part that looks like the other rows in a substitution
+table.
+
+A record with more than one modification is marked unattributable and stays
+that way. It is still displayed — knowing the construct exists is worth
+something — with the confounding note placed *above* its outcomes, because a
+reader who meets "12-fold" first has already attributed it to the
+substitution.
+
+### What precedent may and may not do to a ranking
+
+It reorders. It does not rescale. A published measurement of this exact change
+in this exact molecule does not make the perturbation larger; it makes the
+claim that the perturbation matters better supported. So a measured
+substitution sorts ahead of an equally-scored one nobody has measured, and
+neither `net_score` moves. Confidence and magnitude stay on separate axes,
+which is the property the rest of this system is built on.
+
+Four conditions gate whether a stored record supports a claim about a proposed
+substitution, and all four are necessary:
+
+| | |
+|---|---|
+| Something was measured | else it is a design |
+| Attributable to one change | else the effect belongs to the construct |
+| The same change | the same substitution elsewhere is evidence about *that* peptide |
+| In the same molecule | carrying it over needs the contexts argued equivalent, which is not done here |
+
+### Four rows that are not training labels
+
+`ml/datasets/variant_evidence_dataset.py` turns measured outcomes into
+supervised rows, and refuses most of them. A design has no target value. A
+confounded record would teach an attribution nobody made. A direction without a
+magnitude is a classification target, not a regression one, and the two are
+kept apart rather than one coerced into the other. An uncited outcome caps
+below the tier floor, and a model trained on unverifiable numbers produces
+outputs that inherit the unverifiability while looking like predictions.
+
+Every exclusion is counted and explained in the build report rather than
+dropped, because a builder that quietly discards four fifths of a store reports
+a clean dataset and loses the number that matters.
+
+**Leakage is the specific risk here.** This store is built out of variant
+series: an alanine scan is thirty records wearing one molecule's name, so a
+random or variant-level split keeps twenty-nine of them in training and scores
+the model on a peptide it has already seen. `split_by_parent` groups whole
+parent molecules, `check_leakage` refuses a split where any parent or variant
+straddles the boundary, and the resulting row counts deliberately do not match
+the requested fraction — that is the grouping working, not an approximation
+error.
+
 ## Aim, and why it is a window rather than a filing cabinet
 
 Aim gives this repository the one thing it lacked: metrics over time, across

@@ -594,6 +594,72 @@ const VERDICT = {
   not_recommended: { glyph: "✕", word: "Not recommended" },
 };
 
+// ---- experimental precedent -------------------------------------------------
+//
+// Known biology before prediction: what somebody measured outranks what this
+// program computed, so it goes above the derivation rather than below it.
+//
+// An empty result is rendered, not omitted. "Nobody has measured this" and "we
+// did not look" are the same blank space on a page and opposite facts, and a
+// missing section reads as the first while meaning the second.
+
+const MATCH_LABEL = {
+  SAME_PEPTIDE_SAME_SUBSTITUTION: "Same change, same molecule",
+  SAME_PEPTIDE_SAME_POSITION: "Same position, different residue",
+  SAME_SUBSTITUTION_OTHER_PEPTIDE: "Same change, different peptide",
+  SAME_PEPTIDE_OTHER_CHANGE: "Same molecule, different change",
+};
+
+function precedentOf(rec) {
+  const p = rec.experimental_precedent;
+  const box = el("div", "precedent");
+  const head = el("div", "phead");
+  head.append(el("b", null, "Experimental precedent"));
+
+  if (!p || !p.searched) {
+    head.append(el("span", "pstate none", "not searched"));
+    box.append(head);
+    box.append(el("div", "kv",
+      "The variant-evidence store was not queried for this substitution, so nothing "
+      + "here says whether a measurement exists."));
+    return box;
+  }
+
+  const found = p.has_precedent;
+  head.append(el("span", `pstate ${found ? "yes" : "none"}`,
+                 found ? "measured" : "none found"));
+  box.append(head);
+  box.append(el("div", "kv", p.statement));
+
+  if (p.store_is_empty) return box;
+
+  (p.matches || []).forEach((m) => {
+    const row = el("div", `pmatch ${m.usable_as_evidence ? "usable" : "context"}`);
+    const top = el("div", "pmhead");
+    top.append(el("b", null, m.record.name),
+               el("span", "pkind", MATCH_LABEL[m.kind] || m.kind));
+    if (m.record.strongest_tier) top.append(tierBadge(m.record.strongest_tier));
+    row.append(top);
+    row.append(el("div", "kv", m.caveat));
+
+    // The confounding note comes before the outcomes, not after. A reader who
+    // meets "12-fold" first has already attributed it to the substitution.
+    const c = m.record.confounding;
+    if (c && c.is_confounded) row.append(el("div", "confound", c.statement));
+
+    if (!m.record.has_evidence) {
+      row.append(el("div", "kv",
+        "A modification with no measured outcome: a design, not evidence."));
+    } else {
+      const list = el("ul", "outcomes");
+      m.record.outcomes.forEach((o) => list.append(el("li", null, o.description)));
+      row.append(list);
+    }
+    box.append(row);
+  });
+  return box;
+}
+
 function renderRec(rec, rank) {
   const d = el("details", "rec");
   if (rank === 1) d.open = true;
@@ -624,6 +690,9 @@ function renderRec(rec, rank) {
   // than after it: a reader who meets the limits only after the number has
   // already formed a view about the number.
   body.append(limitsOf(rec));
+
+  // Above the arithmetic, because a measurement outranks a computation.
+  body.append(precedentOf(rec));
 
   const bd = rec.score_breakdown;
   if (bd && bd.formula) {
