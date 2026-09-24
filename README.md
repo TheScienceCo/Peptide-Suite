@@ -1,7 +1,69 @@
-# Peptide-Suite
+# Peptide-Suite Redux (PDR)
 
 Peptide engineering analysis with the provenance of every number carried
 alongside it.
+
+Note that PDR is 
+
+The Science: 
+The biochemistry side of Peptide Suite is trying to answer a practical question: if we 
+start with a biologically active peptide, what changes could make it work better without
+accidentally breaking the things that already make it useful? The program first tries to 
+identify what the peptide is, what receptor or target it interacts with, what its normal 
+biological function is, and what parts of its structure are important. From there, it 
+evaluates possible changes using a combination of known biology and physical chemistry. 
+
+Each extrinsic factor influencing a peptide (from surrounding pH, weak Van 
+der Waals forces to quantum mechanics-mediated covalent and ionic bonds) and each intrinsic 
+property of the peptide (from simple hydrophobicity/hydrophilicity analysis influencing 
+3D structure, to protease susceptibility, to identifying preserved motifs across 
+similar peptides), PDR attempts to assign each factor a quantified "importance" in its 
+core functions: 
+
+The main factors it considers/tweaks/measures/predicts are (list is not comprehensive): 
+1. amino-acid sequence
+2. charge and protonation at different pH values
+3. hydrophobicity, sequence conservation
+4. known receptor-binding regions
+5. disulfide bonds
+6. protease cleavage sites
+7. structural constraints
+8. conformational flexibility
+9. peptide pre-organization
+10. native interaction partners
+11. receptor-specific rules
+12. synthetic feasibility
+13. aggregation risk
+14. solubility
+15. immunogenicity
+16. noncanonical amino-acid effects
+17. known experimental structural features
+18. literature evidence, and critically:
+19. documented effects of similar modifications in related peptides.
+
+The goal is not simply to produce the highest-scoring mutation, but to build 
+an evidence-backed case for why a modification might improve potency, stability, 
+selectivity, half-life, manufacturability, or another desired property while also 
+identifying the tradeoffs and admitting when the available data are not strong 
+enough to make a claim.
+
+1. **Optimization** - Determine singe Amino Acid (AA) substitutions to endogenous
+peptides to enhance its function, either by various methods, including directly
+increasing its binding affinity or efficacy, by decreasing the ability of proteases to
+degrade the peptide (thereby increasing its effective half-life), or by whichever
+measure the user opts to optimize for
+2. **Transformation** - An extension of Optimization, proposes larger scale changes
+to peptides beyond single AA substitutions.
+3. **Peptide Discovery** - A side function created for my amusement whilst looking
+for a novel peptide to test this model on, but I incorporated it, as it has its uses:
+e.g. when you know which downstream molecule needs modulating, a literature-heavy
+analysis of peptides involved in the signalling cascade will determine which peptides
+are involved and to what extent - and importantly, specificity to the specific desired
+function, and ranks the peptides based on (a) specificity to the desired function,
+(b) modularity (c) potency of downstream effects.
+
+
+The ML engine:
 
 The organising rule: **a score appears only if it was computed from real input
 data.** Where a factor could not be computed — no structure, no assay, no
@@ -87,10 +149,10 @@ known limitations, reproduction commands — is in
 
 ## Running
 
-The engine holds no coefficients. Every weight, threshold and cutoff comes from
-a policy artifact loaded at startup, and the system refuses to start without
-one rather than falling back to built-in values. A demonstration pack is
-committed so this repository runs out of the box.
+The pubic version of this engine holds no coefficients. Every weight, threshold 
+and cutoff comes from a policy artifact loaded at startup, and the system refuses 
+to start without one rather than falling back to built-in values. 
+A demonstration pack is included so this repository runs out of the box.
 
 ```bash
 pip install -r requirements.txt
@@ -106,11 +168,55 @@ data. Every scored response says so, in the API payload and in the UI, so a
 number produced under it is never mistaken for a measured one. See
 `policy/README.md`.
 
-## Why there is a QM arm
+## Why there is a Quantum Mechanics (QM) arm
 
 The honest justification, and the one that generalises: for non-canonical
 chemistry, quantum mechanics is not an enhancement that sharpens an existing
-number. It is the entry ticket to having a number at all.
+number. It is the entry ticket to having a number at all. 
+
+While studying Tissue Engineering and iPSC reprogramming at the Stem Cell 
+Institute at the University of Minnesota's Stem Cell Institute, my thesis was 
+that chromatin vibrates at a specific frequency, and that specific frequencies
+could be introduced to change chromatin from a tightly-bound, repressed state to
+a loosely bound state accessible by transcriptional machinery. Using this along
+with established methods for creating iPSC would enhance its efficiency by 
+an order of magnitude. Basically, the idea was that you could lay down a beat 
+to let the DNA just open up and let you tinker around under the hood. 
+While my dissertation did not lead to major publications, the theory behind it 
+was accepted by the scientific community, and is currently being used as the 
+backbone theory to several novel experiments that are directly manipulating
+DNA based on its susceptibility to opening at different frequencies. 
+
+I mention this not to stroke my own ego, but to illustrate that QM is not 
+some frivolous aspect added on just so we could add the word "quantum" to
+my project. 
+
+To prove that chromatin was indeed vibrating, it was radiolabeled and its position
+was measured relative to itself - I had to create an R-based program that 
+incorporated QM in order to derive what I called the "Auto-correlation 
+Coefficient" - the degree to which the physical position a specific segment of 
+DNA correlates with itself. In other words, if a molecule were 100% stationary,
+it would have an auto-correlation efficient of 1.0 at each point measured. 
+If a molecule wiggled randomly (e.g. Brownian motion), the graphic visualization 
+of its auto-correlation coefficient (y-axis) for each measured segment (x-axis) 
+would produce a wiggly looking line. 
+
+It wasn't until I incorporated the time-dependent Schrodinger's Equation and its 
+associated concepts in physical biochemistry that I produced an oscillatory waveform.
+This provided proof of two concepts (1) chromatin is indeed vibrating/breathing and 
+can be modified by introducing frequencies, and (2) QM cannot be ignored at the 
+biochemical level. Specifically:
+
+To analyze peptide-receptor binding, the Schrödinger equation is applied through 
+quantum mechanics/molecular mechanics (QM/MM) simulations, where the critical 
+binding site of the peptide and receptor is modeled quantum mechanically while 
+the rest of the protein structure is handled with classical physics. This approach 
+allows researchers to solve the equation for the binding site's electronic structure, 
+accurately calculating the non-covalent interaction energies, hydrogen bonding, 
+and charge transfers driving the attachment. Ultimately, these quantum calculations 
+yield highly precise binding free energies and electronic configurations, which help
+predict binding affinity and optimize peptide-based drug designs.
+
 
 Aib, Nle, Cha, N-methylated backbones, beta-amino acids, hydrocarbon staples,
 fatty-acid linkers, gamma-Glu and OEG spacers — none of these exist in ff19SB,
