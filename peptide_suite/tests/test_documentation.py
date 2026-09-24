@@ -74,3 +74,64 @@ class TestDocumentationLinks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheSuiteNeedsNoThirdPartyPackages(unittest.TestCase):
+    """
+    CI runs the whole suite with nothing installed, on purpose, and this guard
+    is what tells a developer about it before the runner does.
+
+    The failure mode is quiet and has happened twice: a test reaches for
+    `peptide_suite.api` to read a label or a helper, that module imports
+    FastAPI at its top, and the test passes on a machine that has FastAPI and
+    fails in the `boundary` job that deliberately has none. The remedy both
+    times was the same -- the thing being read was engine data, so it moved
+    into `peptide_suite/core/` and the HTTP layer kept only the route.
+
+    Stated as a rule the suite enforces on itself rather than as a comment in
+    the workflow file, because the workflow file is not what someone reads
+    while writing a test.
+    """
+
+    #: Modules that import a third-party package at module scope. Add to this
+    #: only if the dependency is genuinely unavoidable -- and then the test
+    #: importing it needs a skip guard, not an entry here.
+    NEEDS_INSTALL = {
+        "peptide_suite.api": "fastapi",
+    }
+
+    def test_no_test_imports_a_module_that_needs_an_install(self):
+        offenders = []
+        for path in sorted(Path("peptide_suite/tests").glob("test_*.py")):
+            text = path.read_text(encoding="utf-8")
+            for module, package in self.NEEDS_INSTALL.items():
+                pattern = rf"(?m)^\s*(?:from {re.escape(module)} import|import {re.escape(module)})"
+                for match in re.finditer(pattern, text):
+                    line = text[:match.start()].count("\n") + 1
+                    offenders.append(f"{path}:{line} imports {module} (needs {package})")
+        self.assertEqual(
+            offenders, [],
+            "These imports pass locally and fail in the boundary CI job, which installs "
+            "nothing. Move what is being read into peptide_suite/core/ and import it "
+            f"from there: {offenders}")
+
+    def test_the_boundary_job_still_installs_nothing(self):
+        """
+        The guard above is only worth having while the job it protects stays
+        bare. If someone adds a `pip install` to the boundary job, the
+        hermetic-suite guarantee is gone and this should say so loudly rather
+        than the rule quietly becoming decorative.
+        """
+        workflow = Path(".github/workflows/policy-boundary.yml").read_text(encoding="utf-8")
+        boundary = workflow.split("  ml:")[0]
+        # Comments stripped first: the job's own comment says "Deliberately no
+        # `pip install`", and matching that would make the guard fail on the
+        # sentence explaining why it should pass.
+        steps = "\n".join(line for line in boundary.splitlines()
+                          if not line.lstrip().startswith("#"))
+        self.assertNotIn(
+            "pip install", steps,
+            "The boundary job installs a package now. That job existing without one is "
+            "what proves the analysis pipeline is standard-library-only and the suite is "
+            "hermetic; if the install is genuinely needed, this guarantee needs replacing "
+            "rather than deleting.")

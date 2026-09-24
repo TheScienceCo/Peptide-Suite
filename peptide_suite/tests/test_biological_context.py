@@ -297,8 +297,12 @@ class TestLabelsDoNotOverstateCapability(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from peptide_suite.api import goals
-        cls.payload = goals()
+        # The catalogue, not the HTTP layer that serves it. Reading it through
+        # `peptide_suite.api` imported FastAPI, which the boundary CI job does
+        # not install on purpose -- so this class passed locally and failed
+        # there. See TestTheSuiteNeedsNoThirdPartyPackages below.
+        from peptide_suite.core.goal_catalog import goal_catalog
+        cls.payload = goal_catalog()
         cls.goals = {g["id"]: g for g in cls.payload["goals"]}
 
     def test_the_binding_label_disclaims_a_predicted_constant(self):
