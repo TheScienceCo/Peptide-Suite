@@ -684,6 +684,28 @@ substitution, and all four are necessary:
 | The same change | the same substitution elsewhere is evidence about *that* peptide |
 | In the same molecule | carrying it over needs the contexts argued equivalent, which is not done here |
 
+### What to feed it
+
+Nothing here is trained on real labels, and the store is empty. What would
+change that is documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**,
+with a fillable template at
+[docs/variant_evidence_template.csv](docs/variant_evidence_template.csv) and a
+loader that validates every row:
+
+```bash
+python tools/load_variant_evidence.py your_records.csv --dry-run
+```
+
+The short version: single-change variants with a measured outcome, a stated
+comparator, a stated assay and a citation. Count **parent molecules**, not
+rows — thirty variants of one peptide is one molecule for splitting purposes.
+
+The check worth the most is the numbering one. GLP-1 appears in the literature
+in at least three numbering schemes and IGF-1 in two, and a position in the
+wrong scheme lands on the wrong residue while still looking entirely plausible.
+Positions are 1-indexed into the parent sequence supplied in the same row, and
+a row whose position does not hold the residue it claims is rejected.
+
 ### Four rows that are not training labels
 
 `ml/datasets/variant_evidence_dataset.py` turns measured outcomes into

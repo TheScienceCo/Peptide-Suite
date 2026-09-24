@@ -413,3 +413,63 @@ class TestPrecedentDoesNotMoveTheMagnitude(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheLoaderRefusesWhatWouldBeBelieved(unittest.TestCase):
+    """
+    A row that is wrong in a way nobody notices is worse than a row that is
+    missing: it gets trained on, displayed as precedent, and believed.
+    """
+
+    def rows(self, **overrides):
+        row = {
+            "parent": "GLP-1 (7-37)",
+            "parent_sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",
+            "variant_name": "v", "modification_kind": "SUBSTITUTION",
+            "position": "2", "wild_type": "A", "mutant": "G",
+            "modification_description": "", "measure": "PROTEASE_STABILITY",
+            "direction": "INCREASED", "fold_change": "4.0", "value": "", "unit": "",
+            "comparator": "unmodified parent", "assay": "DPP-4 incubation",
+            "target": "DPP4", "pmid": "12345678", "doi": "",
+            "extraction": "CURATOR_READ_FULL_TEXT", "note": "",
+        }
+        row.update(overrides)
+        return row
+
+    def build(self, **overrides):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "load_variant_evidence", pathlib.Path("tools/load_variant_evidence.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module, module.build_record(self.rows(**overrides))
+
+    def test_a_well_formed_row_loads(self):
+        _module, record = self.build()
+        self.assertTrue(record.has_evidence)
+        self.assertIs(record.strongest_tier, EvidenceTier.DIRECT_EXPERIMENTAL)
+
+    def test_a_position_in_the_wrong_numbering_scheme_is_refused(self):
+        """
+        The check worth the most. GLP-1 appears in at least three numbering
+        schemes; a position in the wrong one lands on the wrong residue and
+        still looks entirely plausible, so nothing downstream reads as an
+        error.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "load_variant_evidence", pathlib.Path("tools/load_variant_evidence.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with self.assertRaises(module.RowError) as caught:
+            module.build_record(self.rows(position="8"))
+        self.assertIn("numbering scheme", str(caught.exception))
+
+    def test_a_row_with_no_citation_caps_below_direct_experimental(self):
+        _module, record = self.build(pmid="", doi="")
+        self.assertIs(record.strongest_tier, EvidenceTier.BIOCHEMICAL_PRINCIPLE)
+
+    def test_a_row_with_no_measure_is_a_design(self):
+        _module, record = self.build(measure="", direction="", fold_change="",
+                                     comparator="", assay="", target="", pmid="")
+        self.assertFalse(record.has_evidence)

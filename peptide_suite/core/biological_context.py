@@ -308,6 +308,51 @@ class DisulfideBond:
 
 
 @dataclass(frozen=True)
+class InterfaceSpan:
+    """
+    A stretch of the peptide that contacts a named target, in POSITIONS.
+
+    `ligand_regions` on the interface below is prose -- "the C-terminal helix",
+    "the N-terminal activation region" -- which a reader can use and a scorer
+    cannot. This is the same knowledge as numbers, so a substitution can be
+    asked the only question that makes a binding score mean anything: does this
+    residue touch the receptor at all?
+
+    Positions are 1-indexed into THIS RECORD'S stored mature sequence, never
+    into a paper's numbering. IGF-1 is described in the literature in at least
+    two numbering schemes and GLP-1 in three; a span that silently used one of
+    them would land on the wrong residues and still look plausible. `covers`
+    is the only way callers are meant to ask.
+    """
+    start: int
+    end: int
+    role: str
+    provenance: Provenance
+    target_gene: str = ""
+
+    def __post_init__(self):
+        if self.start < 1 or self.end < self.start:
+            raise ValueError(
+                f"Interface span {self.start}-{self.end} is not a forward 1-indexed "
+                f"range, so it cannot be checked against a sequence.")
+
+    def covers(self, position: int) -> bool:
+        """Whether a 1-indexed position falls in this span."""
+        return self.start <= position <= self.end
+
+    def fits(self, sequence: str) -> bool:
+        """Whether this span lands inside the sequence it claims to describe."""
+        return bool(sequence) and self.end <= len(sequence)
+
+    def encode(self) -> Dict[str, Any]:
+        return {"start": self.start, "end": self.end, "role": self.role,
+                "target_gene": self.target_gene,
+                "tier": self.provenance.max_tier.name,
+                "source": self.provenance.describe(),
+                "needs_verification": self.provenance.needs_verification}
+
+
+@dataclass(frozen=True)
 class BindingInterface:
     """
     What is established about how this peptide meets one target.
@@ -325,11 +370,18 @@ class BindingInterface:
     activation_mechanism: str = ""
     structures: Tuple[str, ...] = ()
     notes: str = ""
+    #: The same contact knowledge as positions, so a scorer can use it.
+    spans: Tuple[InterfaceSpan, ...] = ()
 
     @property
     def is_empty(self) -> bool:
         return not (self.ligand_regions or self.receptor_regions
-                    or self.critical_residues or self.structures)
+                    or self.critical_residues or self.structures or self.spans)
+
+    @property
+    def has_positions(self) -> bool:
+        """Whether this interface can answer a question about a position."""
+        return bool(self.spans)
 
     def encode(self) -> Dict[str, Any]:
         return {
@@ -338,6 +390,8 @@ class BindingInterface:
             "receptor_regions": list(self.receptor_regions),
             "critical_residues": list(self.critical_residues),
             "activation_mechanism": self.activation_mechanism,
+            "spans": [sp.encode() for sp in self.spans],
+            "has_positions": self.has_positions,
             "structures": list(self.structures),
             "notes": self.notes,
             "is_empty": self.is_empty,
@@ -523,6 +577,10 @@ def _build(key: str, record: dict, query_sequence: str,
             structures=tuple(i.get("structures", [])),
             notes=i.get("notes", ""),
             provenance=provenance,
+            spans=tuple(
+                InterfaceSpan(start=sp["start"], end=sp["end"], role=sp["role"],
+                              target_gene=i["target_gene"], provenance=provenance)
+                for sp in i.get("spans", [])),
         )
         for i in record.get("interfaces", [])
     ]
@@ -597,6 +655,41 @@ def unknown_context(sequence: str, unavailable: Optional[List[str]] = None
             "to bind that family's receptor."
         ],
     )
+
+
+def contact_spans(context: "BiologicalContext") -> List[InterfaceSpan]:
+    """
+    Every positional contact span this record carries, across all targets.
+
+    Returned flat because the question a substitution scorer asks is "does
+    anything bind here", and it must be answerable without the caller knowing
+    how many targets a record happens to describe.
+
+    Spans that do not fit the stored sequence are dropped rather than trusted:
+    a span running off the end means the record and the sequence disagree about
+    what molecule this is, and using it would mark the wrong residues.
+    """
+    sequence = context.mature_sequence
+    return [span
+            for interface in context.interfaces
+            for span in interface.spans
+            if span.fits(sequence)]
+
+
+def contact_spans_at(context: "BiologicalContext", position: int) -> List[InterfaceSpan]:
+    """The contact spans covering a 1-indexed position. Empty if none do."""
+    return [s for s in contact_spans(context) if s.covers(position)]
+
+
+def has_contact_map(context: "BiologicalContext") -> bool:
+    """
+    Whether this record can say anything about which residues touch a target.
+
+    The distinction that matters downstream: with no contact map, a binding
+    score is a physicochemical perturbation with no way to know whether it
+    lands anywhere relevant, and it has to say so instead of ranking.
+    """
+    return bool(contact_spans(context))
 
 
 def retrieve(sequence: str = "", name: str = "",
