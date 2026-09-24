@@ -15,6 +15,7 @@ from peptide_suite.core import EvidenceTier
 from peptide_suite.core.biological_context import Provenance, SourceKind
 from peptide_suite.core.variant_evidence import (
     DATA_PATH, Direction, EMPTY_STORE_STATEMENT, EvidenceMatch, EvidenceSchemaError,
+    Extraction,
     MatchKind, MeasuredOutcome, Modification, ModificationKind, OutcomeMeasure,
     PrecedentResult, VariantEvidenceStore, VariantRecord, precedent_for, store,
 )
@@ -104,8 +105,21 @@ class TestNoCitationNoDirectExperimental(unittest.TestCase):
     could drift.
     """
 
-    def test_a_cited_outcome_reaches_direct_experimental(self):
-        self.assertIs(outcome(provenance=CITED).tier, EvidenceTier.DIRECT_EXPERIMENTAL)
+    def test_a_cited_outcome_read_by_a_curator_reaches_direct_experimental(self):
+        """
+        Both halves are needed now: the tier is the weaker of what the source
+        permits and what the extraction permits. A citation says the paper is
+        real; it says nothing about whether the number was read correctly.
+        """
+        self.assertIs(
+            outcome(provenance=CITED,
+                    extraction=Extraction.CURATOR_READ_FULL_TEXT).tier,
+            EvidenceTier.DIRECT_EXPERIMENTAL)
+
+    def test_a_cited_outcome_nobody_is_recorded_as_having_read_does_not(self):
+        self.assertIs(outcome(provenance=CITED).extraction, Extraction.UNRECORDED)
+        self.assertIs(outcome(provenance=CITED).tier,
+                      EvidenceTier.BIOCHEMICAL_PRINCIPLE)
 
     def test_an_uncited_outcome_caps_below_it(self):
         self.assertIs(outcome(provenance=UNCITED).tier,
@@ -119,8 +133,9 @@ class TestNoCitationNoDirectExperimental(unittest.TestCase):
                           f"or accession")
 
     def test_the_records_strongest_tier_is_its_weakest_link(self):
-        record = variant(outcomes=[outcome(provenance=CITED),
-                                   outcome(provenance=UNCITED)])
+        record = variant(outcomes=[
+            outcome(provenance=CITED, extraction=Extraction.CURATOR_READ_FULL_TEXT),
+            outcome(provenance=UNCITED)])
         self.assertIs(record.strongest_tier, EvidenceTier.DIRECT_EXPERIMENTAL)
 
 

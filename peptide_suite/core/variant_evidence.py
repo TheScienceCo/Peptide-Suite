@@ -166,6 +166,55 @@ class Direction(Enum):
     NOT_DETERMINED = "NOT_DETERMINED"
 
 
+class Extraction(Enum):
+    """
+    Who turned a paper into this record, and what that permits.
+
+    `Provenance` answers where a claim came from. It does not answer who read
+    it out, and the two are different failure modes: a PMID can be perfectly
+    real while the number attached to it is a misreading. A parser that takes
+    "a three-fold higher IC50" for "three-fold more potent" has inverted the
+    result, and the citation checks out either way, so the error is invisible
+    to exactly the review that would otherwise catch it.
+
+    So an automated extraction caps below direct-experimental however good its
+    citation is. That is not a claim that parsers are useless -- it is the
+    statement that a machine-read number and a human-read one are different
+    kinds of evidence, and the store is not allowed to forget which it holds.
+    """
+
+    CURATOR_READ_FULL_TEXT = "CURATOR_READ_FULL_TEXT"
+    CURATOR_READ_ABSTRACT = "CURATOR_READ_ABSTRACT"
+    AUTOMATED_PARSE = "AUTOMATED_PARSE"
+    UNRECORDED = "UNRECORDED"
+
+    @property
+    def max_tier(self) -> EvidenceTier:
+        if self in (Extraction.CURATOR_READ_FULL_TEXT,
+                    Extraction.CURATOR_READ_ABSTRACT):
+            return EvidenceTier.DIRECT_EXPERIMENTAL
+        return EvidenceTier.BIOCHEMICAL_PRINCIPLE
+
+    @property
+    def caveat(self) -> str:
+        return {
+            Extraction.CURATOR_READ_FULL_TEXT: "",
+            Extraction.CURATOR_READ_ABSTRACT: (
+                "Read from the abstract only. Abstracts routinely omit the assay and "
+                "the comparator, so check those two fields against the full text before "
+                "relying on them."),
+            Extraction.AUTOMATED_PARSE: (
+                "Extracted automatically, so it caps below direct-experimental whatever "
+                "its citation says. A parser that reads 'a three-fold higher IC50' as "
+                "'three-fold more potent' has inverted the result and the PMID still "
+                "checks out."),
+            Extraction.UNRECORDED: (
+                "How this was extracted is not recorded, so it cannot be established "
+                "that anybody read the paper. Caps below direct-experimental for the "
+                "same reason an automated parse does."),
+        }[self]
+
+
 class EvidenceSchemaError(ValueError):
     """Raised when a record would store something that cannot be read back."""
 
@@ -190,6 +239,10 @@ class MeasuredOutcome:
     unit: str = ""
     target: str = ""                     # receptor or enzyme, where one applies
     note: str = ""
+    #: Who read this out of the paper. Defaults to UNRECORDED, which caps the
+    #: tier: a record that does not say who extracted it has not established
+    #: that anybody did.
+    extraction: Extraction = Extraction.UNRECORDED
 
     def __post_init__(self):
         if not self.comparator.strip():
@@ -220,13 +273,18 @@ class MeasuredOutcome:
     @property
     def tier(self) -> EvidenceTier:
         """
-        The strongest tier this outcome may be reported at.
+        The strongest tier this outcome may be reported at: the weaker of what
+        its source permits and what its extraction permits.
 
-        Delegated to `Provenance.max_tier`, which is where "no citation, no
-        DIRECT_EXPERIMENTAL" is enforced. Re-implementing the rule here would
-        be a second place for it to drift.
+        The source half is delegated to `Provenance.max_tier`, which is where
+        "no citation, no DIRECT_EXPERIMENTAL" lives; re-implementing it here
+        would be a second place for it to drift. The extraction half is the
+        other question, and it is a different one -- a real PMID with a
+        misread number passes the first test and fails this one.
         """
-        return self.provenance.max_tier
+        order = list(EvidenceTier)
+        return max(self.provenance.max_tier, self.extraction.max_tier,
+                   key=order.index)
 
     @property
     def is_quantitative(self) -> bool:
@@ -250,6 +308,8 @@ class MeasuredOutcome:
                 "comparator": self.comparator, "assay": self.assay,
                 "fold_change": self.fold_change, "value": self.value, "unit": self.unit,
                 "target": self.target, "note": self.note, "tier": self.tier.name,
+                "extraction": self.extraction.value,
+                "extraction_caveat": self.extraction.caveat,
                 "is_quantitative": self.is_quantitative,
                 "provenance": self.provenance.describe(),
                 "description": self.describe()}
@@ -643,7 +703,8 @@ def _record_from_dict(raw: Dict[str, Any]) -> VariantRecord:
             comparator=o.get("comparator", ""), assay=o.get("assay", ""),
             provenance=_provenance_from_dict(o.get("provenance", {})),
             fold_change=o.get("fold_change"), value=o.get("value"),
-            unit=o.get("unit", ""), target=o.get("target", ""), note=o.get("note", ""))
+            unit=o.get("unit", ""), target=o.get("target", ""), note=o.get("note", ""),
+            extraction=Extraction[o.get("extraction", "UNRECORDED")])
         for o in raw.get("outcomes", []))
     return VariantRecord(
         name=raw["name"], parent=raw.get("parent", ""), modifications=modifications,
