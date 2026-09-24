@@ -245,6 +245,32 @@ an unknown peptide gets a stated absence rather than an empty context object,
 because "we have no record of this" and "we looked and it has no receptors"
 render identically if the only difference is an empty list.
 
+### Literature retrieval
+
+`retrieve_literature_context` used to return an invented PMID and an abstract
+reading *"This is a placeholder abstract for calibration testing"*, cache it,
+and serve it back as a cache hit with no marker. It is now a real E-utilities
+client.
+
+The search runs **after** identity resolution and queries what a paper would
+actually say — the canonical name, the aliases, the gene, the receptor —
+because complete sequences almost never appear in abstracts. Topics get their
+own queries (receptor, binding site, structure, mutagenesis, alanine scan,
+affinity, analog, variant, substitution), since a peptide's structural
+literature and its engineering literature are different bodies of work and one
+broad query returns whichever is larger. A raw-sequence query exists only as
+the low-yield fallback for peptides nothing is known about, and is marked as
+such.
+
+There is still no offline mode. PubMed is unreachable from this environment, so
+a search here returns `UNAVAILABLE` carrying the actual transport error and
+zero articles. A partial search — some topics returned, then the service died —
+is reported as a failure rather than a success, because reporting the articles
+gathered so far under a success flag claims the remaining topics found nothing.
+Only a live response is ever cached. The tests replace the transport rather
+than reaching the network, which is also how the LIVE path gets exercised at
+all from here.
+
 ### Three errors in the reference data
 
 Auditing the built-in data turned up three entries that would have produced
@@ -502,7 +528,7 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/infer-function` | Identify a sequence or name, and propose a goal for confirmation |
+| `POST /api/infer-function` | Identify a sequence or name, retrieve its biological context, and propose a goal |
 | `POST /api/optimize` | Run the substitution scan against a confirmed goal |
 | `POST /api/substitution-landscape` | The same scan as the full position x residue grid, unranked |
 | `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
