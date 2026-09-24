@@ -19,6 +19,7 @@ blame the peptide for a network problem.
 
 import json
 import logging
+import os
 import re
 import time
 import urllib.error
@@ -112,6 +113,18 @@ def parse_fasta_header(raw: str) -> Dict[str, str]:
     }
 
 
+# Set to disable every live UniProt lookup process-wide. The test suite sets it,
+# because a suite whose assertions depend on whether a network happens to be
+# reachable is not a suite: these tests passed in a sandbox with no route to
+# uniprot.org and failed in CI, which has one, and the difference was invisible
+# from either side.
+OFFLINE_ENV_VAR = "PEPTIDE_SUITE_OFFLINE"
+
+
+def live_lookups_disabled() -> bool:
+    return os.environ.get(OFFLINE_ENV_VAR, "").strip().lower() in {"1", "true", "yes"}
+
+
 class UniProtClient:
     """Time-boxed, cached UniProt queries that degrade gracefully offline."""
 
@@ -120,7 +133,9 @@ class UniProtClient:
         self.cache_dir = Path(cache_dir) / "uniprot"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
-        self.enabled = enabled
+        # The environment can only turn lookups off, never on: a caller that
+        # asked for a disabled client must not have one silently enabled.
+        self.enabled = enabled and not live_lookups_disabled()
         self._unreachable_reason = ""
         # Once the host is established unreachable, stop dialling it. The class
         # promises to be "time-boxed, cached, and degrade gracefully offline",

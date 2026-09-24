@@ -1,0 +1,2 @@
+parent,parent_sequence,variant_name,modification_kind,position,wild_type,mutant,modification_description,measure,direction,fold_change,value,unit,comparator,assay,target,pmid,doi,extraction,note
+GLP-1 (7-37),HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG,EXAMPLE-ROW-DELETE-ME,SUBSTITUTION,2,A,G,A8G in 7-37 numbering = position 2 of the stored sequence,PROTEASE_STABILITY,INCREASED,4.0,,,the unmodified parent peptide,in vitro DPP-4 incubation,DPP4,00000000,,CURATOR_READ_FULL_TEXT,EXAMPLE ONLY - delete this row before loading

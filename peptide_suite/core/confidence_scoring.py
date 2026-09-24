@@ -61,6 +61,8 @@ class ConfidenceScorer:
         magnitude: float = 0.5,
         sources: Optional[List[str]] = None,
         equation_refs: Optional[List[int]] = None,
+        term_key: Optional[str] = None,
+        computed: bool = True,
     ) -> Effect:
         """
         Score a single effect based on evidence tier.
@@ -75,6 +77,11 @@ class ConfidenceScorer:
                       how much this matters, not how sure we are.
             sources: Literature/database citations
             equation_refs: Which equations informed this
+            term_key: Stable identifier for the term, so a consumer can find it
+                without matching on the description text.
+            computed: False when this term had no input data. The effect is
+                still returned, with an explanation, but it must be rendered as
+                absent rather than as a zero.
 
         Returns:
             Effect object with confidence score and level
@@ -102,6 +109,8 @@ class ConfidenceScorer:
             reasoning=reasoning,
             sources=sources or [],
             equation_refs=equation_refs or [],
+            term_key=term_key,
+            computed=computed,
         )
 
     def _score_to_level(self, score: float) -> ConfidenceLevel:
@@ -139,7 +148,12 @@ class ConfidenceScorer:
         for effect in off_targets:
             contribution = effect.magnitude * effect.score
             survival *= 1.0 - contribution
-            terms.append({"description": effect.description, "contribution": round(contribution, 4)})
+            terms.append({
+                "description": effect.description,
+                "contribution": round(contribution, 4),
+                "term_key": effect.term_key,
+                "computed": effect.computed,
+            })
         combined_cost = 1.0 - survival
 
         return {

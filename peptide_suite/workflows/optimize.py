@@ -23,6 +23,7 @@ from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.conservation import ConservationAnalyzer
 from peptide_suite.core.substitution_predictor import SubstitutionPredictor
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
+from peptide_suite.core.variant_evidence import precedent_for
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,12 @@ class OptimizeWorkflow:
         homologs: Optional[List[str]] = None,
     ) -> Tuple[PeptideContext, List[SubstitutionRecommendation]]:
         """
-        Run the full optimization workflow.
+        Run the full optimization workflow and return the top-ranked few.
+
+        `scan()` is the same pipeline without the final ranking cut, for callers
+        that need every cell rather than the winners -- the substitution
+        landscape is the whole grid, and a grid assembled from the top five
+        would be five cells and a lie about the rest.
 
         Args:
             input_sequence_or_name: Raw AA sequence or gene name (e.g., "IGF1", or "MGFPGLQPRR...")
@@ -65,6 +71,67 @@ class OptimizeWorkflow:
             These can then be formatted for display.
         """
 
+        peptide_context, conservation_profile = self._prepare(
+            input_sequence_or_name, confirmed_goal, auto_confirm, homologs
+        )
+        if not peptide_context.sequence or not peptide_context.confirmed_goal:
+            return peptide_context, []
+
+        # Step 3: Run substitution scan
+        logger.info("Step 3: Running substitution scan...")
+        all_recommendations = self._run_substitution_scan(
+            peptide_context, conservation_profile, ph
+        )
+
+        # Step 4: Rank and filter
+        logger.info("Step 4: Ranking recommendations...")
+        ranked = self._rank_recommendations(all_recommendations)
+
+        # Return top 3-5
+        top_recommendations = ranked[:5]
+        logger.info(f"Top {len(top_recommendations)} recommendations selected")
+
+        return peptide_context, top_recommendations
+
+    def scan(
+        self,
+        input_sequence_or_name: str,
+        confirmed_goal: Optional[str] = None,
+        auto_confirm: bool = True,
+        ph: float = 7.4,
+        homologs: Optional[List[str]] = None,
+    ) -> Tuple[PeptideContext, List[SubstitutionRecommendation]]:
+        """
+        Run the pipeline and return every candidate substitution, unranked.
+
+        Same computation as `run()` up to the point where `run()` throws most of
+        it away. Length x 19 recommendations, in position-then-residue order.
+        """
+        peptide_context, conservation_profile = self._prepare(
+            input_sequence_or_name, confirmed_goal, auto_confirm, homologs
+        )
+        if not peptide_context.sequence or not peptide_context.confirmed_goal:
+            return peptide_context, []
+
+        return peptide_context, self._run_substitution_scan(
+            peptide_context, conservation_profile, ph
+        )
+
+    def _prepare(
+        self,
+        input_sequence_or_name: str,
+        confirmed_goal: Optional[str],
+        auto_confirm: bool,
+        homologs: Optional[List[str]],
+    ) -> Tuple[PeptideContext, Dict[int, float]]:
+        """
+        Parse the input, settle the goal, and compute the conservation profile.
+
+        Returns an empty profile when conservation could not be computed, which
+        the predictor is told about separately via
+        `PeptideContext.conservation_available`: an empty dict and a dict of
+        zeros are not the same thing and only one of them is honest.
+        """
         logger.info(f"=== Workflow 1: Optimize Peptide ===")
         logger.info(f"Input: {input_sequence_or_name[:50]}...")
 
@@ -74,7 +141,7 @@ class OptimizeWorkflow:
         # Validate that we have a sequence
         if not peptide_context.sequence:
             logger.error(f"Could not parse '{input_sequence_or_name}' as a valid sequence or recognized peptide name")
-            return peptide_context, []
+            return peptide_context, {}
 
         logger.info(f"Parsed: {peptide_context.sequence[:50]}... (length {len(peptide_context.sequence)})")
 
@@ -94,7 +161,7 @@ class OptimizeWorkflow:
                     ">>> Awaiting user confirmation of inferred function before proceeding. "
                     "(In programmatic mode, pass confirmed_goal or auto_confirm=True)"
                 )
-                return peptide_context, []
+                return peptide_context, {}
             else:
                 peptide_context.confirmed_goal = inferred_fn
 
@@ -163,21 +230,7 @@ class OptimizeWorkflow:
 
         peptide_context.conservation_entropy = conservation_profile
 
-        # Step 3: Run substitution scan
-        logger.info("Step 3: Running substitution scan...")
-        all_recommendations = self._run_substitution_scan(
-            peptide_context, conservation_profile, ph
-        )
-
-        # Step 4: Rank and filter
-        logger.info("Step 4: Ranking recommendations...")
-        ranked = self._rank_recommendations(all_recommendations)
-
-        # Return top 3-5
-        top_recommendations = ranked[:5]
-        logger.info(f"Top {len(top_recommendations)} recommendations selected")
-
-        return peptide_context, top_recommendations
+        return peptide_context, conservation_profile
 
     def _parse_input(self, input_str: str) -> PeptideContext:
         """
@@ -226,6 +279,16 @@ class OptimizeWorkflow:
         all_recs = []
         sequence = peptide_context.sequence
 
+        # Which residues actually touch a receptor. Resolved once for the whole
+        # scan rather than per substitution: it is a property of the molecule,
+        # and 570 identical lookups is 570 chances for one of them to differ.
+        #
+        # Without this the binding lane was position-blind -- it scored a charge
+        # swap on a solvent-facing loop exactly like one inside the contact
+        # helix, because nothing in the scorer had ever been told which was
+        # which.
+        contact = _contact_context_for(peptide_context)
+
         for position in range(len(sequence)):
             wt_aa = sequence[position]
 
@@ -243,6 +306,7 @@ class OptimizeWorkflow:
                     inferred_goal=peptide_context.confirmed_goal or "generic_improvement",
                     ph=ph,
                     conservation_available=peptide_context.conservation_available,
+                    contact=contact,
                 )
 
                 # Combine scores
@@ -287,6 +351,12 @@ class OptimizeWorkflow:
                     net_score=net_score,
                     ranking_rationale=f"Score {net_score:.2f}, confidence {combined_confidence.value}",
                     score_breakdown=breakdown,
+                    # Known biology before prediction: if anyone has actually
+                    # made this change and measured it, that outranks anything
+                    # computed here. Positions are 0-indexed internally and
+                    # 1-indexed in the literature's numbering.
+                    experimental_precedent=precedent_for(
+                        peptide_context.name, position + 1, wt_aa, mutant_aa).to_dict(),
                 )
 
                 all_recs.append(rec)
@@ -317,8 +387,17 @@ class OptimizeWorkflow:
             not_recs.sort(key=lambda r: r.net_score, reverse=True)
             good_recs.extend(not_recs[: 3 - len(good_recs)])
 
-        # Sort by score
-        good_recs.sort(key=lambda r: r.net_score, reverse=True)
+        # Sort by score, with measured precedent ahead of it.
+        #
+        # This is the one place evidence is allowed to reorder the list, and it
+        # does so WITHOUT touching net_score. The two axes stay separate: a
+        # published measurement of this exact change in this exact molecule does
+        # not make the perturbation larger, it makes the claim that the
+        # perturbation matters better supported. So a substitution somebody has
+        # measured comes before an equally-scored one nobody has, and neither
+        # number moves.
+        good_recs.sort(key=lambda r: (r.has_experimental_precedent, r.net_score),
+                       reverse=True)
 
         return good_recs
 
@@ -390,3 +469,26 @@ def format_workflow_summary(peptide_context: PeptideContext, recommendations: Li
     lines.append(f"  - See logs/prediction_calibration.jsonl for audit trail")
 
     return "\n".join(lines)
+
+
+def _contact_context_for(peptide_context) -> "ContactContext":
+    """
+    The contact map for the peptide under scan, or an empty one.
+
+    Keyed on the identified NAME, not on the sequence: the curated records are
+    keyed by name and a scanned sequence may be a variant of one. An empty
+    ContactContext is returned when nothing is known, and the scorer treats
+    that as "unknown", never as "nothing binds anywhere".
+    """
+    from peptide_suite.core.biological_context import (
+        ContactContext, contact_context, retrieve,
+    )
+    name = (peptide_context.name or "").strip()
+    if not name or name == "unnamed_peptide":
+        return ContactContext()
+    try:
+        return contact_context(retrieve(name=name, sequence=peptide_context.sequence))
+    except Exception:
+        # A contact map is an enhancement; failing to build one must never take
+        # the scan down with it.
+        return ContactContext()

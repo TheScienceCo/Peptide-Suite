@@ -98,31 +98,223 @@ function busy(btn, on, label) {
 
 /* ---------- Workflow 1 ---------- */
 
-async function onAnalyze() {
-  const btn = $("#btn-infer");
-  const input = $("#seq").value.trim();
+/**
+ * Identification without being asked for it.
+ *
+ * A button is the wrong affordance for the first question. Pasting a sequence
+ * you already know the name of and then having to press "Identify" to be told
+ * it is a peptide you named is a step that buys nothing: the answer is already
+ * determined by what was pasted. So a paste runs it immediately, and typing
+ * runs it once you stop.
+ *
+ * The Identify button stays, because auto-identification is deliberately
+ * conservative -- it will not fire on something too short to be worth a
+ * request, and a user who wants it anyway needs a way to insist.
+ */
+const AUTO_IDENTIFY_DELAY_MS = 800;
+
+//: Below this many characters an input is more likely half-typed than
+//: finished, and identifying it spends a request to report a failure the user
+//: already knows about. Short peptide NAMES exist, which is why the button
+//: exists; this only governs what happens without being asked.
+const AUTO_IDENTIFY_MIN_CHARS = 4;
+
+let autoIdentifyTimer = null;
+let autoIdentifyLast = "";
+
+function wireAutoIdentify() {
+  const box = $("#seq");
+  if (!box) return;
+
+  const schedule = (delay) => {
+    clearTimeout(autoIdentifyTimer);
+    autoIdentifyTimer = setTimeout(maybeAutoIdentify, delay);
+  };
+
+  box.addEventListener("input", () => {
+    // Editing invalidates whatever is on screen: it describes a different
+    // molecule now. Clearing first means the page is never showing one
+    // peptide's receptors above another one's sequence, not even briefly.
+    if (IDENTIFIED && IDENTIFIED.input !== currentInput()) resetSteps({ clear: true });
+    schedule(AUTO_IDENTIFY_DELAY_MS);
+  });
+
+  // A paste is a complete input by definition -- there is no more of it
+  // coming -- so it does not wait out the typing delay. The timeout is only
+  // to let the value land before it is read.
+  box.addEventListener("paste", () => schedule(0));
+
+  // Example chips set the value directly, which fires no input event.
+  box.addEventListener("change", () => schedule(0));
+}
+
+function maybeAutoIdentify() {
+  const input = currentInput();
+  if (input.length < AUTO_IDENTIFY_MIN_CHARS) return;
+  if (input === autoIdentifyLast) return;        // already answered this one
+  if (IDENTIFIED && IDENTIFIED.input === input) return;
+  if (document.querySelector("#btn-identify[data-busy]")) return;
+  autoIdentifyLast = input;
+  runIdentify({ auto: true });
+}
+
+// The identification the user is currently looking at, and the input it was
+// made from. Keyed on the input so that editing the sequence invalidates it:
+// showing GLP-1's receptors above a scan of something else is the exact
+// confusion the two-step flow exists to prevent.
+let IDENTIFIED = null;
+
+function currentInput() {
+  return $("#seq").value.trim();
+}
+
+/**
+ * Step one. Work out what the molecule IS -- identity, receptors, binding
+ * sites, domain structure, basic properties -- and stop there.
+ *
+ * Split out from Analyze because the two questions are different and the
+ * second is only worth asking once the first has an answer. Previously one
+ * button did both, so the goal selector appeared beside the identification and
+ * a reader chose an engineering objective while still reading what the thing
+ * was.
+ */
+async function runIdentify({ thenGate = false, auto = false } = {}) {
+  const btn = thenGate ? $("#btn-analyze") : $("#btn-identify");
+  const input = currentInput();
   $("#gate-slot").innerHTML = "";
   $("#opt-results").innerHTML = "";
 
   if (!input) {
-    $("#gate-slot").append(notice("Enter a peptide sequence or a peptide name.", "error", "×"));
+    // Only when asked. An automatic run that scolds you for an empty box you
+    // are still filling in is worse than staying quiet.
+    if (!auto) {
+      $("#gate-slot").append(notice("Enter a peptide sequence or a peptide name.", "error", "×"));
+    }
     return;
   }
 
+  btn.setAttribute("data-busy", "1");
   busy(btn, true);
   try {
     const info = await api("/api/infer-function", { input });
-    renderGate(info);
+    IDENTIFIED = { input, info };
+    renderIdentity(info);
+    // The buttons advance either way. Reaching the identification through
+    // Analyze is not a different state from reaching it through Identify, and
+    // leaving Identify on screen afterwards would offer a step already taken.
+    advanceToAnalyze(info);
+    if (thenGate) renderGoalGate(info);
   } catch (e) {
+    IDENTIFIED = null;
     $("#gate-slot").append(notice(e.message, "error", "×"));
+    resetSteps();          // buttons only: the error above is what to read
   } finally {
-    busy(btn, false, "Analyze");
+    btn.removeAttribute("data-busy");
+    busy(btn, false, thenGate ? "Analyze" : "Identify");
   }
 }
 
-function renderGate(info) {
+/**
+ * Step two. Choose what to optimise for and scan.
+ *
+ * Reuses the identification when it is still the one on screen rather than
+ * re-fetching, so Analyze does not silently replace the context the user is
+ * reading. If the sequence has been edited since, this identifies again first
+ * -- Analyze on its own has to work, because a user who ignores step one is
+ * not making a mistake.
+ */
+async function onAnalyze() {
+  const input = currentInput();
+  if (!IDENTIFIED || IDENTIFIED.input !== input) {
+    return runIdentify({ thenGate: true });
+  }
+  renderGoalGate(IDENTIFIED.info);
+  const gate = $("#gate-slot .gate");
+  if (gate) gate.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/**
+ * After a successful identification, Analyze becomes the only button.
+ *
+ * Two buttons side by side ask the user to decide which one they want. One
+ * button, after the step that produced something to act on, says what the next
+ * step is.
+ */
+function advanceToAnalyze(info) {
+  const identify = $("#btn-identify");
+  const analyze = $("#btn-analyze");
+  if (!identify || !analyze) return;
+
+  // Nothing to analyse: a full-length protein has no single sequence to
+  // optimise, and an unparseable input has none at all. Offering the next step
+  // where there is no next step is worse than offering both.
+  const analysable = Boolean(info.sequence) && !info.parse_error;
+  identify.hidden = analysable;
+  analyze.hidden = false;
+  analyze.classList.toggle("primary", analysable);
+  analyze.classList.toggle("ghost", !analysable);
+  analyze.disabled = !analysable;
+
+  const hint = $("#step-hint");
+  if (hint) {
+    hint.hidden = false;
+    hint.textContent = analysable
+      ? "Identified. Next: choose what to optimise for and scan the substitutions."
+      : "Nothing here can be scanned — see above for why.";
+  }
+}
+
+/**
+ * Back to the two-button start.
+ *
+ * `clear` also empties the results, and the input listener passes it: a
+ * changed sequence makes everything on screen describe a different molecule,
+ * and resetting the buttons while leaving GLP-1's receptors above the fold is
+ * the confusion this flow exists to prevent. The error path does not pass it,
+ * because the thing to read there is the error.
+ */
+function resetSteps({ clear = false } = {}) {
+  if (clear) {
+    $("#gate-slot").innerHTML = "";
+    $("#opt-results").innerHTML = "";
+    IDENTIFIED = null;
+    // Forget what was last auto-identified too. Without this, clearing the box
+    // and pasting the same sequence back does nothing at all.
+    autoIdentifyLast = "";
+  }
+  const identify = $("#btn-identify");
+  const analyze = $("#btn-analyze");
+  if (!identify || !analyze) return;
+  identify.hidden = false;
+  analyze.hidden = false;
+  analyze.disabled = false;
+  analyze.classList.remove("primary");
+  analyze.classList.add("ghost");
+  const hint = $("#step-hint");
+  if (hint) hint.hidden = true;
+}
+
+/**
+ * What the molecule is: known biology, then how the identification was
+ * reached, then its measurable properties. No engineering controls.
+ */
+function renderIdentity(info) {
   const slot = $("#gate-slot");
   slot.innerHTML = "";
+
+  // Identity, then what is known about it. The two were the other way round
+  // and it read badly: a context card reporting an empty lookup sat above the
+  // card that had just identified the molecule, so the page appeared to fail
+  // and succeed at the same question in that order.
+  //
+  // Both still come before any engineering control. Clicking Analyze used to
+  // land straight on those, so a reader saw a score before they saw what the
+  // system thought the molecule was.
+  identityCard(info);
+  const bio = renderBiologicalContext(info.biological_context, {
+    name: info.matched_name || "",
+  });
+  if (bio) slot.append(bio);
 
   // A name that matched a protein rather than a peptide: report what is known
   // and which derived motifs can actually be analysed.
@@ -164,8 +356,17 @@ function renderGate(info) {
     return;
   }
 
+}
+
+/**
+ * The identity card: inference level, UniProt, caveats and basic properties.
+ * Split from the goal gate so Identify can show it without asking the user to
+ * pick an engineering objective in the same breath.
+ */
+function identityCard(info) {
+  const slot = $("#gate-slot");
   const gate = el("div", "gate");
-  gate.append(el("h2", null, "Confirm the target function"));
+  gate.append(el("h2", null, "What this is"));
 
   const LEVEL_LABEL = {
     0: "identified in UniProt",
@@ -228,6 +429,30 @@ function renderGate(info) {
       info.alternatives.map((a) => `${a.motif} @ ${a.position} (${a.parent_protein})`).join(", ")));
   }
 
+  const props = info.properties;
+  if (props) {
+    gate.append(el("div", "kv",
+      `${props.length} residues · ${props.charged_residues} charged (${props.percent_charged}%) · ` +
+      `${props.aromatic_count} aromatic · ${props.proline_count} Pro · ${props.cysteine_count} Cys`));
+  }
+
+  slot.append(gate);
+}
+
+/**
+ * The goal gate: what to optimise for, and the button that scans.
+ *
+ * Appended below the identity rather than replacing it, so the context stays
+ * on screen while the objective is chosen.
+ */
+function renderGoalGate(info) {
+  const slot = $("#gate-slot");
+  if ($("#goal-select")) return;          // already open; do not stack two
+  if (!info.sequence || info.parse_error) return;
+
+  const gate = el("div", "gate");
+  gate.append(el("h2", null, "Confirm the target function"));
+
   const row = el("div", "row");
 
   const goalWrap = el("div");
@@ -236,6 +461,7 @@ function renderGate(info) {
   sel.id = "goal-select";
   GOALS.forEach((g) => {
     const o = el("option", null, g.label + (g.quick_win ? "  — quick win" : ""));
+    o.title = g.description || "";
     o.value = g.id;
     sel.append(o);
   });
@@ -265,18 +491,14 @@ function renderGate(info) {
   const btnWrap = el("div", "shrink");
   const run = el("button", "primary", "Run substitution scan");
   run.id = "btn-scan";
-  run.addEventListener("click", () => runScan(info.sequence, sel.value));
+  run.addEventListener("click", () => {
+    ACTIVE_GOAL = GOALS.find((g) => g.id === sel.value) || null;
+    runScan(info.sequence, sel.value);
+  });
   btnWrap.append(run);
 
   row.append(goalWrap, btnWrap);
   gate.append(row, why, desc);
-
-  const props = info.properties;
-  if (props) {
-    gate.append(el("div", "kv",
-      `${props.length} residues · ${props.charged_residues} charged (${props.percent_charged}%) · ` +
-      `${props.aromatic_count} aromatic · ${props.proline_count} Pro · ${props.cysteine_count} Cys`));
-  }
 
   slot.append(gate);
 }
@@ -320,6 +542,10 @@ function renderOptimizeResults(data) {
   const out = $("#opt-results");
   const pn = policyNotice(data.policy);
   if (pn) out.append(pn);
+
+  // What the selected lane computes, before any score from it.
+  const cap = renderCapability(ACTIVE_GOAL);
+  if (cap) out.append(cap);
   const ctx = data.context;
   const hitPositions = new Set(data.recommendations.map((r) => r.position));
 
@@ -506,11 +732,145 @@ function renderConservation(ctx) {
   return card;
 }
 
+// The goal the current scan ran against, so a recommendation can state the
+// limits of the lane that produced it.
+let ACTIVE_GOAL = null;
+
+function limitsOf(rec) {
+  const box = el("div", "limits");
+  const goal = ACTIVE_GOAL
+    || GOALS.find((g) => g.id === rec.target_category)
+    || null;
+
+  box.append(el("b", null, "What this does not establish"));
+  const list = el("ul", "limitlist");
+  const items = (goal && goal.does_not_compute) ? goal.does_not_compute.slice() : [];
+
+  // The direction limit is already in the goal's does_not_compute list, so it
+  // is not appended again here. It appeared twice in the first version.
+  if (!items.length) items.push("No limits were declared for this goal.");
+  items.forEach((t) => list.append(el("li", null, t)));
+  box.append(list);
+
+  if (goal && goal.reasoning_kinds) {
+    box.append(el("div", "kv",
+      "Four kinds of reasoning could bear on a binding question. This result uses "
+      + "only the ones marked available:"));
+    const table = el("div", "kinds");
+    goal.reasoning_kinds.forEach((k) => {
+      const row = el("div", `kind ${k.available ? "on" : "off"}`);
+      const head = el("div", "khead");
+      head.append(el("span", "kstate", k.available ? "used" : "unavailable"),
+                  el("b", null, k.label));
+      row.append(head);
+      row.append(el("div", "kv", k.available ? k.what_it_is : k.what_it_is_not));
+      table.append(row);
+    });
+    box.append(table);
+  }
+  return box;
+}
+
+function renderCapability(goal) {
+  // The capability panel: what the selected lane computes and what it does
+  // not. A label reading "Binding affinity" implied a computed dissociation
+  // constant; what is computed is the size of a perturbation.
+  if (!goal) return null;
+  const box = el("div", "capability");
+  const head = el("div", "caphead");
+  head.append(el("span", "bctitle", "What this analysis computes"));
+  if (goal.strongest_evidence) head.append(tierBadge(goal.strongest_evidence, false));
+  box.append(head);
+
+  const cols = el("div", "capcols");
+  const yes = el("div", "capcol");
+  yes.append(el("div", "capsub", "Computed"));
+  const yesList = el("ul", "limitlist");
+  (goal.computes || []).forEach((t) => yesList.append(el("li", null, t)));
+  yes.append(yesList);
+
+  const no = el("div", "capcol");
+  no.append(el("div", "capsub", "Not computed"));
+  const noList = el("ul", "limitlist");
+  (goal.does_not_compute || []).forEach((t) => noList.append(el("li", null, t)));
+  no.append(noList);
+
+  cols.append(yes, no);
+  box.append(cols);
+  return box;
+}
+
 const VERDICT = {
   recommend: { glyph: "✓", word: "Recommend" },
   recommend_with_caveats: { glyph: "~", word: "With caveats" },
   not_recommended: { glyph: "✕", word: "Not recommended" },
 };
+
+// ---- experimental precedent -------------------------------------------------
+//
+// Known biology before prediction: what somebody measured outranks what this
+// program computed, so it goes above the derivation rather than below it.
+//
+// An empty result is rendered, not omitted. "Nobody has measured this" and "we
+// did not look" are the same blank space on a page and opposite facts, and a
+// missing section reads as the first while meaning the second.
+
+const MATCH_LABEL = {
+  SAME_PEPTIDE_SAME_SUBSTITUTION: "Same change, same molecule",
+  SAME_PEPTIDE_SAME_POSITION: "Same position, different residue",
+  SAME_SUBSTITUTION_OTHER_PEPTIDE: "Same change, different peptide",
+  SAME_PEPTIDE_OTHER_CHANGE: "Same molecule, different change",
+};
+
+function precedentOf(rec) {
+  const p = rec.experimental_precedent;
+  const box = el("div", "precedent");
+  const head = el("div", "phead");
+  head.append(el("b", null, "Experimental precedent"));
+
+  if (!p || !p.searched) {
+    head.append(el("span", "pstate none", "not searched"));
+    box.append(head);
+    box.append(el("div", "kv",
+      "The variant-evidence store was not queried for this substitution, so nothing "
+      + "here says whether a measurement exists."));
+    return box;
+  }
+
+  const found = p.has_precedent;
+  head.append(el("span", `pstate ${found ? "yes" : "none"}`,
+                 found ? "measured" : "none found"));
+  box.append(head);
+  box.append(el("div", "kv", p.statement));
+
+  if (p.store_is_empty) return box;
+
+  (p.matches || []).forEach((m) => {
+    const row = el("div", `pmatch ${m.usable_as_evidence ? "usable" : "context"}`);
+    const top = el("div", "pmhead");
+    top.append(el("b", null, m.record.name),
+               el("span", "pkind", MATCH_LABEL[m.kind] || m.kind));
+    if (m.record.strongest_tier) top.append(tierBadge(m.record.strongest_tier));
+    row.append(top);
+    row.append(el("div", "kv", m.caveat));
+
+    // The confounding note comes before the outcomes, not after. A reader who
+    // meets "12-fold" first has already attributed it to the substitution.
+    const c = m.record.confounding;
+    if (c && c.is_confounded) row.append(el("div", "confound", c.statement));
+
+    if (!m.record.has_evidence) {
+      row.append(el("div", "kv",
+        "A modification with no measured outcome: a design, not evidence."));
+    } else {
+      const list = el("ul", "outcomes");
+      m.record.outcomes.forEach((o) => list.append(el("li", null, o.description)));
+      row.append(list);
+    }
+    box.append(row);
+  });
+  return box;
+}
 
 function renderRec(rec, rank) {
   const d = el("details", "rec");
@@ -537,6 +897,14 @@ function renderRec(rec, rank) {
   body.append(el("div", "kv",
     `Target category: ${rec.target_category} · overall confidence: ${rec.overall_confidence}` +
     (limitedBy ? ` — limited by: ${limitedBy}` : "")));
+
+  // What this result does not establish. Placed before the arithmetic rather
+  // than after it: a reader who meets the limits only after the number has
+  // already formed a view about the number.
+  body.append(limitsOf(rec));
+
+  // Above the arithmetic, because a measurement outranks a computation.
+  body.append(precedentOf(rec));
 
   const bd = rec.score_breakdown;
   if (bd && bd.formula) {
@@ -780,7 +1148,7 @@ function renderCandidate(c) {
 
 /* ---------- wiring ---------- */
 
-const TABS = ["optimize", "transform", "ml", "find"];
+const TABS = ["optimize", "transform", "landscape", "ml", "find"];
 
 function switchTab(which) {
   TABS.forEach((name) => {
@@ -793,9 +1161,12 @@ function switchTab(which) {
 async function init() {
   TABS.forEach((name) => $(`#tab-${name}`).addEventListener("click", () => switchTab(name)));
   $("#btn-transform").addEventListener("click", onTransform);
-  $("#btn-infer").addEventListener("click", onAnalyze);
+  $("#btn-identify").addEventListener("click", () => runIdentify());
+  $("#btn-analyze").addEventListener("click", onAnalyze);
+  wireAutoIdentify();
   $("#btn-find").addEventListener("click", onFind);
   $("#btn-ml").addEventListener("click", onRunML);
+  $("#btn-fusion").addEventListener("click", onFusion);
   $("#query").addEventListener("keydown", (e) => { if (e.key === "Enter") onFind(); });
 
   EXAMPLES.sequences.forEach((ex) => {
@@ -823,6 +1194,10 @@ async function init() {
   } catch {
     $("#version").textContent = "offline";
   }
+
+  // After GOALS is populated: the landscape's goal select is built from it.
+  await initLandscape();
+  await initRepresentation();
 }
 
 init();
@@ -1569,4 +1944,1040 @@ function renderObjectiveRow(od) {
   row.append(el("span", "objclaim", od.claim ? od.claim.type : ""));
   if (od.claim) row.title = od.claim.rendered;
   return row;
+}
+
+/* ---------- Substitution landscape ---------- */
+
+let LANDSCAPE_METRICS = [];
+
+// The steps of each ramp, in order outward from the neutral middle. Kept as
+// token names rather than hex so light and dark swap in the stylesheet, where
+// the two modes are each selected against their own surface rather than one
+// being an inversion of the other.
+const DIV_NEG = ["--div-neg-1", "--div-neg-2", "--div-neg-3", "--div-neg-4"];
+const DIV_POS = ["--div-pos-1", "--div-pos-2", "--div-pos-3", "--div-pos-4"];
+const SEQ_STEPS = ["--seq-100", "--seq-200", "--seq-350", "--seq-450", "--seq-600"];
+
+// Height of the column-marginal strip, in px. Kept in step with the .hc.marg
+// rule in the stylesheet: bar heights are computed against it.
+const MARGIN_STRIP_PX = 34;
+
+function cellColor(value, encoding, bound) {
+  // No range to spread a scale across: every computed cell sits at the bottom
+  // of the ramp rather than being scattered by rounding noise.
+  if (!bound || bound <= 0) {
+    return encoding === "diverging" ? "var(--div-mid)" : `var(${SEQ_STEPS[0]})`;
+  }
+  if (encoding === "diverging") {
+    const n = Math.max(-1, Math.min(1, value / bound));
+    const step = Math.ceil(Math.abs(n) * DIV_POS.length);
+    if (step === 0) return "var(--div-mid)";
+    const ramp = n < 0 ? DIV_NEG : DIV_POS;
+    return `var(${ramp[Math.min(ramp.length, step) - 1]})`;
+  }
+  const n = Math.max(0, Math.min(1, value / bound));
+  const idx = Math.min(SEQ_STEPS.length, Math.max(1, Math.ceil(n * SEQ_STEPS.length)));
+  return `var(${SEQ_STEPS[idx - 1]})`;
+}
+
+function fmtValue(v, metric) {
+  if (v === undefined || v === null) return "—";
+  return metric.key === "hydrophobicity_delta" ? v.toFixed(1)
+       : metric.encoding === "diverging" ? (v >= 0 ? "+" : "") + v.toFixed(2)
+       : v.toFixed(2);
+}
+
+function landscapeLegend(ls) {
+  const m = ls.metric;
+  const wrap = el("div", "heat-legend");
+
+  // No computed cell means no scale to legend. A ramp drawn over an empty grid
+  // invites the reader to place the hatched cells somewhere on it.
+  const ramp = el("div", "ramp");
+  const bound = ls.scale_bound;
+  if (ls.n_computed === 0) {
+    ramp.append(el("span", null, "no value scale — nothing in this grid was computed"));
+  } else if (m.encoding === "diverging") {
+    ramp.append(el("span", null, bound ? `−${fmtValue(bound, m).replace("+", "")}` : "low"));
+    const steps = el("div", "steps");
+    [...DIV_NEG].reverse().forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    const mid = el("i"); mid.style.background = "var(--div-mid)"; steps.append(mid);
+    DIV_POS.forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    ramp.append(steps, el("span", null, bound ? `+${fmtValue(bound, m).replace("+", "")}` : "high"));
+  } else {
+    ramp.append(el("span", null, "0"));
+    const steps = el("div", "steps");
+    SEQ_STEPS.forEach((t) => {
+      const i = el("i"); i.style.background = `var(${t})`; steps.append(i);
+    });
+    ramp.append(steps, el("span", null, bound ? fmtValue(bound, m) : "high"));
+  }
+  wrap.append(ramp);
+
+  if (ls.n_computed > 0 && m.encoding === "diverging" && m.midpoint_meaning) {
+    wrap.append(el("span", null, `middle: ${m.midpoint_meaning}`));
+  }
+
+  const wt = el("div", "key");
+  const wtSwatch = el("i", "wt-cell");
+  wt.append(wtSwatch, el("span", null, "wild-type residue — not a substitution"));
+  wrap.append(wt);
+
+  if (ls.n_not_computed > 0) {
+    const nc = el("div", "key");
+    nc.append(el("i", "nc"), el("span", null, `not computed (${ls.n_not_computed})`));
+    wrap.append(nc);
+  }
+  return wrap;
+}
+
+function landscapeGrid(ls) {
+  const m = ls.metric;
+  const wrap = el("div", "heat-wrap");
+  const scroll = el("div", "heat-scroll");
+  const grid = el("div", "heat");
+  grid.style.setProperty("--cols", String(ls.length));
+
+  // Row 1: position ticks. Every fifth, plus the two ends, so the axis reads
+  // without the numbers colliding at 18px cells.
+  grid.append(el("div", "corner"));
+  for (let i = 0; i < ls.length; i++) {
+    const n = i + 1;
+    const show = n === 1 || n === ls.length || n % 5 === 0;
+    grid.append(el("div", "tick", show ? String(n) : ""));
+  }
+
+  // Row 2: the wild-type sequence itself, so a reader can see which residue
+  // each column is a substitution away from.
+  grid.append(el("div", "corner"));
+  for (let i = 0; i < ls.length; i++) grid.append(el("div", "wt", ls.sequence[i]));
+
+  const byKey = new Map();
+  ls.cells.forEach((c) => byKey.set(`${c.position}:${c.aa}`, c));
+
+  // Column marginal, sharing the grid's columns so it reads as a reduction of
+  // the chart above rather than as a second chart that happens to sit nearby.
+  // Height encodes the most favourable computed value in the column; a column
+  // with nothing computed gets the hatch, not a zero-height bar, because a bar
+  // of no height is a claim that nothing helps.
+  const profile = ls.profile || [];
+  if (profile.length === ls.length) {
+    const computed = profile.filter((p) => p.n_computed > 0);
+    const span = computed.length
+      ? Math.max(...computed.map((p) => Math.abs(m.encoding === "diverging" ? p.best : p.best)), 1e-9)
+      : 0;
+    grid.append(el("div", "rowlab marglab", "best"));
+    for (let pos = 0; pos < ls.length; pos++) {
+      const col = profile[pos];
+      const cell = el("div", "hc marg");
+      if (!col || col.n_computed === 0) {
+        cell.classList.add("nc");
+      } else {
+        const bar = el("div", "margbar");
+        const frac = span > 0 ? Math.min(1, Math.abs(col.best) / span) : 0;
+        bar.style.background = cellColor(col.best, m.encoding, ls.scale_bound);
+        if (m.encoding === "diverging") {
+          // Anchored on a zero baseline, growing up for a gain and down for a
+          // loss. Bare height would encode magnitude alone, so a position where
+          // the best available substitution is strongly harmful would draw a
+          // tall bar and read as the best position on the strip.
+          cell.classList.add("marg-div");
+          // In px, not a percentage: a floor of a percent or two of the strip
+          // rounds a small negative to under a pixel, and a bar that does not
+          // render reads as a column with no result rather than as a column
+          // whose best option is still a loss.
+          bar.style.height = `${Math.max(3, frac * (MARGIN_STRIP_PX / 2))}px`;
+          if (col.best >= 0) bar.style.bottom = "50%"; else bar.style.top = "50%";
+        } else {
+          bar.style.bottom = "0";
+          bar.style.height = `${Math.max(3, frac * MARGIN_STRIP_PX)}px`;
+        }
+        cell.append(bar);
+      }
+      cell.dataset.margin = String(pos);
+      grid.append(cell);
+    }
+  }
+
+  ls.rows.forEach((aa) => {
+    grid.append(el("div", "rowlab", aa));
+    for (let pos = 0; pos < ls.length; pos++) {
+      const c = byKey.get(`${pos}:${aa}`);
+      const cell = el("div", "hc");
+      if (!c) {
+        cell.classList.add("nc");
+      } else if (c.state === "WILD_TYPE") {
+        cell.classList.add("wt-cell");
+      } else if (c.state === "NOT_COMPUTED") {
+        cell.classList.add("nc");
+      } else {
+        cell.style.background = cellColor(c.value, m.encoding, ls.scale_bound);
+      }
+      if (c) cell.dataset.key = `${pos}:${aa}`;
+      grid.append(cell);
+    }
+  });
+
+  scroll.append(grid);
+
+  // Per-mark hover: a cell chart with no tooltip forces the reader to guess the
+  // value from the colour, which is the one thing colour cannot do precisely.
+  const tip = el("div", "heat-tip");
+  tip.hidden = true;
+  wrap.append(scroll, tip);
+
+  const show = (ev) => {
+    const cell = ev.target.closest(".hc");
+    if (!cell) { tip.hidden = true; return; }
+
+    if (cell.dataset.margin !== undefined) {
+      const col = (ls.profile || [])[Number(cell.dataset.margin)];
+      if (!col) { tip.hidden = true; return; }
+      tip.innerHTML = "";
+      tip.append(el("b", null, `Position ${col.position + 1} (${col.wt}) — column summary`));
+      if (col.n_computed > 0) {
+        tip.append(el("div", "val",
+          `best ${fmtValue(col.best, m)} · mean ${fmtValue(col.mean, m)} · ` +
+          `worst ${fmtValue(col.worst, m)}`));
+      }
+      tip.append(el("div", null, col.detail));
+      if (col.n_not_computed > 0) {
+        tip.append(el("div", null, `${col.n_not_computed} of ${col.n_not_computed + col.n_computed} not computed.`));
+      }
+      tip.hidden = false;
+      placeTip(cell);
+      return;
+    }
+
+    if (!cell.dataset.key) { tip.hidden = true; return; }
+    const c = byKey.get(cell.dataset.key);
+    if (!c) { tip.hidden = true; return; }
+    tip.innerHTML = "";
+    const wt = ls.sequence[c.position];
+    tip.append(el("b", null,
+      c.state === "WILD_TYPE"
+        ? `Position ${c.position + 1}: ${wt} (wild type)`
+        : `Position ${c.position + 1}: ${wt} → ${c.aa}`));
+    if (c.state === "COMPUTED") {
+      const line = el("div");
+      line.append(document.createTextNode(`${m.label}: `));
+      line.append(el("span", "val", `${fmtValue(c.value, m)}`));
+      line.append(document.createTextNode(` ${m.units.split(",")[0]}`));
+      tip.append(line);
+    } else if (c.state === "NOT_COMPUTED") {
+      tip.append(el("div", "val", "not computed"));
+    }
+    tip.append(el("div", null, c.detail));
+    if (c.confidence && c.state === "COMPUTED") {
+      tip.append(el("div", null, `Overall confidence for this substitution: ${c.confidence}`));
+    }
+    tip.hidden = false;
+    placeTip(cell);
+  };
+
+  function placeTip(cell) {
+    const box = wrap.getBoundingClientRect();
+    const cb = cell.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(4, cb.left - box.left + cb.width / 2 - tip.offsetWidth / 2),
+      Math.max(4, box.width - tip.offsetWidth - 4)
+    );
+    const above = cb.top - box.top - tip.offsetHeight - 8;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${above > 0 ? above : cb.bottom - box.top + 8}px`;
+  }
+
+  scroll.addEventListener("mousemove", show);
+  scroll.addEventListener("mouseleave", () => { tip.hidden = true; });
+  return wrap;
+}
+
+function landscapeTable(ls) {
+  const m = ls.metric;
+  const det = el("details");
+  det.append(el("summary", null, `Table view — all ${ls.cells.length} cells`));
+  const wrap = el("div", "heat-table-wrap");
+  const table = el("table", "titration heat-table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Pos", "WT", "Sub", "State", m.label, "Detail"].forEach((h) => hr.append(el("th", null, h)));
+  thead.append(hr);
+  const tbody = el("tbody");
+  ls.cells.forEach((c) => {
+    const tr = el("tr");
+    tr.append(el("td", "num", String(c.position + 1)));
+    tr.append(el("td", "res", ls.sequence[c.position]));
+    tr.append(el("td", "res", c.aa));
+    tr.append(el("td", "st", c.state === "COMPUTED" ? "computed"
+                          : c.state === "WILD_TYPE" ? "wild type" : "not computed"));
+    tr.append(el("td", "num", c.state === "COMPUTED" ? fmtValue(c.value, m) : "—"));
+    tr.append(el("td", "det", c.detail));
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+  wrap.append(table);
+  det.append(wrap);
+  return det;
+}
+
+function renderLandscape(d) {
+  const out = $("#landscape-results");
+  out.innerHTML = "";
+  const ls = d.landscape;
+  const m = ls.metric;
+
+  const pn = policyNotice(d.policy);
+  if (pn) out.append(pn);
+
+  const card = el("div", "card");
+  card.append(el("h2", null,
+    `${ls.name && ls.name !== "unnamed_peptide" ? ls.name : "Peptide"} — ${m.label.toLowerCase()}`));
+  card.append(el("div", "kv",
+    `${ls.length} residues × ${ls.rows.length} residue substitutions · goal: ${ls.goal || "unspecified"} · pH ${ls.ph}`));
+  card.append(el("p", "footnote", m.description));
+
+  if (ls.n_computed === 0) {
+    card.append(notice(
+      `No cell of this grid has a computed value. ${ls.not_computed_reason || ""}`.trim(),
+      "warn", "!"
+    ));
+  } else if (ls.n_not_computed > 0) {
+    card.append(notice(
+      `${ls.n_not_computed} of ${ls.n_not_computed + ls.n_computed + ls.length} cells are hatched ` +
+      `because the pipeline did not compute them. ${ls.not_computed_reason || ""}`.trim(),
+      "warn", "!"
+    ));
+  }
+
+  card.append(el("p", "footnote",
+    m.encoding === "diverging"
+      ? "Top strip: the most favourable computed substitution at each position, on a zero " +
+        "baseline — above the line the best available change is a predicted gain, below it " +
+        "the best available change is still a loss. The column marginal of the grid below, " +
+        "not a separate calculation."
+      : "Top strip: the least costly computed substitution at each position — the " +
+        "column marginal of the grid below, not a separate calculation."));
+  card.append(landscapeGrid(ls));
+  card.append(landscapeLegend(ls));
+  if (ls.scale_basis) card.append(el("p", "footnote", ls.scale_basis));
+  card.append(el("p", "footnote", `Computed by: ${m.source}.`));
+  card.append(landscapeTable(ls));
+
+  (ls.notes || []).forEach((n) => card.append(notice(n, "info", "i")));
+  out.append(card);
+}
+
+async function onLandscape() {
+  const btn = $("#btn-landscape");
+  const out = $("#landscape-results");
+  const seq = $("#lseq").value.trim();
+  if (!seq) { out.innerHTML = ""; out.append(notice("Enter a sequence first.", "error", "!")); return; }
+
+  out.innerHTML = "";
+  busy(btn, true);
+  const ph = parseFloat($("#lph").value);
+  try {
+    const homologs = $("#lhomologs").value
+      .split(/[\n,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    const d = await api("/api/substitution-landscape", {
+      input: seq,
+      goal: $("#lgoal").value || null,
+      metric: $("#lmetric").value,
+      ph: Number.isFinite(ph) ? ph : 7.4,
+      homologs: homologs.length ? homologs : null,
+    });
+    renderLandscape(d);
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Build the grid");
+  }
+}
+
+async function initLandscape() {
+  $("#btn-landscape").addEventListener("click", onLandscape);
+
+  EXAMPLES.sequences.forEach((ex) => {
+    const b = el("button", "chip", ex.label);
+    b.addEventListener("click", () => { $("#lseq").value = ex.seq; });
+    $("#lseq-examples").append(b);
+  });
+
+  const goalSel = $("#lgoal");
+  GOALS.forEach((g) => {
+    const o = el("option", null, g.label);
+    o.value = g.id;
+    goalSel.append(o);
+  });
+
+  const metricSel = $("#lmetric");
+  const desc = $("#lmetric-desc");
+  try {
+    const d = await api("/api/landscape-metrics");
+    LANDSCAPE_METRICS = d.metrics;
+    LANDSCAPE_METRICS.forEach((m) => {
+      const o = el("option", null, m.label);
+      o.value = m.key;
+      metricSel.append(o);
+    });
+    metricSel.value = d.default;
+  } catch {
+    desc.textContent = "Could not load the metric list.";
+    return;
+  }
+  const syncDesc = () => {
+    const m = LANDSCAPE_METRICS.find((x) => x.key === metricSel.value);
+    if (!m) return;
+    desc.textContent =
+      `${m.description} Encoded as a ${m.encoding} scale` +
+      (m.encoding === "diverging" ? `, where the middle means: ${m.midpoint_meaning}.` : ".");
+  };
+  metricSel.addEventListener("change", syncDesc);
+  syncDesc();
+}
+
+/* ---------- Representation explorer ---------- */
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs = {}) => {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+  return n;
+};
+
+// Categorical slots in the palette's fixed order, assigned in sequence. The
+// fourth class deliberately takes no hue: the first three slots are what clear
+// the all-pairs separation gate that a scatter has to meet, so "unrelated" is
+// carried by shape instead.
+const VARIANT_SERIES = [
+  { key: "WILD_TYPE", label: "wild type", token: "--series-1" },
+  { key: "SINGLE", label: "single substitution", token: "--series-2" },
+  { key: "MULTI", label: "multi-substitution", token: "--series-3" },
+];
+const VARIANT_BY_KEY = new Map(VARIANT_SERIES.map((v) => [v.key, v]));
+
+function scatterPlot(d) {
+  const W = 660, H = 420;
+  const M = { top: 14, right: 14, bottom: 44, left: 56 };
+  const wrap = el("div", "scatter-wrap");
+  const svg = svgEl("svg", {
+    class: "scatter", viewBox: `0 0 ${W} ${H}`,
+    role: "img", "aria-label": "Principal component projection of substitution variants",
+  });
+
+  const pts = d.points;
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const pad = (lo, hi) => { const s = (hi - lo) || 1; return [lo - s * 0.06, hi + s * 0.06]; };
+  const [x0, x1] = pad(Math.min(...xs), Math.max(...xs));
+  const [y0, y1] = pad(Math.min(...ys), Math.max(...ys));
+  const sx = (v) => M.left + ((v - x0) / (x1 - x0)) * (W - M.left - M.right);
+  const sy = (v) => H - M.bottom - ((v - y0) / (y1 - y0)) * (H - M.top - M.bottom);
+
+  // Recessive grid first, so nothing draws over a data mark.
+  for (let i = 0; i <= 4; i++) {
+    const gx = M.left + (i / 4) * (W - M.left - M.right);
+    const gy = M.top + (i / 4) * (H - M.top - M.bottom);
+    svg.append(svgEl("line", { class: "grid", x1: gx, x2: gx, y1: M.top, y2: H - M.bottom }));
+    svg.append(svgEl("line", { class: "grid", x1: M.left, x2: W - M.right, y1: gy, y2: gy }));
+  }
+  svg.append(svgEl("line", { class: "axis", x1: M.left, x2: W - M.right, y1: H - M.bottom, y2: H - M.bottom }));
+  svg.append(svgEl("line", { class: "axis", x1: M.left, x2: M.left, y1: M.top, y2: H - M.bottom }));
+
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+  const xLabel = svgEl("text", { class: "axlabel", x: (M.left + W - M.right) / 2, y: H - 10, "text-anchor": "middle" });
+  xLabel.textContent = `PC1 — ${pct(d.explained_variance_ratio[0])} of the variation`;
+  const yLabel = svgEl("text", {
+    class: "axlabel", x: 14, y: (M.top + H - M.bottom) / 2, "text-anchor": "middle",
+    transform: `rotate(-90 14 ${(M.top + H - M.bottom) / 2})`,
+  });
+  yLabel.textContent = `PC2 — ${pct(d.explained_variance_ratio[1])}`;
+  svg.append(xLabel, yLabel);
+
+  const marks = svgEl("g");
+  const nodes = [];
+  // Reference last so it sits on top of the cloud it is the centre of.
+  const ordered = [...pts].sort((a, b) => (a.class === "WILD_TYPE") - (b.class === "WILD_TYPE"));
+  ordered.forEach((p) => {
+    const series = VARIANT_BY_KEY.get(p.class);
+    let node;
+    if (!series) {
+      node = svgEl("rect", { class: "other", x: sx(p.x) - 4, y: sy(p.y) - 4, width: 8, height: 8 });
+    } else {
+      const isRef = p.class === "WILD_TYPE";
+      node = svgEl("circle", {
+        class: "pt", cx: sx(p.x), cy: sy(p.y), r: isRef ? 5.5 : 3,
+        fill: `var(${series.token})`,
+      });
+    }
+    node.__point = p;
+    nodes.push(node);
+    marks.append(node);
+  });
+  svg.append(marks);
+
+  // One direct label, on the reference. Labelling 590 points would be noise,
+  // and labelling none leaves the plot's anchor unnamed.
+  const ref = pts.find((p) => p.class === "WILD_TYPE");
+  if (ref) {
+    const t = svgEl("text", { class: "direct", x: sx(ref.x) + 9, y: sy(ref.y) - 7 });
+    t.textContent = "wild type";
+    svg.append(t);
+  }
+
+  wrap.append(svg);
+
+  const tip = el("div", "heat-tip");
+  tip.hidden = true;
+  wrap.append(tip);
+
+  let focused = null;
+  svg.addEventListener("mousemove", (ev) => {
+    const box = svg.getBoundingClientRect();
+    const px = ((ev.clientX - box.left) / box.width) * W;
+    const py = ((ev.clientY - box.top) / box.height) * H;
+    let best = null, bestDist = Infinity;
+    nodes.forEach((n) => {
+      const p = n.__point;
+      const dist = (sx(p.x) - px) ** 2 + (sy(p.y) - py) ** 2;
+      // Ties go to the reference. Variants can land exactly on top of it --
+      // under the composition encoder that is common -- and reporting one of
+      // them while the reference's own mark is the thing under the cursor
+      // reads as the reference having moved.
+      if (dist < bestDist - 1e-9
+          || (dist <= bestDist + 1e-9 && p.class === "WILD_TYPE")) {
+        bestDist = dist;
+        best = n;
+      }
+    });
+    // A generous hit radius: the marks are small because the cloud is dense,
+    // and a hit target the size of the mark would be unusable.
+    if (!best || bestDist > 18 ** 2) {
+      tip.hidden = true;
+      if (focused) { focused.classList.remove("focus"); focused = null; }
+      return;
+    }
+    if (focused !== best) {
+      if (focused) focused.classList.remove("focus");
+      best.classList.add("focus");
+      focused = best;
+    }
+    const p = best.__point;
+    tip.innerHTML = "";
+    tip.append(el("b", null, p.label));
+    tip.append(el("div", null,
+      p.n_substitutions === null
+        ? "Different length from the reference — no substitution count."
+        : `${p.n_substitutions} substitution${p.n_substitutions === 1 ? "" : "s"} from the reference`));
+    tip.append(el("div", "val", `PC1 ${p.x.toFixed(3)} · PC2 ${p.y.toFixed(3)}`));
+    tip.hidden = false;
+    const wbox = wrap.getBoundingClientRect();
+    const left = Math.min(Math.max(4, ev.clientX - wbox.left + 12),
+                          Math.max(4, wbox.width - tip.offsetWidth - 4));
+    tip.style.left = `${left}px`;
+    tip.style.top = `${Math.max(4, ev.clientY - wbox.top - tip.offsetHeight - 10)}px`;
+  });
+  svg.addEventListener("mouseleave", () => {
+    tip.hidden = true;
+    if (focused) { focused.classList.remove("focus"); focused = null; }
+  });
+
+  return wrap;
+}
+
+function scatterLegend(d) {
+  const present = new Set(d.points.map((p) => p.class));
+  const wrap = el("div", "scatter-legend");
+  VARIANT_SERIES.forEach((s) => {
+    if (!present.has(s.key)) return;
+    const key = el("div", "key");
+    const swatch = el("i");
+    swatch.style.background = `var(${s.token})`;
+    const n = d.points.filter((p) => p.class === s.key).length;
+    key.append(swatch, el("span", null, `${s.label} (${n})`));
+    wrap.append(key);
+  });
+  const others = d.points.filter((p) => !VARIANT_BY_KEY.has(p.class));
+  if (others.length) {
+    const key = el("div", "key");
+    key.append(el("i", "other"),
+               el("span", null, `different length — unrelated (${others.length})`));
+    wrap.append(key);
+  }
+  return wrap;
+}
+
+function representationTable(d) {
+  const ref = d.points.find((p) => p.class === "WILD_TYPE");
+  const dist = (p) => (ref ? Math.hypot(p.x - ref.x, p.y - ref.y) : Math.hypot(p.x, p.y));
+  const rows = [...d.points].sort((a, b) => dist(b) - dist(a));
+  const det = el("details");
+  det.append(el("summary", null, `Table view — all ${rows.length} points, furthest from the reference first`));
+  const wrap = el("div", "heat-table-wrap");
+  const table = el("table", "titration heat-table");
+  const thead = el("thead");
+  const hr = el("tr");
+  ["Variant", "Class", "Subs", "PC1", "PC2", "Distance from reference"].forEach((h) => hr.append(el("th", null, h)));
+  thead.append(hr);
+  const tbody = el("tbody");
+  rows.forEach((p) => {
+    const tr = el("tr");
+    tr.append(el("td", "res", p.label));
+    tr.append(el("td", "st", (VARIANT_BY_KEY.get(p.class) || { label: "unrelated" }).label));
+    tr.append(el("td", "num", p.n_substitutions === null ? "—" : String(p.n_substitutions)));
+    tr.append(el("td", "num", p.x.toFixed(3)));
+    tr.append(el("td", "num", p.y.toFixed(3)));
+    tr.append(el("td", "num", dist(p).toFixed(3)));
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+  wrap.append(table);
+  det.append(wrap);
+  return det;
+}
+
+function renderOOD(entries) {
+  // One block per supplied candidate. Deliberately not a chart: a handful of
+  // items with a verdict each is a list, and a chart here would be decoration
+  // over five numbers.
+  const wrap = el("div");
+  wrap.append(el("div", "label", "WHERE EACH CANDIDATE SITS"));
+  wrap.append(el("p", "footnote",
+    "Each candidate's distance to its nearest neighbour in the substitution cloud, placed " +
+    "inside the cloud's own nearest-neighbour distances. A raw distance answers nothing — " +
+    "the same number is close in one space and remote in another — so the reference set " +
+    "supplies the comparison."));
+
+  entries.forEach((o) => {
+    const block = el("div", "ood");
+    block.append(el("div", "t", o.label));
+    if (!o.available) {
+      block.append(notice(o.reason, "warn", "!"));
+      wrap.append(block);
+      return;
+    }
+    // Status wears an icon and a word, never colour alone.
+    block.append(notice(o.verdict, o.is_outside ? "warn" : "info", o.is_outside ? "!" : "i"));
+    block.append(el("div", "kv",
+      `distance to nearest ${o.distance_to_nearest.toFixed(3)} · ` +
+      `the cloud's own median nearest-neighbour distance ${o.reference_median_nn_distance.toFixed(3)} · ` +
+      `${(o.percentile * 100).toFixed(0)}th percentile`));
+    const chips = el("div", "chips");
+    o.nearest.forEach((n) => {
+      chips.append(el("span", "chip static", `${n.label}  ${n.distance.toFixed(3)}`));
+    });
+    block.append(chips);
+    block.append(el("p", "footnote", o.caveat));
+    wrap.append(block);
+  });
+  return wrap;
+}
+
+function renderRepresentation(d) {
+  const out = $("#representation-results");
+  out.innerHTML = "";
+  const card = el("div", "card");
+  card.append(el("h2", null, "Principal components of the substitution set"));
+  card.append(el("div", "kv",
+    `${d.points.length} sequences · ${d.encoder.model} v${d.encoder.version} · ` +
+    `${d.encoder.input_dim}-dimensional input`));
+
+  // The headline is the number, not the picture. A scatter that carries a small
+  // share of the variation invites a reading it cannot support, so the share
+  // goes first and at size.
+  const hero = el("div", "hero-stat");
+  hero.append(el("div", "figure", `${(d.cumulative_explained * 100).toFixed(1)}%`));
+  hero.append(el("div", "caption",
+    "of the variation between these sequences is in the two dimensions plotted below. " +
+    "The rest is in directions not drawn."));
+  card.append(hero);
+
+  // The projection already emits a warning when the encoder has no learned
+  // content; repeating it here as a second notice said the same thing twice.
+  (d.warnings || []).forEach((w) => card.append(notice(w, "warn", "!")));
+  if (d.truncated) {
+    card.append(notice(
+      "The single-substitution cloud was capped for this projection; supplied candidates " +
+      "and the reference were kept. The components shown are those of the points plotted.",
+      "warn", "!"));
+  }
+
+  card.append(scatterPlot(d));
+  card.append(scatterLegend(d));
+  card.append(el("p", "footnote", d.interpretation));
+  if ((d.ood || []).length) card.append(renderOOD(d.ood));
+  card.append(representationTable(d));
+  out.append(card);
+}
+
+async function onRepresentation() {
+  const btn = $("#btn-representation");
+  const out = $("#representation-results");
+  const seq = $("#rseq").value.trim();
+  if (!seq) { out.innerHTML = ""; out.append(notice("Enter a reference sequence first.", "error", "!")); return; }
+  out.innerHTML = "";
+  busy(btn, true);
+  try {
+    const candidates = $("#rcandidates").value
+      .split(/[\n,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean);
+    const d = await api("/api/ml/representation", {
+      sequence: seq,
+      encoder: $("#rencoder").value,
+      candidates: candidates.length ? candidates : null,
+    });
+    renderRepresentation(d);
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Project");
+  }
+}
+
+async function initRepresentation() {
+  $("#btn-representation").addEventListener("click", onRepresentation);
+
+  EXAMPLES.sequences.filter((ex) => !ex.seq.includes(":") && /^[A-Z]+$/.test(ex.seq))
+    .forEach((ex) => {
+      const b = el("button", "chip", ex.label);
+      b.addEventListener("click", () => { $("#rseq").value = ex.seq; });
+      $("#rseq-examples").append(b);
+    });
+
+  const sel = $("#rencoder");
+  const desc = $("#rencoder-desc");
+  let encoders = {};
+  try {
+    const status = await api("/api/ml/status");
+    encoders = status.encoders || {};
+  } catch {
+    desc.textContent = "Could not load the encoder list.";
+    return;
+  }
+  Object.entries(encoders).forEach(([name, info]) => {
+    const o = el("option", null, info.available ? name : `${name} — unavailable`);
+    o.value = name;
+    // An unavailable encoder stays visible and stays unselectable: hiding it
+    // would make the deterministic fallback look like the intended one.
+    o.disabled = !info.available;
+    sel.append(o);
+  });
+  // Prefer the positional encoder where it is available: the composition one
+  // maps distinct sequences to one vector, and a default that silently merges
+  // half a substitution scan is the wrong thing to show first.
+  const preferred = "deterministic-positional-onehot";
+  const firstAvailable = Object.entries(encoders).find(([, i]) => i.available);
+  if (encoders[preferred] && encoders[preferred].available) sel.value = preferred;
+  else if (firstAvailable) sel.value = firstAvailable[0];
+  const syncDesc = () => {
+    const info = encoders[sel.value];
+    desc.textContent = info ? info.note : "";
+  };
+  sel.addEventListener("change", syncDesc);
+  syncDesc();
+}
+
+/* ---------- Does fusion help? ---------- */
+
+function renderFusion(d) {
+  const out = $("#fusion-results");
+  out.innerHTML = "";
+  const card = el("div", "card");
+  card.append(el("h2", null, "Single modality, concatenation, learned fusion"));
+  card.append(el("div", "kv",
+    `modalities: ${d.modalities.join(" + ")} · split: ${d.split} · ` +
+    `${d.n_train} train, ${d.n_test} test`));
+
+  card.append(notice(d.claim_guidance, "warn", "!"));
+
+  (d.skipped || []).forEach((note) => card.append(notice(note, "warn", "!")));
+
+  if (d.arms.length) {
+    const table = el("table", "titration");
+    const thead = el("thead");
+    const hr = el("tr");
+    ["Arm", "ROC-AUC", "95% interval", "Gate"].forEach((h) => hr.append(el("th", null, h)));
+    thead.append(hr);
+    const tbody = el("tbody");
+    d.arms.forEach((a) => {
+      const tr = el("tr");
+      tr.append(el("td", "armname", a.name));
+      tr.append(el("td", "num", a.roc_auc === null ? "—" : a.roc_auc.toFixed(3)));
+      tr.append(el("td", "num",
+        a.ci_low === null ? "—" : `${a.ci_low.toFixed(3)}–${a.ci_high.toFixed(3)}`));
+      // A gate that puts everything on one modality is the single most useful
+      // thing this table can say, so it gets a column rather than a footnote.
+      tr.append(el("td", "grp", a.gate_share
+        ? a.gate_share.map((w, i) => `${d.modalities[i]} ${(w * 100).toFixed(0)}%`).join(" · ")
+        : "—"));
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    // Scroll the table, not the page: a horizontal page scroll at phone width
+    // makes every other card on the page unreadable too.
+    const scroll = el("div", "table-scroll");
+    scroll.append(table);
+    card.append(scroll);
+  }
+
+  if ((d.permutation_null || []).length) {
+    const lo = Math.min(...d.permutation_null), hi = Math.max(...d.permutation_null);
+    card.append(el("p", "footnote",
+      `Shuffled-label null: ${d.permutation_null.length} runs, ROC-AUC ` +
+      `${lo.toFixed(3)}–${hi.toFixed(3)}. A single run of it spans most of that range, ` +
+      `which is why the check is a permutation rather than one control.`));
+  }
+
+  if (d.resolution) card.append(notice(d.resolution, "info", "i"));
+  if (d.verdict) card.append(notice(d.verdict, "info", "i"));
+  out.append(card);
+}
+
+async function onFusion() {
+  const btn = $("#btn-fusion");
+  const out = $("#fusion-results");
+  out.innerHTML = "";
+  busy(btn, true);
+  const families = parseInt($("#fusion-families").value, 10);
+  const perms = parseInt($("#fusion-perms").value, 10);
+  try {
+    const params = new URLSearchParams({
+      n_families: Number.isFinite(families) ? families : 60,
+      n_permutations: Number.isFinite(perms) ? perms : 6,
+    });
+    renderFusion(await api(`/api/ml/fusion-benefit?${params}`));
+  } catch (e) {
+    out.append(notice(e.message, "error", "!"));
+  } finally {
+    busy(btn, false, "Run the comparison");
+  }
+}
+
+/* ---------- Biological context: known biology, before any score ---------- */
+
+// Evidence tiers, rendered as a badge. The badge exists so a reader can tell a
+// database record from a curated note from a calculation without opening the
+// JSON, which was previously the only way.
+const TIER_LABEL = {
+  DIRECT_EXPERIMENTAL: "experimental",
+  HOMOLOG_EXPERIMENTAL: "database",
+  BIOCHEMICAL_PRINCIPLE: "curated",
+  INFERENCE_ONLY: "inferred",
+};
+
+function tierBadge(tier, needsVerification) {
+  const badge = el("span", `tier tier-${(tier || "INFERENCE_ONLY").toLowerCase()}`);
+  badge.textContent = TIER_LABEL[tier] || "inferred";
+  if (needsVerification) {
+    badge.textContent += " · unverified";
+    badge.title = "Curated into this repository and not checked against its primary "
+                + "source. It cannot be reported as an experimental observation.";
+  }
+  return badge;
+}
+
+// Element.append() returns undefined, so it cannot be chained. A helper, so the
+// mistake has one place to not be made in.
+function sectionHead(title) {
+  const head = el("div", "bchead");
+  head.append(el("span", "bctitle", title));
+  return head;
+}
+
+function contextRow(label, value, extra) {
+  if (!value) return null;
+  const row = el("div", "bcrow");
+  row.append(el("span", "bclabel", label));
+  const body = el("span", "bcvalue");
+  body.append(document.createTextNode(value));
+  if (extra) body.append(extra);
+  row.append(body);
+  return row;
+}
+
+function renderReceptor(r) {
+  const box = el("div", "receptor");
+  const head = el("div", "rhead");
+  head.append(el("b", null, r.target_gene || r.target_name));
+  if (r.is_primary) head.append(el("span", "pill primary", "primary"));
+  else head.append(el("span", "pill", r.interaction_type.replace(/_/g, " ").toLowerCase()));
+  head.append(tierBadge(r.tier, r.needs_verification));
+  box.append(head);
+
+  if (r.target_name && r.target_name !== r.target_gene) {
+    box.append(el("div", "kv", r.target_name));
+  }
+  if (r.receptor_class) box.append(el("div", "kv", r.receptor_class));
+  if (r.role) box.append(el("div", "r", r.role));
+
+  // An unmeasured affinity is stated as unmeasured. The alternative -- an empty
+  // field, or worse a zero -- reads as a number.
+  if (r.affinity_available) {
+    const a = r.affinity;
+    box.append(el("div", "kv", `${a.kind} ${a.value} ${a.unit}${r.assay_context ? " · " + r.assay_context : ""}`));
+  } else {
+    box.append(el("div", "kv muted-note", "No measured affinity was retrieved with a source, so none is shown."));
+  }
+  if (r.notes) box.append(el("p", "footnote", r.notes));
+  box.append(el("p", "footnote", `Source: ${r.source}`));
+  return box;
+}
+
+/**
+ * What is KNOWN about the molecule, as opposed to what it is.
+ *
+ * `identity` is the identification from the same response, and it is passed in
+ * to keep two true sentences from contradicting each other on screen. This
+ * card used to open "No established peptide identity was found for this
+ * sequence" directly above a card reading "matched a known peptide — exact
+ * sequence match to GLP-1 (7-36) amide". Both were correct: the inferencer
+ * recognised the sequence and the curated context layer, which is keyed on
+ * GLP-1 (7-37), had no record for it. Printed together they read as the system
+ * disagreeing with itself, and a reader has no way to tell which half to
+ * believe.
+ *
+ * So the empty state now says which of the two things is missing.
+ */
+function renderBiologicalContext(bc, identity) {
+  if (!bc) return null;
+  const card = el("div", "card bio-context");
+  card.append(el("div", "label", "BIOLOGICAL CONTEXT"));
+
+  if (!bc.is_established) {
+    const named = identity && identity.name;
+    card.append(notice(
+      (named
+        ? `This sequence was identified as ${identity.name}, but no curated biological `
+          + "record for it was retrieved. Identification and biological context are "
+          + "separate lookups, and this one came back empty. "
+        : "No established peptide identity was found for this sequence. ")
+      + "So nothing below asserts a receptor, a domain structure or a function, and "
+      + "none is inferred from resemblance to a peptide family.",
+      "warn", "!"));
+    (bc.unavailable_sources || []).forEach((u) =>
+      card.append(el("p", "footnote", `Not consulted or unreachable — ${u}`)));
+    return card;
+  }
+
+  // --- identification ---
+  const ident = el("div", "bcsection");
+  ident.append(el("h3", null, bc.name));
+  const rows = el("div", "bcrows");
+  [["Gene", bc.gene], ["Organism", bc.organism], ["UniProt", bc.uniprot],
+   ["Family", bc.family], ["Form", bc.form_description]]
+    .forEach(([k, v]) => { const r = contextRow(k, v); if (r) rows.append(r); });
+  if (bc.aliases.length) {
+    const r = contextRow("Also called", bc.aliases.join(", "));
+    if (r) rows.append(r);
+  }
+  ident.append(rows);
+  if (bc.needs_verification) {
+    ident.append(notice(
+      "The records below were curated into this repository and have not been checked "
+      + "against UniProt or primary literature from this environment. They are shown as "
+      + "curated, and none of them is reported as an experimental observation.",
+      "warn", "!"));
+  }
+  (bc.retrieval_notes || []).forEach((n) => ident.append(el("p", "footnote", n)));
+  card.append(ident);
+
+  // --- function ---
+  if (bc.function) {
+    const fn = el("div", "bcsection");
+    const head = el("div", "bchead");
+    head.append(el("span", "bctitle", "Function"), tierBadge(bc.function.tier, bc.function.needs_verification));
+    fn.append(head, el("p", "r", bc.function.value));
+    card.append(fn);
+  }
+
+  // --- structure ---
+  if (bc.regions.length || bc.disulfides.length || bc.precursor_of) {
+    const st = el("div", "bcsection");
+    st.append(sectionHead("Structure"));
+    if (bc.mature_length) {
+      st.append(el("div", "kv", `Mature peptide: ${bc.mature_length} residues`));
+    }
+    if (bc.precursor_of) st.append(el("p", "footnote", bc.precursor_of));
+    bc.regions.forEach((r) => {
+      const row = el("div", "region");
+      const head = el("div", "rhead");
+      head.append(el("b", null, r.name), el("span", "pill", `${r.start}–${r.end}`),
+                  tierBadge(r.tier, r.needs_verification));
+      row.append(head);
+      if (r.residues) row.append(el("div", "seqline", r.residues));
+      if (r.role) row.append(el("div", "r", r.role));
+      st.append(row);
+    });
+    if (bc.disulfides.length) {
+      const ds = el("div", "kv");
+      ds.append(document.createTextNode(
+        "Disulfides: " + bc.disulfides.map((b) => `C${b.first}–C${b.second}`).join(", ")));
+      st.append(ds);
+      // A pairing that does not land on cysteines means the table and the
+      // sequence disagree, and one of them is wrong.
+      if ((bc.disulfide_inconsistencies || []).length) {
+        st.append(notice(
+          `Curated disulfide pair(s) ${bc.disulfide_inconsistencies.join(", ")} do not land `
+          + `on cysteines in the stored sequence. Neither is used until that is resolved.`,
+          "error", "×"));
+      }
+    }
+    card.append(st);
+  }
+
+  // --- receptors ---
+  const rec = el("div", "bcsection");
+  rec.append(sectionHead("Receptors and molecular targets"));
+  if (!bc.primary_receptors.length && !bc.secondary_receptors.length) {
+    rec.append(notice("No established receptor or molecular target was retrieved for this peptide.",
+                      "warn", "!"));
+  } else {
+    bc.primary_receptors.forEach((r) => rec.append(renderReceptor(r)));
+    if (bc.secondary_receptors.length) {
+      rec.append(el("p", "footnote",
+        "Secondary interactions — cross-reactivity, binding proteins and proteases. "
+        + "Design-relevant, and not the principal receptor."));
+      bc.secondary_receptors.forEach((r) => rec.append(renderReceptor(r)));
+    }
+  }
+  card.append(rec);
+
+  // --- binding interface ---
+  const iface = el("div", "bcsection");
+  iface.append(sectionHead("Binding interface"));
+  if (!bc.interface_available) {
+    iface.append(notice(
+      "No sufficiently supported binding-interface annotation was retrieved. Residue-level "
+      + "contacts come from structures and mutagenesis; none is substituted from "
+      + "hydrophobicity or charge reasoning.",
+      "warn", "!"));
+  } else {
+    bc.interfaces.forEach((i) => {
+      const box = el("div", "receptor");
+      const ihead = el("div", "rhead");
+      ihead.append(el("b", null, i.target_gene), tierBadge(i.tier, i.needs_verification));
+      box.append(ihead);
+      if (i.ligand_regions.length) box.append(el("div", "kv", `Ligand side: ${i.ligand_regions.join(", ")}`));
+      if (i.receptor_regions.length) box.append(el("div", "kv", `Receptor side: ${i.receptor_regions.join(", ")}`));
+      if (i.critical_residues.length) box.append(el("div", "kv", `Critical residues: ${i.critical_residues.join(", ")}`));
+      if (i.activation_mechanism) box.append(el("div", "r", i.activation_mechanism));
+      if (i.structures.length) box.append(el("div", "kv", `Structures: ${i.structures.join(", ")}`));
+      iface.append(box);
+    });
+  }
+  card.append(iface);
+
+  // --- data availability ---
+  if ((bc.unavailable_sources || []).length) {
+    const avail = el("div", "bcsection");
+    avail.append(sectionHead("Data availability"));
+    bc.unavailable_sources.forEach((u) => avail.append(el("div", "kv", u)));
+    avail.append(el("p", "footnote",
+      "A source that could not be reached is reported as unreachable, not as an absence of "
+      + "information. The two are different answers."));
+    card.append(avail);
+  }
+  return card;
 }

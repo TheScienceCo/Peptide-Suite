@@ -1,0 +1,235 @@
+{
+  "_about": [
+    "Curated biological context for recognised peptides.",
+    "",
+    "EVERY RECORD HERE IS CURATED_UNVERIFIED UNLESS IT CARRIES A CITATION.",
+    "",
+    "These entries were written into this repository from domain knowledge. No",
+    "network route to UniProt, PubMed, EBI or RCSB exists from the environment",
+    "this file was authored in, so nothing here has been checked against its",
+    "primary source. That is recorded on every claim rather than assumed away:",
+    "Provenance.max_tier caps a CURATED_UNVERIFIED claim at BIOCHEMICAL_PRINCIPLE,",
+    "so no amount of certainty on the author's part can make one of these read as",
+    "an experimental observation.",
+    "",
+    "When live retrieval is available, the retriever prefers it and marks the",
+    "result LIVE_DATABASE. These records are the fallback, and they say so.",
+    "",
+    "Fields left empty are left empty. PDB identifiers and PMIDs in particular",
+    "are absent rather than guessed: a wrong accession is worse than a missing",
+    "one, because it looks checkable and survives review."
+  ],
+  "schema_version": "1.0.0",
+  "peptides": {
+    "IGF-1": {
+      "name": "Insulin-like growth factor 1",
+      "aliases": [
+        "IGF-1",
+        "IGF1",
+        "somatomedin C",
+        "IGF-I",
+        "mechano growth factor parent"
+      ],
+      "gene": "IGF1",
+      "organism": "Homo sapiens",
+      "uniprot": "P05019",
+      "family": "insulin superfamily",
+      "form": "MATURE_PEPTIDE",
+      "precursor_of": "IGF-1 is produced from a precursor (UniProt P05019) by removal of a signal peptide and a C-terminal E-peptide; the mature circulating form is the 70-residue chain below.",
+      "mature_sequence": "GPETLCGAELVDALQFVCGDRGFYFNKPTGYGSSSRRAPQTGIVDECCFRSCDLRRLEMYCAPLKPAKSA",
+      "function": "Mitogenic and anabolic growth factor; mediates much of the growth-promoting action of growth hormone, and signals through the IGF-1 receptor tyrosine kinase.",
+      "regions": [
+        {
+          "name": "B domain",
+          "start": 1,
+          "end": 29,
+          "role": "Contributes to receptor binding; structurally analogous to the insulin B chain."
+        },
+        {
+          "name": "C domain",
+          "start": 30,
+          "end": 41,
+          "role": "Connecting domain, retained in the mature peptide unlike insulin's C-peptide. Implicated in IGF1R selectivity over the insulin receptor."
+        },
+        {
+          "name": "A domain",
+          "start": 42,
+          "end": 62,
+          "role": "Structurally analogous to the insulin A chain; contributes to the receptor-binding surface."
+        },
+        {
+          "name": "D domain",
+          "start": 63,
+          "end": 70,
+          "role": "C-terminal extension with no insulin counterpart."
+        }
+      ],
+      "disulfides": [
+        {
+          "first": 6,
+          "second": 48
+        },
+        {
+          "first": 18,
+          "second": 61
+        },
+        {
+          "first": 47,
+          "second": 52
+        }
+      ],
+      "modifications": [],
+      "receptors": [
+        {
+          "target_name": "Insulin-like growth factor 1 receptor",
+          "target_gene": "IGF1R",
+          "target_accession": "P08069",
+          "interaction_type": "SIGNALLING_RECEPTOR",
+          "receptor_class": "receptor tyrosine kinase (disulfide-linked alpha2-beta2 heterotetramer)",
+          "is_primary": true,
+          "role": "The principal signalling receptor for IGF-1. Ligand binding drives a conformational change in the ectodomain and trans-autophosphorylation of the intracellular kinase domains.",
+          "notes": ""
+        },
+        {
+          "target_name": "Insulin receptor, isoform A",
+          "target_gene": "INSR",
+          "target_accession": "P06213",
+          "interaction_type": "SIGNALLING_RECEPTOR",
+          "receptor_class": "receptor tyrosine kinase",
+          "is_primary": false,
+          "role": "Cross-reactive: IGF-1 binds the A isoform of the insulin receptor with lower affinity than IGF1R. Relevant to selectivity engineering.",
+          "notes": "Reported as a cross-reactivity relationship rather than a principal receptor. No affinity value is recorded here because none was retrieved with a source."
+        },
+        {
+          "target_name": "Insulin-like growth factor binding proteins 1-6",
+          "target_gene": "IGFBP1-6",
+          "target_accession": "",
+          "interaction_type": "BINDING_PROTEIN",
+          "receptor_class": "secreted binding protein family",
+          "is_primary": false,
+          "role": "The great majority of circulating IGF-1 is bound to IGFBPs rather than free. Binding-protein affinity is a design axis in its own right: engineered variants that evade IGFBP binding behave very differently in vivo from the native peptide.",
+          "notes": ""
+        }
+      ],
+      "interfaces": [
+        {
+          "target_gene": "IGF1R",
+          "ligand_regions": [
+            "B domain (1-29)",
+            "C domain (30-41)",
+            "A domain (42-62)"
+          ],
+          "receptor_regions": [
+            "ectodomain"
+          ],
+          "critical_residues": [],
+          "activation_mechanism": "Ligand binding to the ectodomain drives a conformational change and trans-autophosphorylation of the intracellular kinase domains.",
+          "structures": [],
+          "notes": "Spans are this record's own curated domains, restated as positions, and only those domains whose curated role already states a receptor-binding function. The D domain is deliberately absent: its curated role is 'C-terminal extension with no insulin counterpart' and says nothing about receptor contact, so it is not marked as one.",
+          "spans": [
+            {
+              "start": 1,
+              "end": 29,
+              "role": "B domain: contributes to the receptor-binding surface."
+            },
+            {
+              "start": 30,
+              "end": 41,
+              "role": "C domain: implicated in IGF1R selectivity over the insulin receptor."
+            },
+            {
+              "start": 42,
+              "end": 62,
+              "role": "A domain: contributes to the receptor-binding surface."
+            }
+          ]
+        }
+      ],
+      "curation_note": "Domain boundaries and the disulfide pattern follow the standard B/C/A/D description of mature IGF-1. The disulfide pairs are checked against the stored sequence at load time (all six partners must be cysteines) but that check cannot confirm the pairing itself. No PDB identifiers are listed because none could be verified from this environment."
+    },
+    "GLP-1 (7-37)": {
+      "name": "Glucagon-like peptide 1 (7-37)",
+      "aliases": [
+        "GLP-1",
+        "GLP-1 (7-37)",
+        "glucagon-like peptide-1"
+      ],
+      "gene": "GCG",
+      "organism": "Homo sapiens",
+      "uniprot": "P01275",
+      "family": "glucagon superfamily",
+      "form": "MATURE_PEPTIDE",
+      "precursor_of": "Processed from proglucagon (UniProt P01275) by prohormone convertase; GLP-1 (7-37) and the amidated (7-36) form are the bioactive products.",
+      "mature_sequence": "HAEGTFTSDVSSYLEGQAAKEFIAWLVKGRG",
+      "function": "Incretin hormone: potentiates glucose-dependent insulin secretion, suppresses glucagon, slows gastric emptying and promotes satiety.",
+      "regions": [
+        {
+          "name": "N-terminal activation region",
+          "start": 1,
+          "end": 8,
+          "role": "Required for receptor activation. The class B1 two-domain model places this segment in the receptor transmembrane core; it is also where DPP-4 cleaves."
+        },
+        {
+          "name": "C-terminal affinity helix",
+          "start": 9,
+          "end": 31,
+          "role": "Helical segment engaging the receptor extracellular domain; dominates binding affinity."
+        }
+      ],
+      "disulfides": [],
+      "modifications": [],
+      "receptors": [
+        {
+          "target_name": "Glucagon-like peptide 1 receptor",
+          "target_gene": "GLP1R",
+          "target_accession": "P43220",
+          "interaction_type": "SIGNALLING_RECEPTOR",
+          "receptor_class": "class B1 G protein-coupled receptor",
+          "is_primary": true,
+          "role": "The signalling receptor for GLP-1; couples to Gs and raises cAMP.",
+          "notes": ""
+        },
+        {
+          "target_name": "Dipeptidyl peptidase 4",
+          "target_gene": "DPP4",
+          "target_accession": "P27487",
+          "interaction_type": "PROTEASE",
+          "receptor_class": "serine exopeptidase",
+          "is_primary": false,
+          "role": "Cleaves GLP-1 after the penultimate alanine, giving the native peptide a very short circulating half-life. The dominant liability that protease-resistance engineering targets.",
+          "notes": ""
+        }
+      ],
+      "interfaces": [
+        {
+          "target_gene": "GLP1R",
+          "ligand_regions": [
+            "N-terminal activation region (residues 1-8 of the stored sequence)",
+            "C-terminal affinity helix (residues 9-31 of the stored sequence)"
+          ],
+          "receptor_regions": [
+            "extracellular domain",
+            "transmembrane core"
+          ],
+          "critical_residues": [],
+          "activation_mechanism": "Class B1 two-domain mechanism: the C-terminal helix binds the receptor extracellular domain and carries most of the affinity, while the N-terminus inserts into the transmembrane core and drives activation. The two halves do different jobs, so a substitution's consequence depends on which one it lands in.",
+          "structures": [],
+          "notes": "The spans below are the SAME coordinates as this record's curated domain regions, restated as positions so the substitution scorer can use them. No new structural claim is made here and no residue-level contact list is asserted: region resolution is what is curated, so region resolution is what is stored.",
+          "spans": [
+            {
+              "start": 1,
+              "end": 8,
+              "role": "N-terminal activation region: inserts into the receptor transmembrane core. Substitutions here bear on activation rather than on affinity."
+            },
+            {
+              "start": 9,
+              "end": 31,
+              "role": "C-terminal affinity helix: engages the receptor extracellular domain and carries most of the binding affinity."
+            }
+          ]
+        }
+      ],
+      "curation_note": "Region boundaries describe the standard class B1 two-domain division and are approximate; they are recorded as curated rather than as structurally resolved. No PDB identifiers are listed because none could be verified from this environment."
+    }
+  }
+}

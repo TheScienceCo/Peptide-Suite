@@ -72,9 +72,12 @@ class EvidenceRetriever:
     Gracefully handles network failures and missing APIs.
     """
 
-    def __init__(self, cache_dir: str = ".evidence_cache"):
+    def __init__(self, cache_dir: str = ".evidence_cache", pubmed=None):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
+        # Injectable so the transport can be replaced in tests. The default
+        # is a real client; there is no offline substitute.
+        self._pubmed = pubmed
 
         # API keys (can be set via env var, otherwise optional)
         self.ncbi_api_key = None  # In production: os.getenv("NCBI_API_KEY")
@@ -233,16 +236,40 @@ class EvidenceRetriever:
                 service="PubMed E-utilities",
             )
 
-        # There is no honest offline version of a literature search. The
-        # previous version returned an invented PMID and an abstract reading
-        # "This is a placeholder abstract for calibration testing", then cached
-        # it, after which it came back as a cache hit with no marker at all.
+        # Live retrieval, for real. There is still no honest offline version:
+        # a search that cannot reach PubMed returns UNAVAILABLE with the
+        # transport error, and never a bundled article list. The version before
+        # this one returned an invented PMID and an abstract reading "This is a
+        # placeholder abstract for calibration testing", then cached it, after
+        # which it came back as a cache hit with no marker at all.
+        from .literature import (
+            PubMedClient, QueryTopic, build_queries, search_literature,
+        )
+
+        topics = ([QueryTopic(keyword)] if keyword in {t.value for t in QueryTopic}
+                  else list(QueryTopic))
+        queries = build_queries(name=gene_name, gene=gene_name, topics=topics)
+        result = search_literature(self._pubmed or PubMedClient(), queries)
+
+        if result.reachable:
+            payload = [a.encode() for a in result.articles]
+            # Only a live response is cached. _save_cache refuses anything else,
+            # and this is the call site that guarantee exists for.
+            self._save_cache(cache_path, {"articles": payload},
+                             source=RetrievalSource.LIVE)
+            return Retrieval(
+                payload=payload,
+                source=RetrievalSource.LIVE,
+                detail=result.status,
+                service="PubMed E-utilities",
+            )
+
         return Retrieval(
             payload=[],
             source=RetrievalSource.UNAVAILABLE,
-            detail=("PubMed retrieval is not wired up in this build, so no literature was "
-                    "consulted. Any claim below rests on sequence computation or on the "
-                    "bundled reference set, not on a literature search."),
+            detail=(f"No literature was retrieved: {result.status}. Any claim below rests "
+                    f"on sequence computation or on the bundled reference set, not on a "
+                    f"literature search."),
             service="PubMed E-utilities",
         )
 

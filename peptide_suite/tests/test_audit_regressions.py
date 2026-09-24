@@ -142,6 +142,36 @@ class TestGarbageInputIsNotIdentified(unittest.TestCase):
                 self.assertEqual(recommendations, [])
 
 
+class TestTheSuiteIsHermetic(unittest.TestCase):
+    """
+    No assertion in this suite may depend on whether a host is reachable.
+
+    Three did. They took the reference-set path in a sandbox with no route to
+    uniprot.org and the live path on a CI runner that has one, so the same
+    commit passed locally and failed in CI -- and, worse, the reverse was
+    equally possible. A test whose result depends on the weather is not a test,
+    and the failure mode is invisible from either side.
+    """
+
+    def test_live_lookups_are_disabled_for_the_suite(self):
+        from peptide_suite.core.uniprot_client import live_lookups_disabled
+        self.assertTrue(live_lookups_disabled(),
+                        "the tests package must disable live lookups before anything "
+                        "constructs a client")
+
+    def test_a_default_client_does_not_dial(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(UniProtClient(cache_dir=tmp).enabled)
+
+    def test_the_environment_can_only_turn_lookups_off(self):
+        # A caller that explicitly asked for a disabled client must not have one
+        # silently enabled by an environment that happens to allow lookups.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(UniProtClient(cache_dir=tmp, enabled=False).enabled)
+
+
 class TestUniProtDoesNotRedialAnUnreachableHost(unittest.TestCase):
     """
     The class promises to be time-boxed and to degrade gracefully offline. It
@@ -154,9 +184,27 @@ class TestUniProtDoesNotRedialAnUnreachableHost(unittest.TestCase):
         self.assertFalse(UniProtClient()._circuit_open)
 
     def test_a_transport_failure_opens_the_circuit(self):
+        import pathlib
+        import tempfile
         import urllib.error
-        client = UniProtClient(cache_dir="/nonexistent-cache-dir-for-test")
-        client._cache_path = lambda key: __import__("pathlib").Path("/nonexistent/x.json")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            client = UniProtClient(cache_dir=tmp)
+            # The suite runs with live lookups disabled, and this test is the
+            # one that must reach the transport layer -- with a mocked
+            # urlopen, so it still touches no network. Re-enabling it here is
+            # the test saying so out loud.
+            client.enabled = True
+            # Point the cache at a path inside the temp dir that will never
+            # exist, so every lookup misses. The previous version used an
+            # unwritable path at the filesystem root, which raised
+            # FileNotFoundError as root and PermissionError on a CI runner --
+            # a test that passed or failed on who was running it.
+            client._cache_path = lambda key: pathlib.Path(tmp) / "never" / "x.json"
+            self._exercise_circuit(client)
+
+    def _exercise_circuit(self, client):
+        import urllib.error
 
         def boom(*a, **kw):
             raise urllib.error.URLError("simulated outage")

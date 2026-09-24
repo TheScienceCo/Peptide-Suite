@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+import hashlib
+
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -21,8 +23,18 @@ from peptide_suite.runtime import load_active_policy
 from peptide_suite.core import PeptideContext, SubstitutionRecommendation, evidence_weight
 from peptide_suite.core.confidence_scoring import ConfidenceScorer
 from peptide_suite.core.evidence_retrieval import EvidenceRetriever
+from peptide_suite.core.biological_context import BiologicalContext
+from peptide_suite.core.biological_context import retrieve as retrieve_context
+from peptide_suite.core.goal_catalog import goal_catalog
 from peptide_suite.core.function_inference import FunctionInferencer
 from peptide_suite.core.peptide_manager import PeptideManager
+from peptide_suite.core.substitution_landscape import (
+    DEFAULT_METRIC,
+    METRICS,
+    LandscapeError,
+    build_landscape,
+    encode_landscape,
+)
 from peptide_suite.workflows.find_peptides import FindPeptidesWorkflow
 from peptide_suite.workflows.optimize import OptimizeWorkflow
 from peptide_suite.workflows.transform import TransformWorkflow
@@ -277,6 +289,11 @@ def encode_recommendation(rec: SubstitutionRecommendation) -> Dict:
         "net_score": round(rec.net_score, 3),
         "ranking_rationale": rec.ranking_rationale,
         "score_breakdown": rec.score_breakdown or {},
+        # Known biology before prediction. Sent whether or not anything was
+        # found, because "searched and found nothing" is a result and needs to
+        # be distinguishable from "not searched".
+        "experimental_precedent": rec.experimental_precedent,
+        "has_experimental_precedent": rec.has_experimental_precedent,
     }
 
 
@@ -300,6 +317,21 @@ def encode_context(ctx: PeptideContext) -> Dict:
 
 class InferRequest(BaseModel):
     input: str = Field(..., description="Peptide sequence or recognised name")
+
+
+class LandscapeRequest(BaseModel):
+    input: str = Field(..., description="Peptide sequence or recognised name")
+    goal: Optional[str] = Field(None, description="Confirmed functional goal")
+    metric: str = Field(DEFAULT_METRIC, description="Which computed quantity to colour by")
+    ph: float = Field(7.4, ge=0.0, le=14.0)
+    homologs: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Optional homologous sequences. The conservation metric is computable only "
+            "when 3 or more distinct sequences are supplied; without them every cell of "
+            "that metric is returned as not computed rather than as zero."
+        ),
+    )
 
 
 class OptimizeRequest(BaseModel):
@@ -334,6 +366,49 @@ class TransformRequest(BaseModel):
     receptor: str = ""
 
 
+def encode_biological_context(context: BiologicalContext) -> Dict[str, Any]:
+    """
+    Serialise what is known about the peptide, before any score.
+
+    Every section carries its own tier and source string rather than inheriting
+    one from the object, because a record can hold a verified accession beside
+    a curated domain layout and those are not the same claim. The interface
+    renders the badge from these fields; it does not decide them.
+    """
+    sequence = context.mature_sequence
+    return {
+        "is_established": context.is_established,
+        "summary": context.summary(),
+        "name": context.name,
+        "aliases": list(context.aliases),
+        "gene": context.gene,
+        "organism": context.organism,
+        "uniprot": context.uniprot,
+        "family": context.family,
+        "form": context.form.value,
+        "form_description": context.form.describe,
+        "precursor_of": context.precursor_of,
+        "mature_sequence": sequence,
+        "mature_length": len(sequence),
+        "sequence_matches_mature": context.sequence_matches_mature,
+        "needs_verification": context.needs_verification,
+        "function": context.function.encode() if context.function else None,
+        "regions": [r.encode(sequence) for r in context.regions],
+        "disulfides": [d.encode(sequence) for d in context.disulfides],
+        "disulfide_inconsistencies": context.disulfide_inconsistencies(),
+        "modifications": [m.encode() for m in context.modifications],
+        "primary_receptors": [r.encode() for r in context.primary_receptors],
+        "secondary_receptors": [r.encode() for r in context.secondary_receptors],
+        "interfaces": [i.encode() for i in context.interfaces],
+        # Rendered as its own state. "No interface annotation was retrieved" and
+        # "the interface has no notable features" are different sentences and
+        # an empty list alone reads as the second.
+        "interface_available": bool(context.interfaces),
+        "retrieval_notes": context.retrieval_notes,
+        "unavailable_sources": context.unavailable_sources,
+    }
+
+
 def _inferred_name(sequence: str) -> str:
     """The peptide's name from identification, or empty if it was not recognised."""
     inference = _inferencer.infer(sequence)
@@ -349,39 +424,21 @@ def health() -> Dict:
 
 @app.get("/api/goals")
 def goals() -> Dict:
-    """Goals the substitution predictor has a real scoring path for."""
-    return {
-        "goals": [
-            {
-                "id": "protease_resistance",
-                "label": "Protease resistance",
-                "quick_win": True,
-                "description": (
-                    "Highest-confidence lane. Scored by matching residues against documented "
-                    "protease P1 specificities, so the evidence is a real motif match rather "
-                    "than an estimate."
-                ),
-            },
-            {
-                "id": "binding_affinity",
-                "label": "Binding affinity",
-                "quick_win": False,
-                "description": (
-                    "Charge state (Henderson-Hasselbalch) and hydrophobicity change are computed, "
-                    "but the DIRECTION of the effect on binding is not predicted without a "
-                    "receptor structure. Magnitude reflects perturbation size only."
-                ),
-            },
-            {
-                "id": "generic_improvement",
-                "label": "No goal specified",
-                "quick_win": False,
-                "description": (
-                    "No primary benefit is claimed; ranking reflects off-target cost only."
-                ),
-            },
-        ]
-    }
+    """Serve the engine's goal catalogue. The capabilities live in core."""
+    return goal_catalog()
+
+
+@app.get("/api/variant-evidence")
+def variant_evidence() -> Dict:
+    """
+    What the empirical variant-evidence store holds.
+
+    Served so the interface can say "the store is empty" rather than rendering
+    an absence of precedent as an absence of interest. The two look the same in
+    a results list and mean different things.
+    """
+    from peptide_suite.core.variant_evidence import store
+    return store().status()
 
 
 @app.post("/api/infer-function")
@@ -452,7 +509,18 @@ def infer_function(req: InferRequest) -> Dict:
     inference = _inferencer.infer(sequence, name=name, raw_input=raw)
 
     rec = inference.uniprot
+
+    # Known biology comes before prediction. The interface renders this section
+    # above the engineering output, so a reader learns what the system thinks
+    # the molecule is before seeing a number about it.
+    context = retrieve_context(
+        sequence,
+        name=inference.matched_name or name,
+        uniprot_client=_inferencer.uniprot,
+    )
+
     return {
+        "biological_context": encode_biological_context(context),
         "sequence": sequence,
         "name": name,
         "length": len(sequence),
@@ -526,6 +594,66 @@ def optimize(req: OptimizeRequest) -> Dict:
         "ph": req.ph,
         "recommendations": [encode_recommendation(r) for r in recs],
         "scan_size": len(ctx.sequence) * 19,
+    })
+
+
+@app.get("/api/landscape-metrics")
+def landscape_metrics() -> Dict:
+    """The selectable quantities, with the encoding each one is entitled to."""
+    return {
+        "default": DEFAULT_METRIC,
+        "metrics": [
+            {
+                "key": m.key,
+                "label": m.label,
+                "units": m.units,
+                "encoding": m.encoding,
+                "midpoint_meaning": m.midpoint_meaning,
+                "description": m.description,
+                "source": m.source,
+            }
+            for m in METRICS
+        ],
+    }
+
+
+@app.post("/api/substitution-landscape")
+def substitution_landscape(req: LandscapeRequest) -> Dict:
+    """
+    The full position x residue grid, rather than the top few of it.
+
+    Runs the same scan as /api/optimize and skips the ranking cut. Nothing is
+    recomputed per metric: one scan, re-projected.
+    """
+    try:
+        ctx, recs = _optimize.scan(
+            input_sequence_or_name=req.input,
+            confirmed_goal=req.goal,
+            auto_confirm=True,
+            ph=req.ph,
+            homologs=req.homologs,
+        )
+    except Exception as e:
+        logger.exception("Landscape scan failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not ctx.sequence:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Could not parse '{req.input}' as a valid peptide sequence, and gene-name "
+                f"resolution is not wired up in this build. Paste a raw amino acid sequence."
+            ),
+        )
+
+    try:
+        landscape = build_landscape(ctx, recs, metric_key=req.metric, ph=req.ph)
+    except LandscapeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return stamp_policy({
+        "landscape": encode_landscape(landscape),
+        "context": encode_context(ctx),
     })
 
 
@@ -784,7 +912,25 @@ def parameterization() -> Dict:
     from peptide_suite.core.ncaa_registry import NCAARegistry, pipeline_specification
     return {
         "registry_is_empty": NCAARegistry.is_empty(),
-        "parameterized_residues": sorted(NCAARegistry.registry()),
+        "parameterized_residues": sorted(NCAARegistry.usable()),
+        # Separate from the usable list on purpose: a partial record is real
+        # work and licenses nothing, and merging the two lists is exactly how a
+        # half-parameterized residue ends up in a ranking.
+        "in_progress_residues": {
+            code: {
+                "stages_completed": record.get("stages_completed", []),
+                "stages_outstanding": [s.value for s in NCAARegistry.cost(code).stages_outstanding],
+                "geometry_method": record.get("geometry_method", ""),
+                "esp_rrms": record.get("esp_rrms"),
+                "known_deficiencies": record.get("known_deficiencies", []),
+                "validated_against": record.get("validated_against", ""),
+            }
+            for code in sorted(NCAARegistry.registry())
+            if not NCAARegistry.status(code).permits_scoring
+            for record in [NCAARegistry.registry()[code]]
+        },
+        "engines": __import__("peptide_suite.core.qm_engine",
+                              fromlist=["engine_status"]).engine_status(),
         "pipeline": pipeline_specification(),
         "catalogue": [
             {
@@ -836,6 +982,38 @@ def holdout() -> Dict:
     }
 
 
+ML_NEEDS_TORCH = (
+    "The model-evaluation layer needs PyTorch, which is not installed here. "
+    "Install it with: pip install --index-url https://download.pytorch.org/whl/cpu torch "
+    "(the CPU wheel; the default index serves a multi-gigabyte CUDA build). "
+    "Nothing else in Peptide Suite depends on it -- identification, biological context "
+    "and the substitution scan all run without it."
+)
+
+
+def _require_torch() -> None:
+    """
+    Refuse an ML request up front when torch is missing, with a message.
+
+    This existed as `try: from ml... except ImportError` around the import
+    statement, which never fired: every ml module imports torch LAZILY, inside
+    the function that needs it, so the module imports cleanly and the
+    ImportError escapes at call time as an unhandled 500. The interface showed
+    "Request failed (500)", which tells a user nothing about the one thing they
+    need to do.
+    """
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        raise HTTPException(status_code=503, detail=ML_NEEDS_TORCH)
+
+
+def _ml_unavailable(exc: ImportError) -> HTTPException:
+    """For a lazy import that still escapes: report it, never a bare 500."""
+    return HTTPException(status_code=503,
+                         detail=f"{ML_NEEDS_TORCH} (underlying error: {exc})")
+
+
 @app.get("/api/ml/status")
 def ml_status() -> Dict:
     """
@@ -846,12 +1024,17 @@ def ml_status() -> Dict:
     server returns and must not be read as the same kind of number.
     """
     try:
+        # torch explicitly. These two modules import cleanly without it -- they
+        # import it lazily, inside the functions that use it -- so importing
+        # them proved nothing and this reported `available: true` on a machine
+        # where every ML endpoint returned a 500.
+        import torch  # noqa: F401
         from ml.datasets.registry import TASKS, trainable_tasks
         from ml.embeddings.encoder import available_encoders
     except ImportError as e:
         return {"available": False,
-                "reason": f"The ML layer requires torch, which is not installed ({e}). "
-                          f"The peptide analysis pipeline does not depend on it."}
+                "reason": ML_NEEDS_TORCH,
+                "underlying_error": str(e)}
     return {
         "available": True,
         "encoders": available_encoders(),
@@ -878,14 +1061,15 @@ def ml_split_comparison(n_families: int = 40, per_family: int = 8,
     the label is a known function of the input. Running it live rather than
     serving a stored number means the table cannot drift from the code.
     """
-    try:
-        from ml.experiments.split_gap import run
-    except ImportError as e:
-        raise HTTPException(status_code=503, detail=f"ML layer unavailable: {e}")
+    _require_torch()
+    from ml.experiments.split_gap import run
 
     n_families = max(4, min(n_families, 80))
     per_family = max(2, min(per_family, 16))
-    result = run(n_families=n_families, per_family=per_family, seed=seed)
+    try:
+        result = run(n_families=n_families, per_family=per_family, seed=seed)
+    except ImportError as e:
+        raise _ml_unavailable(e)
     return {
         "n_sequences": result.n_sequences,
         "n_clusters": result.n_clusters,
@@ -905,6 +1089,207 @@ def ml_split_comparison(n_families: int = 40, per_family: int = 8,
         "is_synthetic": True,
         "claim_guidance": ("This demonstrates a fact about evaluation protocol and "
                            "supports no biological claim, whatever the numbers say."),
+        "report": result.report(),
+    }
+
+
+class RepresentationRequest(BaseModel):
+    sequence: str = Field(..., description="Reference peptide sequence")
+    encoder: str = Field(
+        "deterministic-positional-onehot",
+        description=(
+            "Which encoder produces the vectors. Mixing encoders is refused. The default "
+            "is the positional encoder because the composition one collapses distinct "
+            "sequences onto each other -- roughly half of a single-substitution scan "
+            "lands on top of something else -- and a plot that silently merges half its "
+            "points is worse than one whose components carry little. The composition "
+            "encoder remains selectable and concentrates far more variance into two "
+            "dimensions; both limitations ride with the response."
+        ),
+    )
+    candidates: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Extra sequences to place in the same space — multi-substitution designs, "
+            "related peptides. Anything not the same length as the reference is "
+            "reported as unrelated rather than given a substitution count it does "
+            "not have."
+        ),
+    )
+    max_points: int = Field(1200, ge=8, le=3000)
+
+
+@app.post("/api/ml/representation")
+def ml_representation(req: RepresentationRequest) -> Dict:
+    """
+    The reference and its single substitutions projected into two dimensions.
+
+    Kept under /api/ml because a representation is a different provenance
+    category from a computed physical quantity, and the response says which
+    encoder made it and how much of the variation the picture actually carries.
+    """
+    _require_torch()
+    from ml.embeddings.encoder import (
+        DeterministicEncoder, EncoderUnavailable, ESM2Encoder, PositionalOneHotEncoder,
+    )
+    from ml.embeddings.explorer import (
+        ProjectionError, project, single_substitution_variants,
+    )
+    from ml.explain.neighbours import NeighbourError, out_of_distribution
+
+    sequence = "".join(req.sequence.split()).upper()
+    if not sequence or any(c not in "ACDEFGHIKLMNPQRSTVWY" for c in sequence):
+        raise HTTPException(
+            status_code=400,
+            detail="Give a reference sequence in one-letter codes; this projection has "
+                   "no encoder for non-canonical residues.",
+        )
+
+    encoders = {
+        DeterministicEncoder.model: lambda: DeterministicEncoder(max_length=max(len(sequence), 1)),
+        PositionalOneHotEncoder.model: lambda: PositionalOneHotEncoder(max_length=max(len(sequence), 1)),
+        ESM2Encoder().model: ESM2Encoder,
+    }
+    if req.encoder not in encoders:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown encoder '{req.encoder}'. Available: {', '.join(sorted(encoders))}",
+        )
+    encoder = encoders[req.encoder]()
+
+    pairs = [("wild type", sequence)] + single_substitution_variants(sequence)
+    for candidate in (req.candidates or []):
+        clean = "".join(candidate.split()).upper()
+        if clean:
+            pairs.append((f"candidate: {clean[:12]}…" if len(clean) > 12 else f"candidate: {clean}",
+                          clean))
+    truncated = len(pairs) > req.max_points
+    if truncated:
+        # Keep the reference and any supplied candidates; the single-substitution
+        # cloud is what gets cut, and the response says so.
+        keep = [pairs[0]] + [p for p in pairs if p[0].startswith("candidate:")]
+        room = req.max_points - len(keep)
+        pairs = keep + [p for p in pairs[1:] if not p[0].startswith("candidate:")][:max(room, 0)]
+
+    try:
+        embeddings = [encoder.encode(seq) for _, seq in pairs]
+    except EncoderUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    try:
+        projection = project(embeddings, [label for label, _ in pairs], sequence)
+    except ProjectionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Where a supplied candidate sits relative to the substitution cloud, in the
+    # cloud's own terms. Only for candidates: asking whether a single
+    # substitution of the reference is out of distribution relative to the other
+    # single substitutions answers itself.
+    cloud = [(label, emb) for (label, _), emb in zip(pairs, embeddings)
+             if not label.startswith("candidate:")]
+    ood: List[Dict] = []
+    for (label, _), embedding in zip(pairs, embeddings):
+        if not label.startswith("candidate:"):
+            continue
+        try:
+            report = out_of_distribution(
+                embedding,
+                [e for _, e in cloud],
+                [l for l, _ in cloud],
+                query_label=label,
+            )
+        except NeighbourError as e:
+            ood.append({"label": label, "available": False, "reason": str(e)})
+            continue
+        ood.append({
+            "label": label,
+            "available": True,
+            "distance_to_nearest": report.distance_to_nearest,
+            "reference_median_nn_distance": report.reference_median_nn_distance,
+            "percentile": report.percentile,
+            "is_outside": report.is_outside,
+            "n_coincident": report.n_coincident,
+            "verdict": report.verdict,
+            "caveat": report.caveat,
+            "nearest": [
+                {"label": n.label, "sequence": n.sequence,
+                 "distance": n.distance, "rank": n.rank}
+                for n in report.nearest
+            ],
+        })
+
+    return {
+        "reference": sequence,
+        "ood": ood,
+        "encoder": {
+            "model": projection.encoder_model,
+            "version": projection.encoder_version,
+            "kind": projection.encoder_kind,
+            "has_learned_content": projection.encoder_has_learned_content,
+            "input_dim": projection.input_dim,
+        },
+        "distinct_positions": projection.distinct_positions,
+        "distinct_projected": projection.distinct_projected,
+        "explained_variance_ratio": projection.explained_variance_ratio,
+        "cumulative_explained": projection.cumulative_explained,
+        "interpretation": projection.interpretation,
+        "warnings": projection.warnings,
+        "truncated": truncated,
+        "points": [
+            {"label": p.label, "sequence": p.sequence, "x": p.x, "y": p.y,
+             "class": p.variant_class.value, "n_substitutions": p.n_substitutions}
+            for p in projection.points
+        ],
+    }
+
+
+@app.get("/api/ml/fusion-benefit")
+def ml_fusion_benefit(n_families: int = 60, per_family: int = 8,
+                      n_permutations: int = 6, seed: int = 0) -> Dict:
+    """
+    Single modality vs naive concatenation vs learned fusion, run live.
+
+    Reports the verdict rule's answer rather than the winning number: arms whose
+    bootstrap intervals overlap have not been separated by this test, and a
+    comparison that cannot clear a shuffled-label null has not compared
+    anything.
+    """
+    _require_torch()
+    from ml.experiments.fusion_benefit import run
+
+    try:
+        result = run(n_families=n_families, per_family=per_family,
+                     n_permutations=n_permutations, seed=seed)
+    except ImportError as e:
+        raise _ml_unavailable(e)
+    except Exception as e:
+        logger.exception("Fusion comparison failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "modalities": result.modalities,
+        "split": result.split,
+        "n_train": result.n_train,
+        "n_test": result.n_test,
+        "arms": [
+            {
+                "name": arm.name,
+                "kind": arm.kind,
+                "roc_auc": arm.metrics["roc_auc"].value,
+                "ci_low": arm.metrics["roc_auc"].ci_low,
+                "ci_high": arm.metrics["roc_auc"].ci_high,
+                "n": arm.metrics["roc_auc"].n,
+                "gate_share": arm.gate_share,
+            }
+            for arm in result.arms
+        ],
+        "permutation_null": result.permutation_null,
+        "resolution": result.resolution,
+        "verdict": result.verdict,
+        "skipped": result.skipped,
+        "is_synthetic": True,
+        "claim_guidance": ("This demonstrates that the comparison can be run and read, and "
+                           "supports no biological claim whatever the numbers say."),
         "report": result.report(),
     }
 
@@ -951,9 +1336,43 @@ def favicon():
     return Response(content=FAVICON, media_type="image/svg+xml")
 
 
+def _asset_version() -> str:
+    """
+    A token that changes whenever the served JS or CSS changes.
+
+    Stamped onto the asset URLs so a browser holding a cached `app.js` cannot
+    render a stale interface against a fresh `index.html`. That failure is
+    invisible and self-inflicted -- the markup gains a button, the cached
+    script has no handler for it, and the page looks broken in a way that
+    reloading does not reliably fix.
+
+    Content hash rather than mtime: a checkout, a rebuild or a rebase changes
+    mtimes without changing a byte, and a version that churns defeats caching
+    without buying correctness.
+    """
+    digest = hashlib.sha256()
+    for name in sorted(("app.js", "styles.css", "index.html")):
+        path = STATIC_DIR / name
+        if path.exists():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 @app.get("/")
 def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    """
+    The page, with its asset URLs version-stamped.
+
+    Rewritten on the way out rather than at build time: this repository has no
+    build step, and a version someone has to remember to bump is a version that
+    is wrong exactly when it matters.
+    """
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    version = _asset_version()
+    html = html.replace("/static/app.js", f"/static/app.js?v={version}")
+    html = html.replace("/static/styles.css", f"/static/styles.css?v={version}")
+    return Response(content=html, media_type="text/html",
+                    headers={"Cache-Control": "no-cache"})
 
 
 if STATIC_DIR.exists():

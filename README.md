@@ -80,11 +80,72 @@ Three workflows:
 - **Find peptides** — functional keywords to capable cell types, checking known
   answers before ranking anything.
 
-And four gates that refuse rather than guess: a structure-template hierarchy
+And five gates that refuse rather than guess: a structure-template hierarchy
 whose last tier is refusal, a parameterized-residue registry that is empty (so
 non-canonical chemistry becomes a research request, not a recommendation), a
-native-contact classifier that freezes essential footprints, and a class B1
-placement rule that will not let an affinity gain stand alone as an improvement.
+native-contact classifier that freezes essential footprints, a class B1
+placement rule that will not let an affinity gain stand alone as an
+improvement, and a synthetic-feasibility check that blocks a regioselectivity
+conflict rather than costing it.
+
+![Architecture](docs/architecture.svg)
+
+## What it looks like
+
+The substitution landscape: every position against every residue, with the
+column marginal above it on a zero baseline. Hollow cells are the wild-type
+diagonal.
+
+![The substitution landscape](docs/screenshots/landscape.png)
+
+The same grid under a quantity nothing could compute. Automated homolog
+retrieval is not wired up in this build, so the conservation term has no input
+— and every substitution cell is hatched rather than filled with the zero that
+would have painted the peptide as perfectly conserved end to end.
+
+![A grid where nothing could be computed](docs/screenshots/landscape-not-computed.png)
+
+A transformation's objective vector. Three axes were assessed; five were not,
+and they are hatched rather than scored neutral, because an unassessed axis
+excluded from an average is not an axis with a value of zero. The coverage
+figure rides with the scalarised score for the same reason.
+
+![Ranked transformations and the objective vector](docs/screenshots/transformations.png)
+
+What did not run, and why. The physics tiers report their own absence in terms
+of the specific engine they would have needed.
+
+![Physics tiers](docs/screenshots/physics-tiers.png)
+
+Non-canonical chemistry does not become a recommendation. The parameterized
+residue registry is empty, so a move that needs chemistry nobody here has
+parameterized is emitted as a research request naming what the work would be.
+
+![Research requests](docs/screenshots/research-requests.png)
+
+Net charge against pH, computed per residue by Henderson-Hasselbalch rather
+than from a table of typical values.
+
+![Net charge against pH](docs/screenshots/transformation-detail.png)
+
+The representation explorer, leading with the share of variation the picture
+actually carries rather than with the picture.
+
+![Representation explorer](docs/screenshots/representation.png)
+
+Random versus sequence-clustered evaluation, run live rather than served from a
+stored table.
+
+![Split comparison](docs/screenshots/split-gap.png)
+
+Whether a learned fusion beats naive concatenation — answered by the verdict
+rule rather than by the winning number.
+
+![Does fusion help](docs/screenshots/fusion-benefit.png)
+
+A completion summary — datasets and licences, models, evaluation results,
+known limitations, reproduction commands — is in
+[`docs/DELIVERABLES.md`](docs/DELIVERABLES.md).
 
 ## Running
 
@@ -205,6 +266,244 @@ needs a structure, the other needs weeks of QM. Both are reported, because
 suppressing one because the other fired would understate what the proposal
 actually needs.
 
+## Why the grid hatches instead of filling
+
+The substitution landscape shows the whole scan — every position against every
+residue — rather than the five recommendations the optimize tab reports.
+Position runs along the x-axis, the twenty residues down the y-axis grouped by
+side-chain chemistry, and each cell carries one computed quantity: net score,
+off-target cost, the conservation penalty on its own, charge change, or
+hydrophobicity change.
+
+The interesting part is what happens to a cell with no number behind it.
+
+A heatmap wants a value everywhere, and the tempting default for "nothing to
+report" is the middle of the scale. On a diverging ramp the middle means *no
+change*, which is a claim about the chemistry. "No conservation data" is a
+different claim, and the two must not share a cell. So a cell the pipeline did
+not compute is hatched, carries no `value` key on the wire at all, and states
+its reason on hover and in the table view.
+
+This is not hypothetical. Automated homolog retrieval is not wired up in this
+build, so without pasted homologs the conservation term has nothing to compute
+from — and the conservation metric comes back with all 589 substitution cells
+hatched and none coloured. Entropy over one sequence is zero at every position
+by construction; filled in, it would have painted the peptide as perfectly
+conserved end to end. Supply three distinct homologs and the same grid fills.
+
+Above the grid sits its column marginal: for each position, the most
+favourable computed substitution available there, on a zero baseline. Above the
+line the best available change is a predicted gain; below it, the best
+available change is still a loss, which is the answer to "which positions
+tolerate change at all" and is invisible in a ranked top-five list. It is a
+reduction of the same cells rather than a second calculation, so it cannot
+disagree with the grid under it — and a column with nothing computed is hatched
+rather than drawn as a bar of no height, because a bar of no height is a claim
+that nothing helps.
+
+Two smaller rules follow from the same idea. The wild-type diagonal is its own
+state — not a substitution with no effect, not a substitution. And a one-signed
+quantity does not get a diverging scale: off-target cost runs 0..1 with no
+meaningful midpoint, so it declares a sequential encoding and gets one hue,
+while only genuinely signed quantities get two poles and a neutral middle.
+
+The colour scale is derived from the grid in front of you, not fixed, and says
+so underneath: a scan whose scores all fall within ±0.3 drawn against a
+theoretical ±1.0 is a uniformly pale chart that hides its own result. Two grids
+therefore do not share a scale, which is stated rather than left to be assumed.
+
+## Two questions, in order
+
+"What is this" and "what should change about it" are different questions, and
+the second is only worth asking once the first has an answer. They were one
+button: clicking **Analyze** produced the identification and the objective
+selector together, so a reader chose an engineering goal while still reading
+what the molecule was.
+
+**Identify** now answers the first on its own — identity and confidence level,
+gene, organism, UniProt, molecular form, function, domain layout, disulfides,
+receptors, binding interface, and the basic properties. Once it has produced
+something to act on, it hides and **Analyze** is the only button left.
+
+![Identify, then analyze](docs/screenshots/identify-step.png)
+
+Both buttons show at the start, because a user who already knows what their
+peptide is should not have to run a step to get past it. Analyze on its own
+identifies first and then opens the gate, since ignoring step one is not a
+mistake. Editing the sequence clears the results and returns both buttons:
+resetting the controls while leaving one peptide's receptors on screen above
+another peptide's scan is the confusion the split exists to prevent. When
+nothing can be scanned — a full-length protein, an unparseable paste — Analyze
+is disabled rather than offered, because offering a next step where there is
+none is worse than offering both.
+
+### Two true sentences that contradicted each other
+
+The context card used to open *"No established peptide identity was found for
+this sequence"* directly above a card reading *"matched a known peptide — exact
+sequence match to GLP-1 (7-36) amide"*. Both were correct: the inferencer
+recognised the sequence, and the curated context layer, which is keyed on GLP-1
+(7-37), had no record for it. Printed together they read as the system
+disagreeing with itself, and a reader has no way to tell which half to believe.
+
+Identification and biological context are separate lookups, so the empty state
+now says which of the two came back empty, and identity is rendered first.
+
+## Known biology comes before prediction
+
+The system could optimise a peptide it could not describe. Submit mature IGF-1,
+select a binding-affinity goal, and it would rank substitutions without ever
+naming IGF1R — not because it disagreed about the receptor, but because nothing
+in the pipeline was responsible for saying what the molecule was. Engineering
+ran straight off a sequence.
+
+Analyze now resolves identity first and renders what is known before any score
+appears.
+
+![Biological context for IGF-1](docs/screenshots/biological-context.png)
+
+The design rule is that **provenance lives on the field, not on the object.** A
+record can hold a sequence verified against UniProt this minute, a domain
+layout curated into this repository months ago, and a receptor with a PMID
+behind it — and those are three different kinds of claim. Collapsing them into
+one confidence number is how a curated guess gets read as a database record. So
+every claim carries a `Provenance`, and `Provenance.max_tier` decides what
+evidence tier it may reach. A curated record with no citation caps at
+`BIOCHEMICAL_PRINCIPLE`, however certain whoever wrote it felt. That rule is
+enforced in one method rather than left to each caller to remember.
+
+Nothing in this environment can reach UniProt, PubMed, EBI or RCSB. So every
+curated record is stamped `curated · unverified`, the receptors show as
+curated rather than experimental, and the Data Availability section reports
+UniProt as *unreachable* rather than as an absence of information — which are
+different answers. No PMID or PDB identifier is recorded anywhere, because a
+fabricated accession is worse than a missing one: it looks checkable and
+survives review.
+
+What the layer refuses to do matters more than what it shows. It will not infer
+a receptor from sequence resemblance — a peptide one substitution from GLP-1
+does not acquire GLP1R. It will not substitute hydrophobicity reasoning for a
+binding interface; when no structural annotation was retrieved it says so. And
+an unknown peptide gets a stated absence rather than an empty context object,
+because "we have no record of this" and "we looked and it has no receptors"
+render identically if the only difference is an empty list.
+
+### Labels that do not overstate the capability
+
+"Binding affinity" implies a computed dissociation constant. What is computed
+is the size of a physicochemical perturbation, and the *direction* of the
+effect is explicitly not determined without a receptor structure. The lane is
+now labelled **"Binding-interface perturbation (not a predicted Kd)"**, and
+every goal declares what it computes and what it does not — structurally, not
+in prose the interface can truncate.
+
+![What the analysis computes](docs/screenshots/capability-panel.png)
+
+Four kinds of reasoning could bear on a binding question, and presenting them
+as one number is the overstatement this structure exists to prevent. Each
+recommendation names all four and marks which were actually used:
+
+| Kind | Here |
+|---|---|
+| Sequence-derived perturbation | **used** — charge by Henderson-Hasselbalch, hydrophobicity by Kyte-Doolittle |
+| Experimentally measured mutation effect | unavailable — no evidence store populated, PubMed unreachable |
+| Structure-supported interaction prediction | unavailable — the structure-template gate supplied no interface |
+| Learned model prediction | unavailable — no model here is trained on real labels |
+
+Each recommendation opens with what it does *not* establish, before the
+arithmetic rather than after it — a reader who meets the limits only after the
+number has already formed a view about the number.
+
+![What a recommendation does not establish](docs/screenshots/recommendation-limits.png)
+
+### Literature retrieval
+
+`retrieve_literature_context` used to return an invented PMID and an abstract
+reading *"This is a placeholder abstract for calibration testing"*, cache it,
+and serve it back as a cache hit with no marker. It is now a real E-utilities
+client.
+
+The search runs **after** identity resolution and queries what a paper would
+actually say — the canonical name, the aliases, the gene, the receptor —
+because complete sequences almost never appear in abstracts. Topics get their
+own queries (receptor, binding site, structure, mutagenesis, alanine scan,
+affinity, analog, variant, substitution), since a peptide's structural
+literature and its engineering literature are different bodies of work and one
+broad query returns whichever is larger. A raw-sequence query exists only as
+the low-yield fallback for peptides nothing is known about, and is marked as
+such.
+
+There is still no offline mode. PubMed is unreachable from this environment, so
+a search here returns `UNAVAILABLE` carrying the actual transport error and
+zero articles. A partial search — some topics returned, then the service died —
+is reported as a failure rather than a success, because reporting the articles
+gathered so far under a success flag claims the remaining topics found nothing.
+Only a live response is ever cached. The tests replace the transport rather
+than reaching the network, which is also how the LIVE path gets exercised at
+all from here.
+
+### Three errors in the reference data
+
+Auditing the built-in data turned up three entries that would have produced
+confidently wrong analysis:
+
+| Entry | Was | Now |
+|---|---|---|
+| `IGF1` | a 33-residue sequence sharing **not one 6-mer** with mature IGF-1 — not the mature peptide, the precursor, or a fragment of either | the canonical 70-residue mature chain, marked `MATURE_PEPTIDE` |
+| `INS` | the 21-residue insulin **A-chain**, under the name of insulin — a two-chain 51-residue molecule | same sequence, correctly labelled `ISOLATED_CHAIN` |
+| `BPC157` | a 53-residue sequence contradicting the 15-residue BPC-157 elsewhere in the repo, and not containing it | retained, flagged `needs_verification`, function annotation removed rather than guessed |
+
+Also removed: a `known_var_effects` record asserting a position-6 L→I effect at
+confidence 0.8 with no citation. Mature IGF-1 has cysteine at position 6, and
+nothing in the codebase read the field. And the `homologs` lists, which each
+held one distinct sequence repeated — the conservation gate refused them
+anyway, but they looked like retrieved alignments.
+
+## What one residue's parameterization actually cost
+
+The registry of parameterized non-canonical residues is empty. That has always
+been its correct state — this project had parameterized nothing — and the
+honest way to change it is to do the work, not to lower the bar.
+
+Aib (α-aminoisobutyric acid, the Aib8 in semaglutide) now has three of six
+pipeline stages behind it, run here:
+
+| Stage | Level of theory | Result |
+|---|---|---|
+| Geometry optimisation | HF/6-31G* | converged, −531.89025452 Eh, 193 basis functions, 62 s |
+| Electrostatic potential | HF/6-31G* | four-shell Connolly surface, 1024 grid points |
+| RESP charges | two-stage restrained fit | ESP relative RMS **0.120**, charges sum to 0.000000 |
+
+The geometry was started from a GFN2-xTB optimisation, which is where the
+interesting distinction is. GFN2-xTB is a real electronic-structure method and
+it is the **wrong** one for deriving these charges — not because it is
+inaccurate, but because the force field these charges are going into had its
+Lennard-Jones terms fitted against HF/6-31G*'s overpolarisation. A
+better-converged charge set from a better method is inconsistent with the
+parameters it will sit beside. So the xtb result is recorded as a
+pre-optimisation, `satisfies_stage` comes back `False`, and it shortens the
+next stage instead of replacing it. B3LYP/6-31G** is refused for the same
+reason, which is the part that is easy to get backwards.
+
+**Aib is still not usable, and the registry still reports as empty.** Three
+stages is not six. Nothing has been validated against experimental
+conformational data, so the charges reproduce a calculation rather than a
+molecule, and the record says exactly that. What changed is that a research
+request for Aib now quotes the three stages genuinely remaining instead of all
+six.
+
+The record also carries what the fit gets wrong. A single-conformer RESP gives
+Aib's two constitutionally identical Cβ methyls different charges (−0.197 and
+−0.112); that is an artifact of the conformer, the remedy is a multi-conformer
+refit, and it is written on the record rather than left for a reader to notice.
+
+One bug worth recording, because it is the exact failure this project exists to
+prevent, committed inside its own tool: the first version of the QM script
+reported `esp_rrms = 0.865`. That is not a residual — it is index 1 of the
+unrestrained ESP charge array, a carbonyl carbon. It looked like a plausible
+fit quality and was a partial charge. The residual is now computed from the
+written grid, and a test asserts it is small enough to be one.
+
 ## Why sequence-aware evaluation matters
 
 Peptide datasets are full of near-duplicates: alanine scans, single-point
@@ -245,6 +544,391 @@ before it was fixed.
 
 This experiment is marked `SYNTHETIC_METHOD_ONLY` in the dataset registry. It
 demonstrates a fact about evaluation protocol and supports no biological claim.
+
+## The representation explorer, and why it leads with a number
+
+A reference peptide and every single substitution of it, projected onto their
+first two principal components. The scatter is not the headline. The headline
+is the share of variation the two drawn dimensions actually carry, shown at
+size above the plot, because a picture carrying 19% of the variation is a
+picture in which proximity means very little and a reader is entitled to know
+that before reading anything off it.
+
+Three things ride with every projection:
+
+- **Explained variance, per component and cumulative.** Without it the axes are
+  unlabelled.
+- **Which encoder made the vectors.** Distance in a deterministic descriptor
+  space is a statement about amino-acid composition. In a pretrained
+  language-model space it would be a statement about what the model learned.
+  Those are different claims, and the projection says which one it is making.
+- **A refusal to mix spaces.** Two vectors of equal dimension from different
+  models occupy unrelated spaces, and a PCA over the mixture produces axes that
+  mean nothing. That is checked, not assumed.
+
+PCA rather than UMAP, deliberately: UMAP's layout depends on hyperparameters
+that change cluster structure, has no explained-variance analogue, and its
+distances are not metric, so all three statements above would become
+unstatable.
+
+The two deterministic encoders are kept separate rather than merged, because
+their limitations are opposite and both are worth seeing. Composition
+concentrates variance into few components and is order-blind — under it roughly
+half of a single-substitution scan lands exactly on top of something else.
+Positional one-hot keeps all 591 apart and spreads the variance so thin that
+two components carry about 4% of it. The positional one is the default: a plot
+that silently merges half its points is worse than one whose components carry
+little and say so.
+
+Both kinds of collapse are counted and reported, because they mean different
+things and a reader counting marks deserves to know which is happening. "591
+sequences occupy 591 distinct positions in this space" is about the encoder.
+"In two dimensions these 591 sequences fall on 36 distinct spots" is about the
+projection — and is what a 4% explained-variance figure means in practice.
+
+Neither encoder has any learned content, and neither is reported as though it
+does. ESM-2 is the intended encoder; its weights are unreachable from this
+environment and it raises rather than falling back, so nothing here can report
+amino-acid counts as a language-model embedding.
+
+Supply candidate sequences and each is placed inside the substitution cloud's
+own nearest-neighbour distance distribution — "further from this reference set
+than 100% of its own members are from their nearest neighbour" — because a raw
+distance answers nothing: the same number is close in one space and remote in
+another. A reference set too small to have a spread is refused rather than
+given a verdict. The point of the warning is narrow and worth stating plainly:
+a prediction about a sequence unlike anything in the reference set is an
+extrapolation, and a model will make it with exactly the same confidence it
+uses for an interpolation.
+
+Attribution is deliberately absent. It explains a model's output, and the only
+model available here is the synthetic split-gap demonstration; attributing its
+recall of constructed sequences would be a picture of nothing. It arrives with
+the labelled data. Residue-level sensitivity is not duplicated either — the
+substitution landscape's column marginal already answers it, over the real
+pipeline rather than over a model.
+
+## Does it propose what was actually made?
+
+The benchmark: take a peptide that was really engineered, hide the engineered
+form, feed the parent in, and ask where the modification that was actually made
+and validated lands in the proposal list.
+
+```bash
+python tools/run_recovery_benchmark.py --drug semaglutide
+```
+
+### Why not blind on the name
+
+The obvious protocol — "ignore every mention of semaglutide" — is the one
+`holdout.Protocol.NAMED_ENTITY` exists to mark **insufficient**. Removing
+semaglutide leaves liraglutide, which carries Arg34 and γ-Glu-linked acylation
+at Lys26, and taspoglutide, which is [Aib8, Aib35]-GLP-1. The union of those
+two is semaglutide's answer. A named-entity run would score beautifully with
+the answer sitting in the corpus under two other names.
+
+So **motif ablation** removes every molecule carrying the chemistry, whatever
+it is called — blinding semaglutide removes five molecules, not one — and
+**temporal** freezes the corpus at a year. No first-publication year is
+recorded for any drug, so temporal runs currently refuse rather than inventing
+a plausible one.
+
+### Three things that make the number honest
+
+**Whether the answer was even proposable.** The scan enumerates single
+canonical substitutions. `Aib8` is a non-canonical residue and a C18 diacid is
+not a substitution, so for those the true answer was never in the candidate
+space. Reported as out of scope, never as a miss — scoring it as a miss
+understates the method and dropping it overstates it. Of semaglutide's three
+modifications, exactly one is scoreable.
+
+**The rank, with its total.** 2nd of 3 and 2nd of 47 are different results,
+and `RankedOutcome` has no boolean anywhere in it.
+
+**What chance alone produces.** On a 31-residue peptide there are 589
+candidates, so "in the top 10" is 1.7% of the list and sounds like a lot.
+
+### The first result is a negative one
+
+> `Arg34` ranked **178th of 589** proposals under motif_ablation.
+> Permutation null over 1000 shuffles: median rank 294, p ≈ 0.32.
+
+Better than chance and nowhere near distinguishable from it. That is the
+honest state of the binding lane against a real engineered modification, and
+it is exactly the number this harness exists to produce rather than avoid.
+
+It also exposed a category error worth fixing before reading too much into it:
+Arg34's purpose in semaglutide and liraglutide is to remove Lys34 so that
+acylation goes regioselectively to Lys26 — it is not a binding optimisation at
+all, and scoring it under a binding goal asks whether the system stumbles onto
+the right residue for the wrong reason. The report says so whenever a
+modification has no recorded purpose, and `modification_purpose` in the golden
+set is how that gets fixed.
+
+### Numbering, again
+
+Semaglutide's `Arg34` is GLP-1 (7-37) numbering: position 34 is index 28 of
+the 31-residue stored chain. Applied without the offset it lands six residues
+away, the scan is asked about the wrong substitution, and the run still
+produces a presentable number. The offset must be recorded — never inferred,
+because searching for the offset that makes the answer work is fitting the
+benchmark to the result — and the mapped position is checked before use.
+
+## Experimental precedent, and the store that is empty on purpose
+
+The system can say a substitution is a large physicochemical perturbation. It
+could not say whether anyone has ever made that substitution and measured what
+happened. Those are different claims and the second is better, so where it
+exists it now goes above the arithmetic rather than below it.
+
+![Experimental precedent](docs/screenshots/experimental-precedent.png)
+
+**The store is empty, and that is the honest state.** Every outcome worth
+storing needs a citation, and no literature host is reachable from this
+deployment — PubMed, UniProt, EBI and RCSB all fail to connect. Populating it
+from memory would produce exactly the artefact the module exists to prevent: a
+citation-shaped store whose citations nobody can follow, which reads as
+retrieved evidence after one copy-paste. So the schema, the retrieval, the
+ranking and the confounding logic are real and tested, and they currently
+return *"no precedent found"*, which is true. Same shape as the NCAA registry,
+which reports itself empty rather than promoting a residue that has completed
+three of six pipeline stages.
+
+An absence here is an absence **in this store**. It is not evidence that no
+measurement exists, and nothing in the codebase reads it as one.
+
+### A design is not evidence
+
+`Modification` is what someone changed. `MeasuredOutcome` is what they
+measured. A record holding the first without the second is stored as a design:
+`has_evidence` is False and nothing may use it to support a claim about effect.
+The distinction exists because a table of modification names sitting under a
+column headed Evidence acquires the column's meaning.
+
+### A measurement needs a baseline
+
+"Three-fold more potent" is not a fact until it says three-fold more potent
+*than what*, in *what assay*. Both are required fields, refused at
+construction rather than checked at display time, because the number survives
+being copied into a summary and the missing baseline does not. An affinity with
+no named target is refused too — it names no interaction. So is `UNCHANGED`
+recorded alongside a twelve-fold change: one of the two is wrong and which
+cannot be guessed here.
+
+### Combination changes are confounded, and saying so is the feature
+
+The long-acting GLP-1 analogues are the standing example. A marketed analogue
+differs from its parent at several places at once — a backbone substitution, a
+sequence substitution, an attached fatty-acid chain — and its measured
+half-life is a property of that whole construct. Attributing it to the
+substitution is the readiest error in this domain, precisely because the
+substitution is the part that looks like the other rows in a substitution
+table.
+
+A record with more than one modification is marked unattributable and stays
+that way. It is still displayed — knowing the construct exists is worth
+something — with the confounding note placed *above* its outcomes, because a
+reader who meets "12-fold" first has already attributed it to the
+substitution.
+
+### What precedent may and may not do to a ranking
+
+It reorders. It does not rescale. A published measurement of this exact change
+in this exact molecule does not make the perturbation larger; it makes the
+claim that the perturbation matters better supported. So a measured
+substitution sorts ahead of an equally-scored one nobody has measured, and
+neither `net_score` moves. Confidence and magnitude stay on separate axes,
+which is the property the rest of this system is built on.
+
+Four conditions gate whether a stored record supports a claim about a proposed
+substitution, and all four are necessary:
+
+| | |
+|---|---|
+| Something was measured | else it is a design |
+| Attributable to one change | else the effect belongs to the construct |
+| The same change | the same substitution elsewhere is evidence about *that* peptide |
+| In the same molecule | carrying it over needs the contexts argued equivalent, which is not done here |
+
+### What to feed it
+
+Nothing here is trained on real labels, and the store is empty. What would
+change that is documented in **[docs/TRAINING_DATA.md](docs/TRAINING_DATA.md)**,
+with a fillable template at
+[docs/variant_evidence_template.csv](docs/variant_evidence_template.csv) and a
+loader that validates every row:
+
+```bash
+python tools/load_variant_evidence.py your_records.csv --dry-run
+```
+
+The short version: single-change variants with a measured outcome, a stated
+comparator, a stated assay and a citation. Count **parent molecules**, not
+rows — thirty variants of one peptide is one molecule for splitting purposes.
+
+The check worth the most is the numbering one. GLP-1 appears in the literature
+in at least three numbering schemes and IGF-1 in two, and a position in the
+wrong scheme lands on the wrong residue while still looking entirely plausible.
+Positions are 1-indexed into the parent sequence supplied in the same row, and
+a row whose position does not hold the residue it claims is rejected.
+
+### Four rows that are not training labels
+
+`ml/datasets/variant_evidence_dataset.py` turns measured outcomes into
+supervised rows, and refuses most of them. A design has no target value. A
+confounded record would teach an attribution nobody made. A direction without a
+magnitude is a classification target, not a regression one, and the two are
+kept apart rather than one coerced into the other. An uncited outcome caps
+below the tier floor, and a model trained on unverifiable numbers produces
+outputs that inherit the unverifiability while looking like predictions.
+
+Every exclusion is counted and explained in the build report rather than
+dropped, because a builder that quietly discards four fifths of a store reports
+a clean dataset and loses the number that matters.
+
+**Leakage is the specific risk here.** This store is built out of variant
+series: an alanine scan is thirty records wearing one molecule's name, so a
+random or variant-level split keeps twenty-nine of them in training and scores
+the model on a peptide it has already seen. `split_by_parent` groups whole
+parent molecules, `check_leakage` refuses a split where any parent or variant
+straddles the boundary, and the resulting row counts deliberately do not match
+the requested fraction — that is the grouping working, not an approximation
+error.
+
+## Aim, and why it is a window rather than a filing cabinet
+
+Aim gives this repository the one thing it lacked: metrics over time, across
+runs, in a browser. What it does not give it is a place to keep runs.
+`ml/tracking.py` writes an append-only JSONL line per run and `RunRecord`
+decides whether that run can be replayed; both keep working with Aim absent,
+switched off, or broken. `ml/aim_tracking.py` mirrors an already-recorded run
+into Aim so it can be looked at.
+
+The direction is the design. One writer means the two can never disagree about
+what a run was, and deleting the adapter loses a dashboard rather than a run.
+
+```
+ml/tracking.py  ──writes──▶  experiments.jsonl   ← the record
+                                   │
+                                   └──read by──▶  ml/aim_tracking.py ──▶ Aim
+```
+
+```bash
+pip install aim                                   # optional
+python -c "from ml.aim_tracking import status_report; print(status_report())"
+aim up --repo .aim                                # the dashboard
+export PEPTIDE_SUITE_AIM=0                        # switch the mirror off
+```
+
+The switch can only turn the mirror **off**. There is no value that makes an
+uninstalled Aim transmit, because a switch that can turn a capability on is a
+switch someone can set and then believe the capability is present.
+
+### Four things it refuses
+
+**A no-op is not a success.** Aim is not installed in CI, on purpose. Every
+call still works and every call still reports that nothing was transmitted —
+`AimStatus` distinguishes `LIVE`, `READY`, `NOT_INSTALLED`, `DISABLED`,
+`FAILED` and `CLOSED`, and never collapses them to a boolean. A tracker that
+swallows its own failure is worse than one that raises, because the run appears
+to have been logged.
+
+**`None` is not a metric.** `Experiment.metrics` holds `Optional[float]`
+because a metric that was not computed is recorded as not computed, and there
+is no faithful way to draw that. NaN renders as a gap, which is what a skipped
+step looks like; zero renders as a result. Unmeasured metrics are omitted and
+counted, so a report reads *"3 metric(s) were not computed and were omitted
+rather than sent as zero or NaN: auc, converged, spearman"* instead of three
+flat lines along the axis. `True` is refused for the same reason — it is a
+float to Python and would plot as 1.0, a flag drawn in the shape of a
+measurement.
+
+**Two runs are not comparable because both are in the database.** Dataset
+version, split strategy, encoder identity and metric definition decide that,
+and `comparability()` computes it here rather than leaving it to whoever is
+looking at two lines on one axis. A field missing from either run is reported
+as *unknown*, never as agreement: two runs that both fail to record their
+dataset version are not thereby known to share one.
+
+**The reduction happens before Aim sees it.** `ml/embeddings/explorer.py`
+computes the PCA — on the SVD of the mean-centred matrix, with a four-point
+floor, a refusal when every vector is identical, and a warning when the first
+two components explain little. Aim receives finished coordinates, the
+explained-variance ratio that produced them, and the sentence saying what the
+axes are. Letting a visualiser perform the reduction would put the axes'
+derivation somewhere nobody records, and the axes are the part that gets
+interpreted.
+
+### The bridge to the evidence store
+
+A training run mirrored into Aim carries its dataset's exclusions, not just its
+row count. A run trained on 12 rows out of a 400-record store and one trained
+on 380 are different results and the dashboard draws the metric identically, so
+the counts and the reasons travel with the run. The split's leakage verdict
+goes on as a tag in both directions — `split-clean` and `SPLIT-LEAKS` — because
+a comparison view that cannot filter out a leaking run will eventually include
+one, and its number will be the best on the chart.
+
+### What a real install found
+
+The adapter was written against a fake `aim` module, because CI has no real
+one. Installing Aim for real turned up something the fake could not: Aim writes
+each run to its own chunk directory and builds the searchable index from a
+separate daemon that `aim up` starts, and `Repo.iter_runs` reads the index. A
+run mirrored and closed by a script that then exits is on disk and invisible.
+The first version of this module reported *"10 values sent to Aim"* for a run
+that `iter_runs` could not find at all — the module's own stated failure mode,
+arriving from the other side. Closing now indexes the run, and says so when it
+cannot:
+
+> Run 1a2b3c4d5e6f indexed and visible in the Aim repository.
+
+> The run was written but could not be indexed (…), so it will not appear in
+> the Aim UI until `aim up` indexes it. The JSONL record is unaffected.
+
+The integration tests run wherever Aim is installed and skip loudly where it is
+not, rather than being quietly absent.
+
+## Does fusion actually help?
+
+The multimodal ask is easy to satisfy dishonestly: build a fusion layer, run it
+once against a concatenation baseline nobody tried to make work, and report the
+larger number. So the comparison here is built around the parts that make it
+falsifiable.
+
+Two modalities, against a label that needs both. Position-aware sequence can
+see a motif; bulk physicochemistry — charge, hydrophobicity, composition
+fractions — cannot. The label is *motif present and net charge positive*. Four
+arms on a sequence-clustered split: each modality alone, naive concatenation,
+and a gated fusion whose mixture is learned per example. The baseline gets the
+same width and the same training budget as the thing meant to beat it.
+
+Three rules decide what may be claimed:
+
+- **Overlapping bootstrap intervals are not a win.** However far apart two
+  point estimates are, if the intervals overlap this test did not separate
+  them, and that is what gets reported.
+- **A collapsed gate is disclosed.** When the fusion model puts 95%+ of its
+  weight on one modality, what is being compared is that modality with extra
+  layers, not a mixture — stated even when the fusion arm wins.
+- **A shuffled-label null decides whether the test could detect anything.**
+  Without it, "the intervals overlap" might only mean the test set is too
+  small.
+
+That last rule had to be rebuilt. The first version used a single control run
+trained on shuffled labels, and it returned 0.783 ROC-AUC — which looks exactly
+like a leak. It was not: over ten shuffles the same arm spans roughly 0.28 to
+0.56 around a mean of 0.46. One draw from a distribution that wide certifies
+nothing, and using it as a resolution check would have called an under-powered
+test a leaking one, or the reverse, depending on the seed. The null is now a
+permutation over several shuffles and the bound is stated as what that many
+shuffles can resolve.
+
+The honest answer on this construction is that **fusion does not help**: all
+four arms land within each other's intervals, and the gate collapses onto the
+sequence modality. That is a real result about these two modalities — the
+sequence encoding already contains what the physicochemical one summarises —
+and it is reported rather than tuned away.
 
 ## Why named-entity holdouts overstate the result
 
@@ -296,10 +980,14 @@ Typed request and response schemas; interactive docs at `/docs` when running.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/infer-function` | Identify a sequence or name, and propose a goal for confirmation |
+| `POST /api/infer-function` | Identify a sequence or name, retrieve its biological context, and propose a goal |
 | `POST /api/optimize` | Run the substitution scan against a confirmed goal |
+| `POST /api/substitution-landscape` | The same scan as the full position x residue grid, unranked |
+| `GET /api/landscape-metrics` | The selectable quantities and the encoding each is entitled to |
 | `POST /api/transform` | Ranked transformations, objective vectors, gates and research requests |
 | `POST /api/find-peptides` | Functional keyword search |
+| `GET /api/ml/fusion-benefit` | Four-arm multimodal comparison with its verdict rule, run live |
+| `POST /api/ml/representation` | Reference and single substitutions in two principal components, with each candidate placed against the cloud |
 | `GET /api/policy` | Which policy produced the numbers, and how much of it is placeholder |
 | `GET /api/parameterization` | The residue registry and the pipeline that would fill it |
 | `GET /api/holdout` | Holdout protocols, and the named-entity leakage table |
@@ -316,9 +1004,25 @@ without knowing what weighted it.
 python -m unittest discover -t . -s peptide_suite/tests
 ```
 
+No third-party package is required to run it — not FastAPI, not PyTorch. CI
+runs this suite with nothing installed, which is what keeps that true, and the
+suite disables live network lookups for itself so no assertion can depend on
+whether a host happens to be reachable.
+
 `-t .` matters. It lets the test package load the demonstration pack before any
 test imports — without it the suite fails at the first coefficient read, which
 is the boundary working as intended rather than a broken suite.
+
+The ML suite is separate, because it does need PyTorch:
+
+```bash
+python -m unittest discover -t . -s ml/tests
+```
+
+Aim is not installed for it either. The adapter's absent path is therefore the
+one CI exercises for real, its live path runs against a fake `aim` module, and
+the integration tests against a real install skip with a stated reason rather
+than vanishing.
 
 ```bash
 python tools/check_policy_boundary.py --scope all

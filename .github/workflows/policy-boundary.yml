@@ -15,5 +15,34 @@ jobs:
       # rise above the recorded debt.
       - name: Engine/policy boundary
         run: python tools/check_policy_boundary.py --scope all
-      - name: Tests
+      # Deliberately no `pip install`. The analysis pipeline imports nothing
+      # outside the standard library, and this job is what keeps that true: a
+      # test that reaches for FastAPI, torch or requests fails here even though
+      # it passes on a developer machine that has them.
+      #
+      # It is also what keeps the suite hermetic. The runner has a working
+      # network and a developer sandbox may not, so a test that dials a live
+      # host passes in one place and fails in the other. Three did. The suite
+      # now disables live lookups for itself, and this job is where that
+      # guarantee is actually exercised.
+      - name: Tests (no third-party packages installed, on purpose)
         run: python -m unittest discover -s peptide_suite/tests -t .
+
+  ml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The CPU wheel, explicitly: the default index serves a CUDA build that is
+      # several gigabytes and buys nothing on a runner with no GPU.
+      - name: Install PyTorch (CPU)
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+      - name: Install numpy
+        run: pip install numpy
+      # Addendum 3 section 11: no model weights are downloaded here. Every test
+      # runs against tiny models built in-process, and the encoder that would
+      # need real weights raises rather than fetching them.
+      - name: ML tests
+        run: python -m unittest discover -s ml/tests -t .

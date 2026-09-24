@@ -16,6 +16,14 @@ uvicorn[standard]>=0.27
 #   biopython>=1.83
 #   requests>=2.31
 
-# ML layer (Addendum 3). Optional: the peptide analysis pipeline and the web
-# interface run without it, and the ml/ package is not imported by either.
-#   torch>=2.0
+# ML layer (Addendum 3). Optional, and left commented deliberately: the analysis
+# pipeline and the web interface run without it, `peptide_suite` never imports
+# `ml`, and the two ML endpoints report the layer as unavailable rather than
+# failing. Install it to run ml/ and its tests:
+#   pip install torch          (2.14 here, CPU; ml/tests need it)
+
+# Experiment tracking dashboard (Phase 2). Optional, and a view rather than a
+# store: `ml/tracking.py` writes the run record and stays the system of record
+# whether or not this is installed. `ml/aim_tracking.py` imports it lazily and
+# reports NOT_INSTALLED rather than failing, so nothing here depends on it:
+#   pip install aim            (3.29 here; needed only for the dashboard)

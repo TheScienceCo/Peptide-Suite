@@ -17,6 +17,16 @@ from .confidence_scoring import ConfidenceScorer
 
 logger = logging.getLogger(__name__)
 
+# Stable identifiers for the terms this module produces. A consumer that needs
+# one particular term -- the substitution landscape asks for the conservation
+# term by itself -- keys on these rather than on the description, which is
+# written for a reader and rewritten whenever the wording improves.
+TERM_PRIMARY = "primary"
+TERM_RESIDUE_PROPERTY = "residue_property_loss"
+TERM_CONSERVATION = "conservation"
+TERM_BACKBONE = "backbone"
+TERM_CHARGE_REDISTRIBUTION = "charge_redistribution"
+
 
 @dataclass
 class HydrophobicityScale:
@@ -110,6 +120,7 @@ class SubstitutionPredictor:
         inferred_goal: str = "generic_improvement",
         ph: float = 7.4,
         conservation_available: bool = False,
+        contact=None,
     ) -> Tuple[Effect, List[Effect]]:
         """
         Predict primary and off-target effects of a single substitution.
@@ -145,6 +156,7 @@ class SubstitutionPredictor:
             conservation_profile,
             inferred_goal,
             ph,
+            contact,
         )
 
         # Off-target effects: always check these
@@ -171,13 +183,15 @@ class SubstitutionPredictor:
         conservation_profile: Dict[int, float],
         goal: str,
         ph: float,
+        contact=None,
     ) -> Effect:
         """Predict intended effect based on inferred goal."""
 
         if goal == "protease_resistance":
             return self._predict_protease_effect(wild_seq, mutant_seq, position, wt_aa, mut_aa)
         elif goal == "binding_affinity":
-            return self._predict_binding_effect(wild_seq, mutant_seq, position, wt_aa, mut_aa, ph)
+            return self._predict_binding_effect(
+                wild_seq, mutant_seq, position, wt_aa, mut_aa, ph, contact)
         else:
             # Generic: try to infer from charge/hydrophobic changes
             return self._predict_generic_effect(wild_seq, mutant_seq, position, wt_aa, mut_aa, ph)
@@ -216,6 +230,7 @@ class SubstitutionPredictor:
                 modifier=best["confidence"],
                 magnitude=0.75,
                 equation_refs=[22, 23],
+                term_key=TERM_PRIMARY,
             )
         elif net_added:
             score = self.confidence_scorer.score_effect(
@@ -232,6 +247,7 @@ class SubstitutionPredictor:
                 modifier=0.85,
                 magnitude=0.0,  # No benefit; the cost is carried as a negative below
                 equation_refs=[22, 23],
+                term_key=TERM_PRIMARY,
             )
         else:
             score = self.confidence_scorer.score_effect(
@@ -246,15 +262,50 @@ class SubstitutionPredictor:
                 modifier=0.7,
                 magnitude=0.05,
                 equation_refs=[],
+                term_key=TERM_PRIMARY,
             )
 
         score.category = "primary"
         return score
 
     def _predict_binding_effect(
-        self, wild_seq: str, mutant_seq: str, position: int, wt_aa: str, mut_aa: str, ph: float
+        self, wild_seq: str, mutant_seq: str, position: int, wt_aa: str, mut_aa: str,
+        ph: float, contact=None
     ) -> Effect:
-        """Predict impact on receptor/ligand binding affinity."""
+        """
+        Predict impact on receptor binding -- gated on whether this residue
+        touches the receptor at all.
+
+        This used to be position-blind. It computed the charge and
+        hydrophobicity change and scored them identically whether the residue
+        sat in the binding interface or pointed into solvent, because nothing
+        in it ever consulted the contact map. That is not a small
+        inaccuracy: a 30-residue peptide has 570 candidate substitutions and
+        the ranking was, with respect to binding, arbitrary. It would happily
+        put a charge swap on a solvent-facing loop above a conservative change
+        inside the receptor-contact helix.
+
+        `contact` is a ContactContext or None. Three cases, and they are
+        genuinely different claims:
+
+          position IS in a known contact region  -- the perturbation bears on
+              binding, and the region and target are named.
+          position is NOT in any contact region, and a map exists -- no benefit
+              is claimed. NOT because the substitution does nothing, but
+              because there is no basis here to say it does anything to
+              BINDING, which is what the goal asked about.
+          no map at all -- the perturbation is real and it is unknown whether
+              it lands anywhere relevant. Said out loud rather than ranked as
+              though it were a binding result.
+
+        One confidence modifier across all three, deliberately. The contact map
+        changes WHETHER a benefit is claimed, which is magnitude; it does not
+        change how sure anyone is of the Henderson-Hasselbalch arithmetic,
+        which is what the modifier describes. Varying both would be the
+        confidence-and-magnitude conflation the rest of this system exists to
+        prevent -- and the first draft did vary it, which added two fitted
+        coefficients to engine source and the policy boundary refused them.
+        """
 
         # Charge change analysis (Coulomb-style)
         wt_charge = self.charge_calc.charge_at_ph(wt_aa, ph=ph, position=position)
@@ -272,23 +323,63 @@ class SubstitutionPredictor:
         # Magnitude is derived from the size of the physicochemical change actually
         # computed from the sequence, not asserted. A substitution that changes
         # neither charge nor hydrophobicity cannot plausibly change binding much.
-        magnitude = min(1.0, (abs(charge_delta) * 0.6) + (abs(hydro_delta) / 9.0) * 0.4)
+        perturbation = min(1.0, (abs(charge_delta) * 0.6) + (abs(hydro_delta) / 9.0) * 0.4)
+
+        physics = (
+            f"Charge state computed via Henderson-Hasselbalch at pH {ph}; hydrophobicity "
+            f"from the Kyte-Doolittle scale (Δq = {charge_delta:+.2f}e, "
+            f"Δhydrophobicity = {hydro_delta:+.1f}). Direction of the effect on binding "
+            f"is NOT predicted: without a receptor structure there is no way to know "
+            f"whether this change is complementary or antagonistic. No binding energy is "
+            f"computed — that requires Tier 2 structure prediction."
+        )
+
+        covering = contact.spans_at(position + 1) if contact else []
+
+        if covering:
+            span = covering[0]
+            targets = ", ".join(sorted({s.target_gene for s in covering if s.target_gene}))
+            description += f" — in the {targets or 'receptor'} contact region"
+            magnitude = perturbation
+            reasoning = (
+                f"Position {position + 1} lies in a curated contact region for "
+                f"{targets or 'the target'}: {span.role} {physics}"
+            )
+        elif contact and contact.has_map:
+            # The fix. A perturbation outside every known contact region is not
+            # evidence about binding, and scoring it as though it were is what
+            # made this ranking arbitrary.
+            magnitude = 0.0
+            regions = "; ".join(
+                f"{s.start}-{s.end} ({s.target_gene})" for s in contact.spans) or "none"
+            reasoning = (
+                f"Position {position + 1} lies OUTSIDE every curated receptor-contact "
+                f"region of this peptide (contact regions: {regions}). No binding "
+                f"benefit is claimed here — not because the substitution does nothing, "
+                f"but because there is no basis in this record for saying it does "
+                f"anything to BINDING, which is what the selected goal asked about. The "
+                f"physicochemical change is still computed and its off-target costs "
+                f"still apply. {physics}"
+            )
+        else:
+            magnitude = perturbation
+            reasoning = (
+                f"No receptor-contact map is available for this peptide, so it is "
+                f"unknown whether position {position + 1} touches a target at all. What "
+                f"follows ranks the SIZE of a physicochemical perturbation and is not a "
+                f"statement about binding: with no contact map every position is equally "
+                f"unknown, so the ordering carries no information about which "
+                f"substitutions matter to a receptor. {physics}"
+            )
 
         score = self.confidence_scorer.score_effect(
             description=description,
             evidence_tier=EvidenceTier.BIOCHEMICAL_PRINCIPLE,
-            reasoning=(
-                f"Charge state computed via Henderson-Hasselbalch at pH {ph}; hydrophobicity "
-                f"from the Kyte-Doolittle scale. Direction of the effect on binding is NOT "
-                f"predicted: without a receptor structure there is no way to know whether this "
-                f"change is complementary or antagonistic to the binding interface. Magnitude "
-                f"reflects only how large a physicochemical perturbation this is "
-                f"(Δq = {charge_delta:+.2f}e, Δhydrophobicity = {hydro_delta:+.1f}). "
-                f"No binding energy is computed — that requires Tier 2 structure prediction."
-            ),
+            reasoning=reasoning,
             modifier=0.5,  # Moderate confidence without structure
             magnitude=magnitude,
             equation_refs=[1, 11],  # Coulomb, Henderson-Hasselbalch
+            term_key=TERM_PRIMARY,
         )
 
         score.category = "primary"
@@ -311,6 +402,7 @@ class SubstitutionPredictor:
             modifier=1.0,
             magnitude=0.0,
             equation_refs=[],
+            term_key=TERM_PRIMARY,
         )
 
         score.category = "primary"
@@ -397,6 +489,7 @@ class SubstitutionPredictor:
             reasoning=reason,
             modifier=modifier,
             magnitude=magnitude,
+            term_key=TERM_RESIDUE_PROPERTY,
         )
         effect.category = "off_target"
         return effect
@@ -427,6 +520,8 @@ class SubstitutionPredictor:
                 modifier=1.0,
                 magnitude=0.0,  # Contributes nothing to the net score
                 equation_refs=[],
+                term_key=TERM_CONSERVATION,
+                computed=False,
             )
             effect.category = "off_target"
             return effect
@@ -460,6 +555,7 @@ class SubstitutionPredictor:
             modifier=modifier,
             magnitude=magnitude,
             equation_refs=[43],  # Shannon entropy
+            term_key=TERM_CONSERVATION,
         )
         effect.category = "off_target"
         return effect
@@ -495,6 +591,7 @@ class SubstitutionPredictor:
             reasoning=reason,
             modifier=modifier,
             magnitude=magnitude,
+            term_key=TERM_BACKBONE,
         )
         effect.category = "off_target"
         return effect
@@ -552,6 +649,7 @@ class SubstitutionPredictor:
             modifier=0.8,
             magnitude=magnitude,
             equation_refs=[1, 11],  # Coulomb heuristic, Henderson-Hasselbalch
+            term_key=TERM_CHARGE_REDISTRIBUTION,
         )
         effect.category = "off_target"
         return effect

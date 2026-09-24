@@ -52,15 +52,38 @@ are eligible, which proposals owe a mechanistic account, and which operation is
 forbidden. Wiring an engine in changes one value per module rather than the
 shape of every consumer.
 
-Remaining, and blocked on tooling rather than on design:
+Remaining. The tooling turned out to be reachable after all -- conda-forge and
+PyPI both resolve from this environment, which an earlier note in this file got
+wrong -- so most of what follows is compute and care rather than procurement:
 
-- [ ] Install a conformational search (CREST + GFN2-xTB) and make
-      `conformer_ensemble.generate` return ensembles
-- [ ] Install NBO and make `backbone_nbo.analyse` return stabilisation energies
-- [ ] Install a QM package with SAPT0/DFT-SAPT and make
-      `contact_decomposition.decompose` return real components
-- [ ] Run the 6d parameterization pipeline for at least one residue, so the
-      registry stops being empty
+- [x] **The 6d pipeline, run for real on one residue.** GFN2-xTB via pip
+      (rdkit + ASE + xtb), Psi4 1.11 and the `resp` package via conda-forge.
+      Aib (ACE-Aib-NME, 25 atoms) now has three of six stages behind it:
+      geometry optimised at HF/6-31G* from a GFN2-xTB starting point, ESP on a
+      four-shell Connolly surface, and a two-stage RESP fit with an ESP
+      relative RMS of 0.120 over 1024 grid points. The charges sum to zero and
+      the methyls came out equivalenced.
+
+      **The registry is still empty of usable residues, and that is correct.**
+      Aib is `IN_PROGRESS`: three stages is not six, nothing has been validated
+      against experiment, and an incomplete pipeline yields no usable
+      parameters. What changed is that the cost quoted in a research request is
+      now the real remaining cost rather than the whole of it.
+- [ ] Torsion scans for Aib. Now tractable rather than blocked: the driver is
+      the backbone phi/psi map, so a relaxed 2D scan at HF/6-31G* is a few
+      hours of compute on this machine, not a missing engine.
+- [ ] Fit the scanned profiles (ForceBalance or equivalent), then validate
+      against experimental conformational data. These are the two stages that
+      would let Aib into the usable registry, and the second needs a literature
+      source rather than compute.
+- [ ] A multi-conformer RESP refit. The single-conformer fit gives Aib's two
+      constitutionally identical Cbeta methyls different charges; that is an
+      artifact of the conformer and is recorded as a known deficiency on the
+      record rather than left for a reader to find.
+- [ ] Wire CREST (installed) into `conformer_ensemble.generate`.
+- [ ] Wire Psi4's SAPT into `contact_decomposition.decompose`.
+- [ ] NBO for `backbone_nbo.analyse`. The one genuinely blocked item: NBO is
+      commercially licensed and no licence is available here.
 
 These come last rather than first because they are explanatory depth on a system
 that had to be honest before it was deep. All three depend on the QM pipeline
@@ -90,19 +113,48 @@ Built so far:
 - [x] **Encoders** — deterministic encoder present, ESM-2 fails loudly rather
       than substituting.
 - [x] **The split-gap experiment**, visible in the UI and run live.
+- [x] **Substitution landscape** — the whole position x residue grid, in its own
+      tab, over five selectable quantities. A cell with no computed value is
+      hatched and carries no value on the wire; the wild-type diagonal is its
+      own state; a one-signed quantity gets a sequential encoding rather than a
+      diverging one. Colour scale derived from the grid shown and declared as
+      such. Diverging poles validated for colour-vision deficiency in both
+      modes, with dark steps selected against the dark surface rather than
+      flipped. The column marginal rides above it on a zero baseline: which
+      positions tolerate change at all, reduced from the same cells.
 
 Remaining, and mostly blocked on data and weights rather than design:
 
 - [ ] Real labelled datasets. Every prediction task is UNAVAILABLE here; the
       registry names the source and licence for each.
-- [ ] ESM-2 weights, then the four-arm comparison per task
+- [ ] ESM-2 weights, then the four-arm comparison per task, and the same
+      projection over a learned space — where the explorer's 19% would be the
+      number to beat
       (physicochemical baseline / classical ML / pretrained embeddings /
       fine-tuned) that answers whether language models add predictive value.
-- [ ] Embedding explorer (PCA/UMAP) and the substitution landscape heatmap.
-- [ ] Multimodal fusion: modality-specific encoders plus a fusion layer,
-      compared against single modality and naive concatenation.
-- [ ] Explainability: nearest training examples, residue sensitivity,
-      attribution, OOD warnings by embedding distance.
+- [x] **Representation explorer** — reference plus every single substitution
+      projected onto two principal components, leading with the explained
+      variance rather than the scatter. Refuses to mix encoder spaces, refuses
+      a set with no variation, and fixes the SVD's arbitrary sign so the plot
+      does not mirror itself between runs. Two deterministic encoders with
+      opposite limitations, both stated; the pretrained arm still raises.
+- [x] **Multimodal fusion** — modality-specific encoders and a gated fusion
+      whose mixture is learned per example, against both single modalities and
+      a naive concatenation given the same width and budget. The deliverable is
+      the verdict rule: overlapping bootstrap intervals are not a win, a
+      collapsed gate is disclosed even when fusion wins, and a permutation null
+      over shuffled labels decides whether the test could detect anything. On
+      this construction fusion does not help, and that is reported.
+- [x] **Explainability, the parts that do not need a trained model** — nearest
+      examples in representation space, and an out-of-distribution warning that
+      places a candidate inside the reference set's own nearest-neighbour
+      distance distribution rather than reporting a bare distance. Refuses a
+      reference set too small to have a spread; refuses a distance across two
+      encoder spaces. Residue sensitivity is the landscape's column marginal,
+      computed over the real pipeline, and is not duplicated here.
+- [ ] Attribution, once a model trained on real labels exists. Attributing the
+      synthetic split-gap model's recall of constructed sequences would be a
+      picture of nothing.
 - [ ] The receptor-prediction validation idea — take the learned properties
       together with the physics pipeline's and predict the binding site,
       ignoring the literature, then check against known biology.
@@ -161,7 +213,11 @@ Scope:
 12. **Documentation** — README rewritten so an ML engineer or computational
     biologist understands the project in about two minutes. Architecture
     diagram, UI screenshots, one performance comparison table, and a section
-    titled "Why sequence-aware evaluation matters".
+    titled "Why sequence-aware evaluation matters". *Done: `docs/architecture.svg`
+    (selected for dark mode rather than flipped), eight screenshots taken from
+    a live run rather than mocked, the split-gap table, and the section. A test
+    fails on a figure that is referenced but missing, or committed but shown
+    nowhere.*
 
 **Validation idea worth building toward:** take the learned properties together
 with those from the existing pipeline and predict the receptor or binding site a

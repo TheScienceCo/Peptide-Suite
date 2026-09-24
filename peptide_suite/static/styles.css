@@ -17,11 +17,47 @@
   --axis: #c3c2b7;
   --border: #e1e0d9;
 
+  /* Categorical slots, in the palette's fixed order. Assigned in sequence,
+     never cycled: a fourth series folds into a shape-coded 'other' rather
+     than inventing a hue. The first three validate all-pairs in both modes,
+     which is the gate a scatter has to clear. */
   --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
   --seq-100: #cde2fb;
+  --seq-200: #9ec5f4;
   --seq-250: #86b6ef;
+  --seq-350: #5598e7;
   --seq-450: #2a78d6;
   --seq-600: #184f95;
+
+  /* Diverging pair: blue (positive) <-> red (negative), neutral gray midpoint.
+     Blue arm is the documented sequential ramp's 100/200/350/450 steps. The red
+     arm was derived rather than picked: each step holds the matching blue step's
+     OKLCH lightness, at the hue and chroma of the documented reds (status
+     critical #d03b3b in light, categorical red in dark), then pulled into gamut.
+     So the two arms are lightness-symmetric about the midpoint, which is what a
+     diverging ramp has to be for the sign to read as sign rather than as size.
+     Poles validated in both modes: CVD dE 23.8 light / 21.2 dark, normal-vision
+     31.6 / 28.6, both >= 3:1 on their surface.
+
+     The dark arms are selected, not flipped. They hold the dark sequential
+     ramp's lightness ladder but take the LIGHT arms' chroma profile (0.25,
+     0.49, 0.84, 1.00 of the pole), because that profile is what makes a
+     low-magnitude cell recede instead of shouting a hue: near white, chroma
+     collapses on its own; near a dark surface it does not, and a literal reuse
+     of the dark sequential steps turned a mostly-small-magnitude grid into a
+     wall of red. Hence a diverging blue arm distinct from the sequential blue
+     ramp in dark — different job, different requirement at the near-zero end. */
+  --div-neg-4: #d03b3b;
+  --div-neg-3: #e66962;
+  --div-neg-2: #f7aba4;
+  --div-neg-1: #fed4d0;
+  --div-mid:   #f0efec;
+  --div-pos-1: #cde2fb;
+  --div-pos-2: #9ec5f4;
+  --div-pos-3: #5598e7;
+  --div-pos-4: #2a78d6;
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
@@ -46,10 +82,24 @@
     --axis: #383835;
     --border: #2c2c2a;
     --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
     --seq-100: #104281;
+    --seq-200: #184f95;
     --seq-250: #184f95;
+    --seq-350: #256abf;
     --seq-450: #3987e5;
     --seq-600: #86b6ef;
+
+    --div-neg-4: #d55859;
+    --div-neg-3: #ab4546;
+    --div-neg-2: #753e3d;
+    --div-neg-1: #583b3a;
+    --div-mid:   #383835;
+    --div-pos-1: #354559;
+    --div-pos-2: #32527b;
+    --div-pos-3: #2d6bb7;
+    --div-pos-4: #3987e5;
   }
 }
 
@@ -65,10 +115,24 @@
   --axis: #383835;
   --border: #2c2c2a;
   --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
   --seq-100: #104281;
+  --seq-200: #184f95;
   --seq-250: #184f95;
+  --seq-350: #256abf;
   --seq-450: #3987e5;
   --seq-600: #86b6ef;
+
+  --div-neg-4: #d55859;
+  --div-neg-3: #ab4546;
+  --div-neg-2: #753e3d;
+  --div-neg-1: #583b3a;
+  --div-mid:   #383835;
+  --div-pos-1: #354559;
+  --div-pos-2: #32527b;
+  --div-pos-3: #2d6bb7;
+  --div-pos-4: #3987e5;
 }
 
 * { box-sizing: border-box; }
@@ -1140,13 +1204,395 @@ table.titration td.sign {
 /* The split-comparison table has four columns, not the seven the titration
    table was sized for, so it does not need that min-width and inheriting it
    forced a scroll on a table that fits. */
-#ml-results table.titration { min-width: 340px; }
+#ml-results table.titration,
+#fusion-results table.titration { min-width: 340px; }
 
 /* Arm names are prose, not residue labels. The monospace residue cell is sized
    for things like "K28" and clipped "composition baseline" mid-word. */
-#ml-results td.armname {
+#ml-results td.armname,
+#fusion-results td.armname {
   font-weight: 600;
   color: var(--text-primary);
   min-width: 11rem;
   padding-right: 14px;
+}
+
+/* The fusion table's gate column is the widest thing in it, and at phone width
+   the whole table would push the page sideways. Scroll the table, not the page:
+   a horizontal page scroll makes every other card unreadable too. */
+.table-scroll { overflow-x: auto; }
+@media (max-width: 640px) {
+  #fusion-results td.grp { font-size: 10.5px; }
+}
+
+/* ---------- substitution landscape heatmap ---------- */
+/* The grid is a CSS grid of cells rather than an SVG: hover targets, sticky row
+   labels and horizontal scrolling all come for free, and the cell colours stay
+   as design tokens instead of being baked into generated markup. */
+
+.heat-wrap { position: relative; }
+
+.heat-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+.heat {
+  --cell: 22px;
+  --rowlab: 26px;
+  display: grid;
+  grid-template-columns: var(--rowlab) repeat(var(--cols), var(--cell));
+  /* 2px of surface between fills, per the mark spec: adjacent cells must not
+     bleed into one another or two steps read as one block. */
+  gap: 2px;
+  width: max-content;
+  padding: 6px 8px 8px 6px;
+}
+
+.heat .tick,
+.heat .rowlab,
+.heat .wt {
+  font: 10px/1 var(--mono);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+}
+
+.heat .rowlab {
+  height: var(--cell);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  background: var(--surface-1);
+  z-index: 2;
+}
+
+.heat .corner { position: sticky; left: 0; background: var(--surface-1); z-index: 2; }
+
+.heat .wt {
+  height: 16px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.heat .hc {
+  height: var(--cell);
+  border-radius: 2px;
+  cursor: default;
+}
+
+/* A cell with no computed value must not sit anywhere on the value scale — the
+   midpoint of a diverging ramp reads as "no change", which is a claim. Hatch
+   plus the legend entry plus the table view: three channels, none of them
+   colour alone. */
+.heat .hc.nc {
+  background:
+    repeating-linear-gradient(45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--text-muted) 55%, transparent) 3px 4px);
+  outline: 1px solid var(--grid);
+  outline-offset: -1px;
+}
+
+/* The wild-type residue is not a substitution with no effect. */
+.heat .hc.wt-cell {
+  background: var(--surface-1);
+  outline: 1.5px solid var(--axis);
+  outline-offset: -2px;
+}
+
+.heat .hc:hover {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -1px;
+}
+
+.heat-tip {
+  position: absolute;
+  z-index: 40;
+  max-width: 300px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.heat-tip b { display: block; color: var(--text-primary); font-size: 12px; margin-bottom: 2px; }
+.heat-tip .val { font-variant-numeric: tabular-nums; color: var(--text-primary); font-weight: 600; }
+.heat-tip[hidden] { display: none; }
+
+.heat-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.heat-legend .ramp { display: flex; align-items: center; gap: 6px; }
+.heat-legend .ramp .steps { display: flex; gap: 1px; }
+.heat-legend .ramp i { width: 16px; height: 12px; border-radius: 2px; display: block; }
+.heat-legend .key { display: flex; align-items: center; gap: 5px; }
+.heat-legend .key i { width: 14px; height: 12px; border-radius: 2px; display: block; }
+.heat-legend .key i.nc {
+  background:
+    repeating-linear-gradient(45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--text-muted) 55%, transparent) 3px 4px);
+  outline: 1px solid var(--grid);
+  outline-offset: -1px;
+}
+.heat-legend .key i.wt-cell {
+  background: var(--surface-1);
+  outline: 1.5px solid var(--axis);
+  outline-offset: -2px;
+}
+
+.heat-table-wrap { max-height: 320px; overflow: auto; margin-top: 8px; }
+table.heat-table { min-width: 100%; }
+table.heat-table td.det { color: var(--text-secondary); font-size: 11px; }
+table.heat-table td.st { font-size: 11px; text-transform: lowercase; }
+
+@media (max-width: 640px) {
+  .heat { --cell: 18px; --rowlab: 22px; }
+  .heat-tip { max-width: 220px; }
+}
+
+/* ---------- representation scatter ---------- */
+
+.scatter-wrap { position: relative; margin-top: 8px; }
+
+svg.scatter {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+
+svg.scatter .grid { stroke: var(--grid); stroke-width: 1; }
+svg.scatter .axis { stroke: var(--axis); stroke-width: 1; }
+svg.scatter .axlabel { fill: var(--text-secondary); font: 11px var(--sans); }
+svg.scatter .tick { fill: var(--text-muted); font: 10px var(--mono); }
+/* A direct label wears text ink, never the series colour. */
+svg.scatter .direct { fill: var(--text-primary); font: 11px var(--sans); font-weight: 600; }
+svg.scatter circle.pt { stroke: var(--surface-1); stroke-width: 1; }
+svg.scatter circle.pt.focus { stroke: var(--text-primary); stroke-width: 2; }
+/* The fourth class is shape-coded rather than given a hue: the palette's first
+   three slots are what clear the all-pairs gate a scatter has to meet. */
+svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.5; }
+
+.hero-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 2px;
+}
+.hero-stat .figure {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.05;
+}
+.hero-stat .caption { font-size: 12px; color: var(--text-secondary); max-width: 46ch; }
+
+.scatter-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.scatter-legend .key { display: flex; align-items: center; gap: 5px; }
+.scatter-legend .key i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.scatter-legend .key i.other {
+  border-radius: 0;
+  background: none;
+  border: 1.5px solid var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .hero-stat .figure { font-size: 28px; }
+}
+
+/* The grid's column marginal. Shares the heatmap's columns, so it is read as a
+   reduction of the chart above rather than as a separate chart. */
+.heat .hc.marg {
+  position: relative;
+  height: 34px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--axis);
+}
+.heat .hc.marg .margbar { position: absolute; left: 0; right: 0; border-radius: 1px; }
+/* Zero baseline for the diverging strip, drawn as chrome rather than as data. */
+.heat .hc.marg.marg-div {
+  border-bottom: none;
+  background: linear-gradient(var(--axis), var(--axis)) 0 50% / 100% 1px no-repeat;
+}
+.heat .hc.marg.nc { border-bottom: 1px solid var(--axis); }
+.heat .rowlab.marglab {
+  height: 34px;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 400;
+  align-items: flex-end;
+  padding-bottom: 3px;
+}
+
+.ood { margin: 10px 0 4px; padding-top: 10px; border-top: 1px solid var(--hair, var(--border)); }
+.ood .t { font-weight: 600; color: var(--text-primary); font-size: 12.5px; margin-bottom: 6px; }
+.ood .chips { margin-top: 6px; }
+.chip.static { cursor: default; font-family: var(--mono); font-size: 11px; }
+
+/* ---------- biological context ---------- */
+
+.bio-context h3 { margin: 2px 0 8px; font-size: 16px; color: var(--text-primary); }
+.bcsection { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+.bcsection:first-of-type { border-top: none; margin-top: 4px; padding-top: 0; }
+.bchead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bctitle {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.bcrows { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; }
+.bcrow { display: contents; }
+.bclabel { font-size: 11px; color: var(--text-muted); }
+.bcvalue { font-size: 12.5px; color: var(--text-secondary); }
+
+/* An evidence badge wears its own muted tone, never a series colour: it labels
+   a claim, it does not identify a series. */
+.tier {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 9px; white-space: nowrap;
+  border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-1);
+}
+.tier-direct_experimental { border-color: var(--status-good); color: var(--status-good); }
+.tier-homolog_experimental { border-color: var(--series-1); color: var(--series-1); }
+.tier-biochemical_principle { border-color: var(--axis); color: var(--text-secondary); }
+.tier-inference_only { border-color: var(--border); color: var(--text-muted); }
+
+.receptor, .region {
+  padding: 9px 11px; margin-bottom: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-1);
+}
+.rhead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 4px; }
+.pill {
+  font-size: 10px; padding: 1px 7px; border-radius: 9px;
+  background: var(--page); border: 1px solid var(--border); color: var(--text-secondary);
+}
+.pill.primary { border-color: var(--series-1); color: var(--series-1); font-weight: 600; }
+.seqline {
+  font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
+  word-break: break-all; margin: 3px 0;
+}
+.muted-note { color: var(--text-muted); font-style: italic; }
+
+@media (max-width: 560px) {
+  .bcrows { grid-template-columns: 1fr; gap: 0 0; }
+  .bclabel { margin-top: 6px; font-weight: 600; }
+}
+
+/* ---------- capability and limits ---------- */
+
+.capability {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-1); padding: 12px 14px; margin-bottom: 14px;
+}
+.caphead { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+.capcols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.capsub {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.limitlist { margin: 0; padding-left: 16px; }
+.limitlist li { font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; }
+
+.limits {
+  border-left: 2px solid var(--axis); padding: 2px 0 2px 11px; margin: 10px 0;
+}
+.limits > b {
+  display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 5px;
+}
+
+.kinds { margin-top: 8px; display: grid; gap: 6px; }
+.kind {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 9px; background: var(--page);
+}
+.khead { display: flex; align-items: center; gap: 7px; margin-bottom: 2px; }
+.kstate {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 9px; border: 1px solid var(--border);
+  color: var(--text-muted); white-space: nowrap;
+}
+.kind.on .kstate { border-color: var(--status-good); color: var(--status-good); }
+.kind.off { opacity: 0.72; }
+
+@media (max-width: 640px) {
+  .capcols { grid-template-columns: 1fr; gap: 10px; }
+}
+
+/* ---- experimental precedent ---------------------------------------------
+   Rendered whether or not anything was found. A missing section reads as
+   "nobody has measured this" while meaning "we did not look", so the empty
+   state is a state rather than an absence. */
+.precedent {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 11px; margin: 10px 0; background: var(--page);
+}
+.phead { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.phead > b {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.pstate {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+  text-transform: uppercase; padding: 1px 6px; border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.pstate.yes  { color: var(--status-good); border-color: var(--status-good); }
+.pstate.none { color: var(--text-muted); }
+
+.pmatch {
+  margin-top: 8px; padding-left: 9px; border-left: 2px solid var(--border);
+}
+.pmatch.usable { border-left-color: var(--status-good); }
+.pmhead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 3px; }
+.pkind {
+  font-family: var(--mono); font-size: 10px; color: var(--text-secondary);
+}
+/* The confounding note sits above the outcomes on purpose: a reader who meets
+   "12-fold" first has already attributed it to the substitution. */
+.confound {
+  margin: 5px 0; padding: 5px 8px; border-radius: var(--radius);
+  background: var(--surface-2, var(--page));
+  border: 1px solid var(--status-warning, var(--border));
+  color: var(--text-secondary); font-size: 12px;
+}
+.outcomes { margin: 4px 0 0; padding-left: 17px; color: var(--text-secondary); }
+.outcomes li { margin: 2px 0; }
+
+/* ---- two-step input controls --------------------------------------------
+   Identify then Analyze. Both are shown at the start because a user who knows
+   what their peptide is should not have to run a step to get past it; once
+   Identify has produced something to act on, it hides and Analyze is the only
+   button left. */
+.steps { display: flex; gap: 8px; align-items: flex-end; }
+.steps button[hidden] { display: none; }
+.step-hint {
+  margin: 8px 0 0; color: var(--text-secondary); font-size: 12px;
 }

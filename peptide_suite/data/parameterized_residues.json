@@ -14,9 +14,7 @@
     "Adding an entry is a claim that the work was done. Do not add one to make a",
     "proposal rank."
   ],
-
   "schema_version": "1.0.0",
-
   "_entry_schema": {
     "residue_code": "as it appears in the catalogue",
     "force_field": "GAFF2 | OpenFF | ff19SB-compatible",
@@ -31,6 +29,89 @@
     "date": "ISO date",
     "files": "where the parameter files live"
   },
-
-  "residues": {}
+  "residues": {
+    "Aib": {
+      "force_field": "GAFF2-compatible (charges only; no bonded terms fitted yet)",
+      "stages_completed": [
+        "geometry_optimization",
+        "electrostatic_potential",
+        "resp_charges"
+      ],
+      "stages_rejected": [],
+      "geometry_method": "HF/6-31G*",
+      "geometry_energy_hartree": -531.8902545175471,
+      "geometry_started_from": "GFN2-xTB optimised geometry (ASE BFGS, fmax 0.02 eV/A)",
+      "esp_method": "HF/6-31G* on a Connolly, shells at 1.4, 1.6, 1.8, 2.0 x vdW radius",
+      "charge_model": "two-stage RESP, a=0.0005/0.001, b=0.1",
+      "charges": [
+        -0.20711149964247205,
+        0.5107363823492337,
+        -0.5471189824551221,
+        -0.455095045588986,
+        0.2139312033043387,
+        -0.19656358931223164,
+        -0.11168492218017662,
+        0.5048511521906885,
+        -0.5542514738391275,
+        -0.4201694419781434,
+        -0.052009487477363316,
+        0.07465455585998187,
+        0.07465455585998187,
+        0.07465455585998187,
+        0.28424949375832914,
+        0.05860134822533563,
+        0.05860134822533563,
+        0.05860134822533563,
+        0.04206961465976499,
+        0.04206961465976499,
+        0.04206961465976499,
+        0.30388891211308244,
+        0.0667902475075675,
+        0.0667902475075675,
+        0.0667902475075675
+      ],
+      "charge_sum": -0.0,
+      "esp_rrms": 0.11998922453359988,
+      "n_grid_points": 1024,
+      "symbols": [
+        "C",
+        "C",
+        "O",
+        "N",
+        "C",
+        "C",
+        "C",
+        "C",
+        "O",
+        "N",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "smiles": "CC(=O)NC(C)(C)C(=O)NC",
+      "known_deficiencies": [
+        "Single-conformer fit. Chemically equivalent groups are not constrained to equal charges across substituents, only within each methyl, so constitutionally identical substituents can differ. Carbon charges span 0.718 e. A multi-conformer fit with explicit inter-group equivalencing is the standard remedy and has not been run."
+      ],
+      "torsion_scans": "",
+      "experimental_validation": "",
+      "validated_against": "Nothing. The charges reproduce an HF/6-31G* electrostatic potential, which is what they were fitted to. No comparison against experimental conformational data has been made, and until one is these parameters describe a calculation rather than a molecule.",
+      "parameterized_by": "Peptide-Suite, tools/qm/run_qm_stages.py",
+      "psi4_version": "1.11",
+      "date": "2026-09-23",
+      "git_commit": "acd61de472351db4894275a4a9e8f6edd0d822e2",
+      "files": "artifact recorded inline; no force-field files produced yet"
+    }
+  }
 }

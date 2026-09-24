@@ -1,0 +1,51 @@
+{
+  "_about": {
+    "what_this_is": [
+      "Experimentally measured outcomes for modified peptides: what someone changed,",
+      "what they measured, against what baseline, in what assay, and where it was",
+      "published. Read by peptide_suite/core/variant_evidence.py."
+    ],
+    "why_it_is_empty": [
+      "Every outcome worth storing needs a citation, and this deployment can reach no",
+      "literature host: PubMed (eutils.ncbi.nlm.nih.gov), UniProt, EBI and RCSB are all",
+      "unreachable. Populating it from memory would produce the exact artefact the",
+      "module exists to prevent -- a citation-shaped store whose citations nobody can",
+      "follow, and which reads as retrieved evidence after one copy-paste.",
+      "",
+      "So the schema, the retrieval, the ranking and the combination-confounding logic",
+      "are real, tested, and currently return 'no precedent found', which is true. The",
+      "same shape as the NCAA registry, which reports itself empty rather than",
+      "promoting a residue that has completed three of six pipeline stages.",
+      "",
+      "An absence here is an absence in this store. It is not evidence that no",
+      "measurement exists, and nothing in the codebase reads it as one."
+    ],
+    "what_a_record_needs": {
+      "modifications": "At least one. A record with none has nothing for an outcome to be about.",
+      "outcomes": "Optional. A record with modifications and no outcomes is a DESIGN, not evidence, and reports itself so.",
+      "comparator": "Required on every outcome. 'Three-fold more potent' is not a fact until it says than what.",
+      "assay": "Required on every outcome. Two numbers for one measure from different assays are not comparable.",
+      "target": "Required for affinity, potency and selectivity measures. An affinity with no target names no interaction.",
+      "unit": "Required whenever an absolute value is given.",
+      "provenance.pmid_or_doi": "Required for DIRECT_EXPERIMENTAL. Without one the outcome caps at BIOCHEMICAL_PRINCIPLE, enforced in Provenance.max_tier rather than by convention."
+    },
+    "the_confounding_rule": [
+      "A record with more than one modification is marked unattributable and stays that",
+      "way. The long-acting GLP-1 analogues are the standing example: a marketed",
+      "analogue differs from its parent at several places at once -- a backbone",
+      "substitution, a sequence substitution, an attached fatty-acid chain -- and its",
+      "measured half-life is a property of that whole construct.",
+      "",
+      "Attributing it to the substitution is the readiest error in this domain, because",
+      "the substitution is the part that looks like the other rows in a substitution",
+      "table. No such record is written here, because writing one would mean asserting",
+      "its specific modification list from memory."
+    ],
+    "no_identifier_in_this_file_is_invented": [
+      "There are no PMIDs, DOIs, accessions or PDB codes below, because there are no",
+      "records below. A fabricated identifier is worse than a missing one: it looks",
+      "checkable and survives review."
+    ]
+  },
+  "variants": []
+}
