@@ -1585,3 +1585,14 @@ svg.scatter rect.other { fill: none; stroke: var(--text-muted); stroke-width: 1.
 }
 .outcomes { margin: 4px 0 0; padding-left: 17px; color: var(--text-secondary); }
 .outcomes li { margin: 2px 0; }
+
+/* ---- two-step input controls --------------------------------------------
+   Identify then Analyze. Both are shown at the start because a user who knows
+   what their peptide is should not have to run a step to get past it; once
+   Identify has produced something to act on, it hides and Analyze is the only
+   button left. */
+.steps { display: flex; gap: 8px; align-items: flex-end; }
+.steps button[hidden] { display: none; }
+.step-hint {
+  margin: 8px 0 0; color: var(--text-secondary); font-size: 12px;
+}

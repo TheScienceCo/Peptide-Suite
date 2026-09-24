@@ -64,10 +64,15 @@
           <label for="ph">pH for charge calculation</label>
           <input type="text" id="ph" value="7.4" inputmode="decimal">
         </div>
-        <div class="shrink">
-          <button class="primary" id="btn-infer">Analyze</button>
+        <div class="shrink steps">
+          <!-- Two questions, in order. Identify answers "what is this"; Analyze
+               answers "what should change about it". Once the first has an
+               answer, Identify hides and Analyze is the only button left. -->
+          <button class="primary" id="btn-identify">Identify</button>
+          <button class="ghost" id="btn-analyze">Analyze</button>
         </div>
       </div>
+      <p class="hint step-hint" id="step-hint" hidden></p>
     </div>
 
     <div id="gate-slot"></div>

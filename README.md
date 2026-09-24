@@ -206,6 +206,43 @@ so underneath: a scan whose scores all fall within ±0.3 drawn against a
 theoretical ±1.0 is a uniformly pale chart that hides its own result. Two grids
 therefore do not share a scale, which is stated rather than left to be assumed.
 
+## Two questions, in order
+
+"What is this" and "what should change about it" are different questions, and
+the second is only worth asking once the first has an answer. They were one
+button: clicking **Analyze** produced the identification and the objective
+selector together, so a reader chose an engineering goal while still reading
+what the molecule was.
+
+**Identify** now answers the first on its own — identity and confidence level,
+gene, organism, UniProt, molecular form, function, domain layout, disulfides,
+receptors, binding interface, and the basic properties. Once it has produced
+something to act on, it hides and **Analyze** is the only button left.
+
+![Identify, then analyze](docs/screenshots/identify-step.png)
+
+Both buttons show at the start, because a user who already knows what their
+peptide is should not have to run a step to get past it. Analyze on its own
+identifies first and then opens the gate, since ignoring step one is not a
+mistake. Editing the sequence clears the results and returns both buttons:
+resetting the controls while leaving one peptide's receptors on screen above
+another peptide's scan is the confusion the split exists to prevent. When
+nothing can be scanned — a full-length protein, an unparseable paste — Analyze
+is disabled rather than offered, because offering a next step where there is
+none is worse than offering both.
+
+### Two true sentences that contradicted each other
+
+The context card used to open *"No established peptide identity was found for
+this sequence"* directly above a card reading *"matched a known peptide — exact
+sequence match to GLP-1 (7-36) amide"*. Both were correct: the inferencer
+recognised the sequence, and the curated context layer, which is keyed on GLP-1
+(7-37), had no record for it. Printed together they read as the system
+disagreeing with itself, and a reader has no way to tell which half to believe.
+
+Identification and biological context are separate lookups, so the empty state
+now says which of the two came back empty, and identity is rendered first.
+
 ## Known biology comes before prediction
 
 The system could optimise a peptide it could not describe. Submit mature IGF-1,

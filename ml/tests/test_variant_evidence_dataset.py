@@ -17,8 +17,8 @@ from ml.datasets.variant_evidence_dataset import (
 from peptide_suite.core import EvidenceTier
 from peptide_suite.core.biological_context import Provenance, SourceKind
 from peptide_suite.core.variant_evidence import (
-    Direction, MeasuredOutcome, Modification, ModificationKind, OutcomeMeasure,
-    VariantEvidenceStore, VariantRecord,
+    Direction, Extraction, MeasuredOutcome, Modification, ModificationKind,
+    OutcomeMeasure, VariantEvidenceStore, VariantRecord,
 )
 
 CITED = Provenance(kind=SourceKind.PRIMARY_LITERATURE, pmid="99999999", year=2020)
@@ -27,9 +27,13 @@ MEASURE = OutcomeMeasure.PROTEASE_STABILITY
 
 
 def outcome(**kwargs) -> MeasuredOutcome:
+    # The extraction is stated because it has to be: an outcome that does not
+    # say who read it out caps at BIOCHEMICAL_PRINCIPLE, below the tier floor,
+    # so a fixture omitting it tests the floor rather than the rule under test.
     fields = dict(measure=MEASURE, direction=Direction.INCREASED,
                   comparator="the parent peptide", assay="synthetic, this test only",
-                  provenance=CITED, fold_change=3.0)
+                  provenance=CITED, fold_change=3.0,
+                  extraction=Extraction.CURATOR_READ_FULL_TEXT)
     fields.update(kwargs)
     return MeasuredOutcome(**fields)
 

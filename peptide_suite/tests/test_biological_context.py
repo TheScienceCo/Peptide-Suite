@@ -340,7 +340,17 @@ class TestLabelsDoNotOverstateCapability(unittest.TestCase):
         self.assertFalse(kinds["learned_model"])
 
     def test_every_unavailable_kind_says_why(self):
+        """
+        Substance, not a magic phrase. This asserted the literal string "Not
+        available", which passed while the text was hardcoded and broke the
+        moment the evidence-store kind started computing its own reason -- a
+        test enforcing wording rather than the guarantee the wording carried.
+        """
         for kind in self.payload["binding_reasoning_kinds"]:
             if not kind["available"]:
                 with self.subTest(kind=kind["kind"]):
-                    self.assertIn("Not available", kind["what_it_is_not"])
+                    why = kind["what_it_is_not"]
+                    self.assertGreater(len(why.split()), 8,
+                                       "an unavailable capability needs a reason, not a "
+                                       "restatement that it is unavailable")
+                    self.assertNotEqual(why.strip().lower(), "not available.")

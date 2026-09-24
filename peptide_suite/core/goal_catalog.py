@@ -22,7 +22,45 @@ from typing import Dict
 # affinity prediction" is the overstatement the label audit exists to fix: a
 # sequence-derived perturbation size and a structure-supported interaction
 # prediction are not the same claim and must not share a number.
-BINDING_REASONING_KINDS = [
+def _evidence_store_state() -> Dict:
+    """
+    Whether the empirical variant-evidence store has anything in it.
+
+    Read rather than asserted. This field used to be a hardcoded False beside
+    the sentence "no empirical variant evidence store is populated in this
+    build", which was true when it was written and is exactly the kind of
+    statement that stays in the interface after it stops being true. Populating
+    the store now flips the interface without anyone remembering to.
+    """
+    try:
+        from .variant_evidence import store
+        status = store().status()
+    except Exception as exc:
+        return {"available": False,
+                "why": f"The variant-evidence store could not be read ({exc})."}
+    if status["records_with_measured_outcomes"]:
+        return {
+            "available": True,
+            "why": (f"{status['records_with_measured_outcomes']} record(s) in the "
+                    f"variant-evidence store carry measured outcomes, "
+                    f"{status['attributable_records']} of them attributable to a single "
+                    f"change. Whether any bears on a given substitution is decided per "
+                    f"substitution, not here."),
+        }
+    return {
+        "available": False,
+        "why": ("No record in the variant-evidence store carries a measured outcome. "
+                "Every outcome needs a citation and no literature host is reachable "
+                "from this deployment, so the store is empty rather than populated "
+                "from memory. That is an absence in the store, not evidence that no "
+                "measurement exists."),
+    }
+
+
+def binding_reasoning_kinds() -> List[Dict]:
+    """The four kinds, with availability read from the system rather than fixed."""
+    evidence = _evidence_store_state()
+    return [
     {
         "kind": "sequence_derived",
         "label": "Sequence-derived perturbation",
@@ -37,13 +75,11 @@ BINDING_REASONING_KINDS = [
     {
         "kind": "experimental_mutation",
         "label": "Experimentally measured mutation effect",
-        "available": False,
+        "available": evidence["available"],
         "what_it_is": (
             "A published measurement of this substitution in this peptide against this "
             "receptor."),
-        "what_it_is_not": (
-            "Not available: no empirical variant evidence store is populated in this "
-            "build, and PubMed is unreachable from this environment."),
+        "what_it_is_not": evidence["why"],
     },
     {
         "kind": "structure_supported",
@@ -64,7 +100,7 @@ BINDING_REASONING_KINDS = [
         "what_it_is_not": (
             "Not available: no model in this repository is trained on real labels."),
     },
-]
+    ]
 
 
 def goal_catalog() -> Dict:
@@ -75,8 +111,9 @@ def goal_catalog() -> Dict:
     this list has no scoring path, and is absent rather than present-and-empty:
     an empty capability list reads as a capability that was measured at zero.
     """
+    kinds = binding_reasoning_kinds()
     return {
-    "binding_reasoning_kinds": BINDING_REASONING_KINDS,
+    "binding_reasoning_kinds": kinds,
     "goals": [
         {
             "id": "protease_resistance",
@@ -120,7 +157,7 @@ def goal_catalog() -> Dict:
                 "Selectivity between a primary receptor and a cross-reactive one",
             ],
             "strongest_evidence": "BIOCHEMICAL_PRINCIPLE",
-            "reasoning_kinds": BINDING_REASONING_KINDS,
+            "reasoning_kinds": kinds,
         },
         {
             "id": "generic_improvement",

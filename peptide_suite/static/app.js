@@ -98,9 +98,29 @@ function busy(btn, on, label) {
 
 /* ---------- Workflow 1 ---------- */
 
-async function onAnalyze() {
-  const btn = $("#btn-infer");
-  const input = $("#seq").value.trim();
+// The identification the user is currently looking at, and the input it was
+// made from. Keyed on the input so that editing the sequence invalidates it:
+// showing GLP-1's receptors above a scan of something else is the exact
+// confusion the two-step flow exists to prevent.
+let IDENTIFIED = null;
+
+function currentInput() {
+  return $("#seq").value.trim();
+}
+
+/**
+ * Step one. Work out what the molecule IS -- identity, receptors, binding
+ * sites, domain structure, basic properties -- and stop there.
+ *
+ * Split out from Analyze because the two questions are different and the
+ * second is only worth asking once the first has an answer. Previously one
+ * button did both, so the goal selector appeared beside the identification and
+ * a reader chose an engineering objective while still reading what the thing
+ * was.
+ */
+async function runIdentify({ thenGate = false } = {}) {
+  const btn = thenGate ? $("#btn-analyze") : $("#btn-identify");
+  const input = currentInput();
   $("#gate-slot").innerHTML = "";
   $("#opt-results").innerHTML = "";
 
@@ -112,22 +132,119 @@ async function onAnalyze() {
   busy(btn, true);
   try {
     const info = await api("/api/infer-function", { input });
-    renderGate(info);
+    IDENTIFIED = { input, info };
+    renderIdentity(info);
+    // The buttons advance either way. Reaching the identification through
+    // Analyze is not a different state from reaching it through Identify, and
+    // leaving Identify on screen afterwards would offer a step already taken.
+    advanceToAnalyze(info);
+    if (thenGate) renderGoalGate(info);
   } catch (e) {
+    IDENTIFIED = null;
     $("#gate-slot").append(notice(e.message, "error", "×"));
+    resetSteps();          // buttons only: the error above is what to read
   } finally {
-    busy(btn, false, "Analyze");
+    busy(btn, false, thenGate ? "Analyze" : "Identify");
   }
 }
 
-function renderGate(info) {
+/**
+ * Step two. Choose what to optimise for and scan.
+ *
+ * Reuses the identification when it is still the one on screen rather than
+ * re-fetching, so Analyze does not silently replace the context the user is
+ * reading. If the sequence has been edited since, this identifies again first
+ * -- Analyze on its own has to work, because a user who ignores step one is
+ * not making a mistake.
+ */
+async function onAnalyze() {
+  const input = currentInput();
+  if (!IDENTIFIED || IDENTIFIED.input !== input) {
+    return runIdentify({ thenGate: true });
+  }
+  renderGoalGate(IDENTIFIED.info);
+  const gate = $("#gate-slot .gate");
+  if (gate) gate.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/**
+ * After a successful identification, Analyze becomes the only button.
+ *
+ * Two buttons side by side ask the user to decide which one they want. One
+ * button, after the step that produced something to act on, says what the next
+ * step is.
+ */
+function advanceToAnalyze(info) {
+  const identify = $("#btn-identify");
+  const analyze = $("#btn-analyze");
+  if (!identify || !analyze) return;
+
+  // Nothing to analyse: a full-length protein has no single sequence to
+  // optimise, and an unparseable input has none at all. Offering the next step
+  // where there is no next step is worse than offering both.
+  const analysable = Boolean(info.sequence) && !info.parse_error;
+  identify.hidden = analysable;
+  analyze.hidden = false;
+  analyze.classList.toggle("primary", analysable);
+  analyze.classList.toggle("ghost", !analysable);
+  analyze.disabled = !analysable;
+
+  const hint = $("#step-hint");
+  if (hint) {
+    hint.hidden = false;
+    hint.textContent = analysable
+      ? "Identified. Next: choose what to optimise for and scan the substitutions."
+      : "Nothing here can be scanned — see above for why.";
+  }
+}
+
+/**
+ * Back to the two-button start.
+ *
+ * `clear` also empties the results, and the input listener passes it: a
+ * changed sequence makes everything on screen describe a different molecule,
+ * and resetting the buttons while leaving GLP-1's receptors above the fold is
+ * the confusion this flow exists to prevent. The error path does not pass it,
+ * because the thing to read there is the error.
+ */
+function resetSteps({ clear = false } = {}) {
+  if (clear) {
+    $("#gate-slot").innerHTML = "";
+    $("#opt-results").innerHTML = "";
+    IDENTIFIED = null;
+  }
+  const identify = $("#btn-identify");
+  const analyze = $("#btn-analyze");
+  if (!identify || !analyze) return;
+  identify.hidden = false;
+  analyze.hidden = false;
+  analyze.disabled = false;
+  analyze.classList.remove("primary");
+  analyze.classList.add("ghost");
+  const hint = $("#step-hint");
+  if (hint) hint.hidden = true;
+}
+
+/**
+ * What the molecule is: known biology, then how the identification was
+ * reached, then its measurable properties. No engineering controls.
+ */
+function renderIdentity(info) {
   const slot = $("#gate-slot");
   slot.innerHTML = "";
 
-  // Known biology first. Clicking Analyze used to land straight on engineering
-  // controls, so a reader saw a score before they saw what the system thought
-  // the molecule was.
-  const bio = renderBiologicalContext(info.biological_context);
+  // Identity, then what is known about it. The two were the other way round
+  // and it read badly: a context card reporting an empty lookup sat above the
+  // card that had just identified the molecule, so the page appeared to fail
+  // and succeed at the same question in that order.
+  //
+  // Both still come before any engineering control. Clicking Analyze used to
+  // land straight on those, so a reader saw a score before they saw what the
+  // system thought the molecule was.
+  identityCard(info);
+  const bio = renderBiologicalContext(info.biological_context, {
+    name: info.matched_name || "",
+  });
   if (bio) slot.append(bio);
 
   // A name that matched a protein rather than a peptide: report what is known
@@ -170,8 +287,17 @@ function renderGate(info) {
     return;
   }
 
+}
+
+/**
+ * The identity card: inference level, UniProt, caveats and basic properties.
+ * Split from the goal gate so Identify can show it without asking the user to
+ * pick an engineering objective in the same breath.
+ */
+function identityCard(info) {
+  const slot = $("#gate-slot");
   const gate = el("div", "gate");
-  gate.append(el("h2", null, "Confirm the target function"));
+  gate.append(el("h2", null, "What this is"));
 
   const LEVEL_LABEL = {
     0: "identified in UniProt",
@@ -234,6 +360,30 @@ function renderGate(info) {
       info.alternatives.map((a) => `${a.motif} @ ${a.position} (${a.parent_protein})`).join(", ")));
   }
 
+  const props = info.properties;
+  if (props) {
+    gate.append(el("div", "kv",
+      `${props.length} residues · ${props.charged_residues} charged (${props.percent_charged}%) · ` +
+      `${props.aromatic_count} aromatic · ${props.proline_count} Pro · ${props.cysteine_count} Cys`));
+  }
+
+  slot.append(gate);
+}
+
+/**
+ * The goal gate: what to optimise for, and the button that scans.
+ *
+ * Appended below the identity rather than replacing it, so the context stays
+ * on screen while the objective is chosen.
+ */
+function renderGoalGate(info) {
+  const slot = $("#gate-slot");
+  if ($("#goal-select")) return;          // already open; do not stack two
+  if (!info.sequence || info.parse_error) return;
+
+  const gate = el("div", "gate");
+  gate.append(el("h2", null, "Confirm the target function"));
+
   const row = el("div", "row");
 
   const goalWrap = el("div");
@@ -280,13 +430,6 @@ function renderGate(info) {
 
   row.append(goalWrap, btnWrap);
   gate.append(row, why, desc);
-
-  const props = info.properties;
-  if (props) {
-    gate.append(el("div", "kv",
-      `${props.length} residues · ${props.charged_residues} charged (${props.percent_charged}%) · ` +
-      `${props.aromatic_count} aromatic · ${props.proline_count} Pro · ${props.cysteine_count} Cys`));
-  }
 
   slot.append(gate);
 }
@@ -949,7 +1092,14 @@ function switchTab(which) {
 async function init() {
   TABS.forEach((name) => $(`#tab-${name}`).addEventListener("click", () => switchTab(name)));
   $("#btn-transform").addEventListener("click", onTransform);
-  $("#btn-infer").addEventListener("click", onAnalyze);
+  $("#btn-identify").addEventListener("click", () => runIdentify());
+  $("#btn-analyze").addEventListener("click", onAnalyze);
+  // Editing the sequence invalidates the identification on screen, so the flow
+  // returns to its start rather than letting Analyze scan one peptide under
+  // another one's receptors.
+  $("#seq").addEventListener("input", () => {
+    if (IDENTIFIED && IDENTIFIED.input !== currentInput()) resetSteps({ clear: true });
+  });
   $("#btn-find").addEventListener("click", onFind);
   $("#btn-ml").addEventListener("click", onRunML);
   $("#btn-fusion").addEventListener("click", onFusion);
@@ -2611,16 +2761,36 @@ function renderReceptor(r) {
   return box;
 }
 
-function renderBiologicalContext(bc) {
+/**
+ * What is KNOWN about the molecule, as opposed to what it is.
+ *
+ * `identity` is the identification from the same response, and it is passed in
+ * to keep two true sentences from contradicting each other on screen. This
+ * card used to open "No established peptide identity was found for this
+ * sequence" directly above a card reading "matched a known peptide — exact
+ * sequence match to GLP-1 (7-36) amide". Both were correct: the inferencer
+ * recognised the sequence and the curated context layer, which is keyed on
+ * GLP-1 (7-37), had no record for it. Printed together they read as the system
+ * disagreeing with itself, and a reader has no way to tell which half to
+ * believe.
+ *
+ * So the empty state now says which of the two things is missing.
+ */
+function renderBiologicalContext(bc, identity) {
   if (!bc) return null;
   const card = el("div", "card bio-context");
   card.append(el("div", "label", "BIOLOGICAL CONTEXT"));
 
   if (!bc.is_established) {
+    const named = identity && identity.name;
     card.append(notice(
-      "No established peptide identity was found for this sequence. Everything below is "
-      + "derived from the sequence itself: no receptor, domain structure or function is "
-      + "asserted, and none is inferred from resemblance to a peptide family.",
+      (named
+        ? `This sequence was identified as ${identity.name}, but no curated biological `
+          + "record for it was retrieved. Identification and biological context are "
+          + "separate lookups, and this one came back empty. "
+        : "No established peptide identity was found for this sequence. ")
+      + "So nothing below asserts a receptor, a domain structure or a function, and "
+      + "none is inferred from resemblance to a peptide family.",
       "warn", "!"));
     (bc.unavailable_sources || []).forEach((u) =>
       card.append(el("p", "footnote", `Not consulted or unreachable — ${u}`)));
