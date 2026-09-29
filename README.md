@@ -1,45 +1,81 @@
 # Peptide-Suite Redux (PDR)
 
-Peptide engineering analysis with the provenance of every number carried
-alongside it.
+Peptide optimization through machine learning: a biochemical engineering solution.
 
-Note that PDR is 
+Note: This is the showcased public version of the full repo, which contains proprietary 
+software. The transition sometimes causes bugs. If you are experiencing bugs and would 
+like access to the private repo, which is fully operational, contact me.
+
+## Running
+
+The pubic version of this engine holds no coefficients. Every weight, threshold 
+and cutoff comes from a policy artifact loaded at startup. 
+A demonstration pack is included so this public repo runs out of the box.
+
+```bash
+pip install -r requirements-ml.txt
+
+export PEPTIDE_SUITE_POLICY=policy/demo.v1.json
+python -m uvicorn peptide_suite.api:app --reload
+```
+
+Then open http://127.0.0.1:8000.
+
+`policy/demo.v1.json` is a demonstration pack: no weight in it was fitted to
+data. Every scored response says so, in the API payload and in the UI, so a
+number produced under it is never mistaken for a measured one. See
+`policy/README.md`.
 
 The Science: 
-The biochemistry side of Peptide Suite is trying to answer a practical question: if we 
-start with a biologically active peptide, what changes could make it work better without
-accidentally breaking the things that already make it useful? The program first tries to 
+The biochemistry side of PDR is trying to answer a practical question: if we 
+start with a (biologically active, known) peptide, what modifications could make it work 
+better without breaking the things that already make it useful? 
+
+Based entirely on just the amino acid sequence, PDR works as follows:
+
+biology/evidence
+↓
+residue map
+↓
+ESM-2 + engineered features + empirical data
+↓
+candidate generation
+↓
+prediction
+↓
+feasibility gates
+↓
+multi-objective ranking
+↓
+explanation/evaluation.
+
+Essentially, it takes a sequence of amino acids, retrieves foundational information 
+about the peptide, identifies its binding target (usually a receptor), identifies which
+protease mediates its degradation, 
 identify what the peptide is, what receptor or target it interacts with, what its normal 
 biological function is, and what parts of its structure are important. From there, it 
 evaluates possible changes using a combination of known biology and physical chemistry. 
 
-Each extrinsic factor influencing a peptide (from surrounding pH, weak Van 
-der Waals forces to quantum mechanics-mediated covalent and ionic bonds) and each intrinsic 
-property of the peptide (from simple hydrophobicity/hydrophilicity analysis influencing 
-3D structure, to protease susceptibility, to identifying preserved motifs across 
-similar peptides), PDR attempts to assign each factor a quantified "importance" in its 
-core functions: 
+Each factor (both intrinsic and extrinsic to the peptide itself) influencing a peptide, 
+PDR attempts to assign each factor a quantified "importance" in its core functions: 
 
 The main factors it considers/tweaks/measures/predicts are (list is not comprehensive): 
-1. amino-acid sequence
-2. charge and protonation at different pH values
+1. amino-acid sequence (obviously)
+2. charge and protonation at different pH values (default to physiological pH of 7.40)
 3. hydrophobicity, sequence conservation
 4. known receptor-binding regions
-5. disulfide bonds
-6. protease cleavage sites
-7. structural constraints
-8. conformational flexibility
-9. peptide pre-organization
-10. native interaction partners
-11. receptor-specific rules
-12. synthetic feasibility
-13. aggregation risk
-14. solubility
+5. known/ostensible protease cleavage sites
+6. other known native interaction partners
+7. 6. disulfide bonds
+8. known experimental structural features, including structural constraints and conformational flexibility
+9. receptor-specific rules
+10. synthetic feasibility
+11. aggregation risk
+12. solubility
 15. immunogenicity
 16. noncanonical amino-acid effects
-17. known experimental structural features
-18. literature evidence, and critically:
-19. documented effects of similar modifications in related peptides.
+17. literature evidence, and critically:
+18. documented effects of similar modifications in related peptides.
 
 The goal is not simply to produce the highest-scoring mutation, but to build 
 an evidence-backed case for why a modification might improve potency, stability, 
@@ -85,27 +121,93 @@ whose last tier is refusal, a parameterized-residue registry that is empty (so
 non-canonical chemistry becomes a research request, not a recommendation), a
 native-contact classifier that freezes essential footprints, and a class B1
 placement rule that will not let an affinity gain stand alone as an improvement.
+## 
 
-## Running
+Sequence intake and peptide identification
+Input an amino-acid sequence, validate it, and attempt to identify the peptide or closest known match. Pull basic information such as name, length, molecular weight, charge-related properties, known biological role, organism/source, and existing annotations.
+Key skills / notable concepts: sequence parsing, Biopython, database/API retrieval, identity resolution, metadata normalization, exact/fuzzy matching, provenance tracking, data validation.
 
-The pubic version of this engine holds no coefficients. Every weight, threshold 
-and cutoff comes from a policy artifact loaded at startup, and the system refuses 
-to start without one rather than falling back to built-in values. 
-A demonstration pack is included so this repository runs out of the box.
+Biological-context resolution: target, mechanism, protease liability
+Determine what the peptide acts on, usually a receptor, protein partner, membrane target, enzyme, or signaling pathway. Separately determine whether there is a known physiologically relevant protease and, when possible, its cleavage site or recognition pattern. Protease state remains YES or UNKNOWN, not “no.”
+Key skills / notable concepts: scientific literature retrieval, RAG, entity linking, receptor-ligand biology, protein-protein interaction analysis, protease specificity, cleavage-site inference, evidence grading, LLM-assisted information extraction, source reconciliation.
 
-```bash
-pip install -r requirements.txt
+Build the peptide functional map
+Convert the peptide from “a string of amino acids” into a residue-level map of biologically meaningful subregions. Mark binding/contact residues, structural motifs, turns/loops, conserved positions, termini, PTMs, known cleavage regions, aggregation-prone regions, membrane-interacting segments, flexible/linker regions, and places where function is unknown.
+Key skills / notable concepts: residue-level annotation, functional-region mapping, conservation analysis, motif recognition, structural reasoning, sequence-to-function interpretation, overlapping annotations, uncertainty representation.
 
-export PEPTIDE_SUITE_POLICY=policy/demo.v1.json
-python -m uvicorn peptide_suite.api:app --reload
-```
+Assign evidence and confidence to every mapped feature
+Each annotation is labeled according to how well it is supported, e.g. KNOWN / STRONGLY_INFERRED / PREDICTED / UNKNOWN. Direct experimental evidence is separated from homolog inference, computational prediction, and LLM-derived interpretation.
+Key skills / notable concepts: evidence provenance, confidence calibration, knowledge representation, citation tracking, scientific reasoning, uncertainty modeling, avoiding false precision.
 
-Then open http://127.0.0.1:8000.
+Generate sequence representations, including ESM-2 embeddings
+Run the peptide sequence through ESM-2 to obtain learned residue-level and/or whole-sequence embeddings. These representations capture higher-order sequence relationships that simple descriptors such as charge or hydrophobicity cannot fully encode.
+Key skills / notable concepts: protein language models, transformers, pretrained foundation models, ESM-2, embeddings, representation learning, tensor handling, PyTorch, embedding pooling/caching, transfer learning.
 
-`policy/demo.v1.json` is a demonstration pack: no weight in it was fitted to
-data. Every scored response says so, in the API payload and in the UI, so a
-number produced under it is never mistaken for a measured one. See
-`policy/README.md`.
+Define or confirm the engineering objective
+The system confirms what the user is actually trying to improve: receptor affinity, selectivity, half-life, protease resistance, solubility, reduced aggregation, stability, permeability, manufacturability, or some multi-objective combination.
+Key skills / notable concepts: objective formulation, multi-objective optimization, constraint definition, human-in-the-loop design, translating biological intent into computable targets.
+
+Determine what regions are modifiable versus protected
+Use the functional map to distinguish residues where modification is likely useful from residues where perturbation carries substantial functional risk. Protected residues are penalized, not categorically forbidden, because occasionally the best modification may still involve a functionally important site.
+Key skills / notable concepts: constraint modeling, risk-aware optimization, biological priors, penalty functions, soft constraints, interpretable decision logic.
+
+Choose modification strategies based on the biology
+Decide what kinds of changes are biologically sensible before generating candidates. Examples include amino-acid substitution, terminal modification, backbone changes, cyclization, lipidation, PEG-like modifications, D-amino-acid substitution, noncanonical residues, protease-resistant replacements, or other chemistry depending on objective and region.
+Key skills / notable concepts: peptide chemistry, medicinal chemistry logic, modification taxonomy, design-space reduction, rule-based expert systems, biochemical feasibility reasoning.
+
+Handle protease-specific optimization
+If a protease and cleavage site are known, modifications are targeted around that experimentally supported liability. If the protease is known but the exact site is uncertain, specificity windows and accessibility/context are evaluated. If protease identity is UNKNOWN, the system screens for broad physiologically plausible proteolytic liabilities instead of pretending a specific enzyme has been identified.
+Key skills / notable concepts: protease recognition windows, substrate specificity, sequence-context modeling, biological plausibility screening, cleavage prediction, uncertainty-aware decision logic.
+
+Generate candidate variants
+Create candidate substitutions and other modification hypotheses, guided by the protected-region map, biochemical objective, known empirical examples, structural constraints, and learned sequence representations. This can include systematic single-position scans as well as higher-priority targeted modifications.
+Key skills / notable concepts: combinatorial search, candidate generation, substitution matrices, heuristic search, guided enumeration, sequence mutation pipelines, search-space pruning.
+
+Calculate classical biochemical and structural features for each candidate
+Recalculate properties such as charge, pI-related behavior, hydrophobicity, predicted stability, aggregation tendency, secondary-structure propensity, steric compatibility, receptor-contact disruption, protease susceptibility, and synthetic feasibility.
+Key skills / notable concepts: feature engineering, physicochemical descriptors, structural bioinformatics, peptide property prediction, cheminformatics-style scoring, deterministic scientific computation.
+
+Compare WT and variant representations using ESM-2
+Generate ESM-2 embeddings for candidate sequences and measure how the variant representation shifts relative to wild type, particularly at mutated residues and relevant functional regions. These learned features can then feed downstream prediction/ranking models.
+Key skills / notable concepts: embedding-difference analysis, residue embeddings, sequence embeddings, latent-space comparison, transformer inference, PyTorch pipelines, representation similarity.
+
+Integrate empirical modification data
+Retrieve known examples involving the same peptide, close analogs, homologs, or related peptide families. Empirical outcomes such as measured potency, stability, half-life, or binding changes receive substantially more weight than purely computational predictions.
+Key skills / notable concepts: heterogeneous data integration, biological dataset construction, analog retrieval, homolog matching, evidence weighting, endpoint normalization, literature mining.
+
+Predict candidate effects with ML models
+Use engineered features plus ESM-2 representations and, where appropriate, empirical/structural features as inputs to task-specific models. The architecture can support classical ML baselines as well as PyTorch models rather than assuming a deep model is automatically superior.
+Key skills / notable concepts: supervised learning, PyTorch, scikit-learn, multimodal feature fusion, regression/classification, transfer learning, baseline comparison, model selection.
+
+Apply hard and soft feasibility gates
+Eliminate or heavily penalize candidates that are chemically implausible, structurally destructive, synthetically problematic, unsupported by available chemistry, or inconsistent with essential biological constraints.
+Key skills / notable concepts: rule engines, constraint satisfaction, peptide synthesis constraints, NCAA handling, chemistry validation, safety checks against model hallucination.
+
+Score candidates across separate dimensions
+Avoid one mysterious “AI score.” Keep dimensions such as predicted benefit, magnitude, confidence, evidence quality, functional risk, structural risk, protease impact, synthesis feasibility, and uncertainty distinguishable.
+Key skills / notable concepts: multi-criteria decision analysis, interpretable scoring, calibrated uncertainty, explainable ML, weighted ranking systems, decision-support design.
+
+Rank and explain recommendations
+Rank candidate modifications and show why each ranks where it does: what property should improve, what evidence supports it, what region is being modified, what risk exists, and what uncertainty remains.
+Key skills / notable concepts: explainability, model interpretation, evidence-backed recommendation systems, UI/UX for scientific decision support, human-in-the-loop review.
+
+Evaluate against known-answer / holdout data
+Test whether the system can recover known successful or unsuccessful modifications without having effectively memorized them. Use sequence-clustered splits, homolog-aware holdouts, decoys, ablations, and leakage checks rather than relying only on random train/test splits.
+Key skills / notable concepts: ML evaluation, sequence-clustered validation, leakage prevention, holdout design, decoy controls, ablation testing, generalization analysis.
+
+Calibrate confidence and quantify uncertainty
+Compare confidence against actual predictive performance and avoid presenting low-data predictions as equivalent to empirically supported results.
+Key skills / notable concepts: calibration curves, uncertainty quantification, confidence intervals, prediction reliability, epistemic uncertainty, model calibration.
+
+Record the entire run reproducibly
+Save sequence, objective, evidence sources, model versions, embeddings, parameters, generated variants, scores, evaluation outputs, and final ranking so the result can be reproduced later. Aim can sit here as the experiment-tracking layer for model runs.
+Key skills / notable concepts: MLOps, experiment tracking, Aim, reproducibility, provenance, model/version control, run metadata, auditability.
+
+Present the final decision-support output
+The UI shows the wild-type peptide map, proposed modifications, predicted benefits, supporting literature, confidence, uncertainty, and rationale rather than simply saying “mutation X is best.”
+Key skills / notable concepts: scientific visualization, React/Next.js, FastAPI, explainable interfaces, human-centered ML, full-stack integration.
+
+
 
 ## Why there is a Quantum Mechanics (QM) arm
 
