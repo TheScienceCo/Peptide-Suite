@@ -34,19 +34,32 @@ better without breaking the things that already make it useful?
 Based entirely on just the amino acid sequence, PDR works as follows:
 
 biology/evidence
+
 ↓
+
 residue map
+
 ↓
+
 ESM-2 + engineered features + empirical data
+
 ↓
+
 candidate generation
+
 ↓
+
 prediction
 ↓
+
 feasibility gates
+
 ↓
+
 multi-objective ranking
+
 ↓
+
 explanation/evaluation.
 
 Essentially, it takes a sequence of amino acids, retrieves foundational information 
