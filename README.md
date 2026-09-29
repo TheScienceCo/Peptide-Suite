@@ -13,7 +13,7 @@ and cutoff comes from a policy artifact loaded at startup.
 A demonstration pack is included so this public repo runs out of the box.
 
 ```bash
-pip install -r requirements-ml.txt
+pip install -r requirements.txt
 
 export PEPTIDE_SUITE_POLICY=policy/demo.v1.json
 python -m uvicorn peptide_suite.api:app --reload
